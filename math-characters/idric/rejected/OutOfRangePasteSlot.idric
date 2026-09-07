@@ -1,0 +1,6 @@
+module OutOfRangePasteSlot
+
+import UnicodePicker
+
+invalid_action : picker_action
+invalid_action = view_slot (the Nat 3)

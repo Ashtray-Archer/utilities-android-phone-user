@@ -38,9 +38,9 @@ action_text (write_slot _) = "NULL"
 action_argument : picker_action → String
 action_argument (insert_text _) = "0u"
 action_argument (insert_pair _) = "0u"
-action_argument (view_slot slot) = show slot ++ "u"
-action_argument (remember_slot slot) = show slot ++ "u"
-action_argument (write_slot slot) = show slot ++ "u"
+action_argument (view_slot slot) = show (slot_index slot) ++ "u"
+action_argument (remember_slot slot) = show (slot_index slot) ++ "u"
+action_argument (write_slot slot) = show (slot_index slot) ++ "u"
 
 render_key : PickerKey → String
 render_key (Key label action) =

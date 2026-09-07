@@ -27,6 +27,9 @@ inserted_outputs = outputs (all_keys pages)
 
 contract_holds : Bool
 contract_holds =
+  slot_index slot_one == 0 &&
+  slot_index slot_two == 1 &&
+  slot_index slot_three == 2 &&
   page_names ==
     [ "Unicode", "Math", "Punctuation", "Programming"
     , "Regular Expressions", "Concept Separation"
