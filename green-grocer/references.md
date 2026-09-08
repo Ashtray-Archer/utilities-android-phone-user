@@ -8,6 +8,12 @@
     availability, physical locations, decimal quantities, freshness, licensing,
     and the proposed adapter types.
 
+- [Customer inventory type specification](./customer-inventory-types.md)
+  - Narrow type boundary from an Eagle inventory snapshot into the existing
+    customer-facing `product`/`cart` model.
+  - Defines source identity, store inventory, normalized availability, physical
+    locations, freshness, mapping rules, invariants, and first acceptance fixtures.
+
 ## Catalog and fixture sources
 
 Grocery-store fixture and seed-data sources worth mining before inventing our own catalog.
