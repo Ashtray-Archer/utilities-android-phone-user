@@ -1,0 +1,155 @@
+{
+  "fixture": true,
+  "store": {
+    "identity": "carpenter-bros-hardware-ann-arbor",
+    "name": "Carpenter Bros. Hardware"
+  },
+  "observed_at": "2026-09-08T20:10:00Z",
+  "source_time": null,
+  "items": [
+    {
+      "product": {
+        "identity": "fixture:hex-nut-3-8-16",
+        "name": "3/8-16 zinc hex nut",
+        "price": "0.29",
+        "unit": "each",
+        "image": "fixture:fasteners"
+      },
+      "availability": {
+        "kind": "in_stock",
+        "amount": "143"
+      },
+      "locations": [
+        { "label": "Fasteners · Aisle 4 · Bin 12" }
+      ]
+    },
+    {
+      "product": {
+        "identity": "fixture:wood-screw-8-1-1-4",
+        "name": "#8 × 1-1/4 in. exterior wood screw",
+        "price": "0.18",
+        "unit": "each",
+        "image": "fixture:fasteners"
+      },
+      "availability": {
+        "kind": "in_stock",
+        "amount": "386"
+      },
+      "locations": [
+        { "label": "Fasteners · Aisle 4 · Bin 31" },
+        { "label": "Project endcap" }
+      ]
+    },
+    {
+      "product": {
+        "identity": "fixture:copper-elbow-half-inch",
+        "name": "1/2 in. copper 90° elbow",
+        "price": "1.49",
+        "unit": "each",
+        "image": "fixture:plumbing"
+      },
+      "availability": {
+        "kind": "in_stock",
+        "amount": "27"
+      },
+      "locations": [
+        { "label": "Plumbing · Aisle 7 · Bin 18" }
+      ]
+    },
+    {
+      "product": {
+        "identity": "fixture:interior-paint-gallon",
+        "name": "Interior wall paint — white",
+        "price": "31.99",
+        "unit": "gallon",
+        "image": "fixture:paint"
+      },
+      "availability": {
+        "kind": "in_stock",
+        "amount": "11"
+      },
+      "locations": [
+        { "label": "Paint · Aisle 2" }
+      ]
+    },
+    {
+      "product": {
+        "identity": "fixture:led-bulb-60w-4pack",
+        "name": "60 W equivalent LED bulbs — 4 pack",
+        "price": "8.99",
+        "unit": "pack",
+        "image": "fixture:electrical"
+      },
+      "availability": {
+        "kind": "out_of_stock"
+      },
+      "locations": [
+        { "label": "Electrical · Aisle 6" }
+      ]
+    },
+    {
+      "product": {
+        "identity": "fixture:grass-seed-five-pound",
+        "name": "Sun and shade grass seed",
+        "price": "24.99",
+        "unit": "5 lb bag",
+        "image": "fixture:lawn-garden"
+      },
+      "availability": {
+        "kind": "in_stock",
+        "amount": "8"
+      },
+      "locations": [
+        { "label": "Lawn & garden · Aisle 10" },
+        { "label": "Seasonal front display" }
+      ]
+    },
+    {
+      "product": {
+        "identity": "fixture:utility-knife",
+        "name": "Retractable utility knife",
+        "price": "7.49",
+        "unit": "each",
+        "image": "fixture:tools"
+      },
+      "availability": {
+        "kind": "unknown"
+      },
+      "locations": [
+        { "label": "Tools · Aisle 1" }
+      ]
+    },
+    {
+      "product": {
+        "identity": "fixture:chain-by-foot",
+        "name": "Zinc utility chain",
+        "price": "2.39",
+        "unit": "foot",
+        "image": "fixture:hardware"
+      },
+      "availability": {
+        "kind": "in_stock",
+        "amount": "42.5"
+      },
+      "locations": [
+        { "label": "Hardware · Aisle 5 · Chain rack" }
+      ]
+    },
+    {
+      "product": {
+        "identity": "fixture:furnace-filter-16-20-1",
+        "name": "16 × 20 × 1 in. furnace filter",
+        "price": "6.99",
+        "unit": "each",
+        "image": "fixture:heating"
+      },
+      "availability": {
+        "kind": "in_stock",
+        "amount": "19"
+      },
+      "locations": [
+        { "label": "Heating · Rear wall" }
+      ]
+    }
+  ]
+}
