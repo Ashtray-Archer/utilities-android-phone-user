@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carpenter Bros. Hardware — inventory draft</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f2ed;
+      color: #1f211d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #f4f2ed;
+    }
+
+    button, input { font: inherit; }
+
+    .topbar {
+      background: #24271f;
+      color: #fff;
+      padding: 18px 16px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 10px rgba(0,0,0,.16);
+    }
+
+    .topbar-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .store-name {
+      margin: 0;
+      font-size: clamp(1.45rem, 5vw, 2.1rem);
+      line-height: 1.05;
+      letter-spacing: -.025em;
+    }
+
+    .store-place {
+      margin-top: 6px;
+      color: #d6d8ce;
+      font-size: .9rem;
+    }
+
+    .cart-jump {
+      border: 1px solid #777b6f;
+      background: #fff;
+      color: #1f211d;
+      border-radius: 999px;
+      padding: 9px 13px;
+      cursor: pointer;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .notice {
+      background: #fff4cf;
+      border-bottom: 1px solid #e1d39d;
+      padding: 10px 16px;
+      font-size: .88rem;
+    }
+
+    .notice strong { font-weight: 800; }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px 16px 48px;
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    #search {
+      width: 100%;
+      border: 1px solid #b8b9b2;
+      background: #fff;
+      color: #1f211d;
+      border-radius: 12px;
+      padding: 13px 14px;
+      outline: none;
+    }
+
+    #search:focus {
+      border-color: #4d5442;
+      box-shadow: 0 0 0 3px rgba(77,84,66,.13);
+    }
+
+    .result-count {
+      color: #66695f;
+      font-size: .9rem;
+      min-width: 74px;
+      text-align: right;
+    }
+
+    .freshness {
+      color: #6c6d67;
+      font-size: .78rem;
+      margin-bottom: 18px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 22px;
+      align-items: start;
+    }
+
+    .products {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 13px;
+    }
+
+    .product-card {
+      background: #fff;
+      border: 1px solid #d6d5cf;
+      border-radius: 15px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 280px;
+    }
+
+    .product-image {
+      min-height: 92px;
+      background: #e8e6de;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      color: #55594f;
+      font-weight: 800;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      font-size: .75rem;
+    }
+
+    .product-body {
+      padding: 13px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .product-name {
+      font-size: 1rem;
+      font-weight: 750;
+      line-height: 1.25;
+      min-height: 2.5em;
+    }
+
+    .price {
+      margin-top: 8px;
+      font-size: 1.18rem;
+      font-weight: 800;
+    }
+
+    .unit {
+      font-size: .8rem;
+      color: #6b6d66;
+      margin-left: 4px;
+      font-weight: 500;
+    }
+
+    .availability {
+      margin-top: 10px;
+      font-size: .85rem;
+      font-weight: 750;
+    }
+
+    .availability.in { color: #2c622e; }
+    .availability.out { color: #8d2c21; }
+    .availability.unknown { color: #6c5d27; }
+
+    .locations {
+      margin-top: 6px;
+      color: #5d6059;
+      font-size: .8rem;
+      line-height: 1.35;
+      min-height: 2.1em;
+    }
+
+    .add-button {
+      margin-top: auto;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #343a2d;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 750;
+    }
+
+    .add-button:disabled {
+      background: #c8c8c3;
+      color: #666761;
+      cursor: default;
+    }
+
+    .cart {
+      background: #fff;
+      border: 1px solid #d6d5cf;
+      border-radius: 15px;
+      padding: 15px;
+      position: sticky;
+      top: 111px;
+    }
+
+    .cart h2 {
+      margin: 0 0 12px;
+      font-size: 1.15rem;
+    }
+
+    .empty-cart {
+      color: #6d6f68;
+      padding: 15px 0;
+      font-size: .9rem;
+    }
+
+    .cart-line {
+      padding: 11px 0;
+      border-top: 1px solid #ecebe6;
+    }
+
+    .cart-line:first-child { border-top: 0; }
+
+    .cart-line-name {
+      font-size: .88rem;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .cart-line-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 7px;
+    }
+
+    .qty {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #c7c7c0;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .qty button {
+      border: 0;
+      background: #f3f2ed;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .qty span {
+      min-width: 32px;
+      text-align: center;
+      font-size: .85rem;
+      font-weight: 700;
+    }
+
+    .line-total { font-weight: 750; font-size: .9rem; }
+
+    .cart-total {
+      display: flex;
+      justify-content: space-between;
+      border-top: 2px solid #343a2d;
+      padding-top: 12px;
+      margin-top: 10px;
+      font-size: 1rem;
+      font-weight: 850;
+    }
+
+    .cart-note {
+      color: #74766f;
+      font-size: .74rem;
+      line-height: 1.35;
+      margin-top: 11px;
+    }
+
+    .error {
+      background: #fff;
+      border: 1px solid #d5b0aa;
+      border-radius: 12px;
+      padding: 16px;
+      color: #7f241a;
+    }
+
+    @media (max-width: 820px) {
+      .layout { grid-template-columns: 1fr; }
+      .cart { position: static; }
+      .products { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+    }
+
+    @media (max-width: 520px) {
+      .topbar-inner { align-items: center; }
+      .store-place { font-size: .8rem; }
+      .cart-jump { padding: 8px 10px; }
+      main { padding-left: 11px; padding-right: 11px; }
+      .products { grid-template-columns: 1fr 1fr; gap: 9px; }
+      .product-card { min-height: 300px; }
+      .product-body { padding: 10px; }
+      .product-image { min-height: 72px; }
+      .product-name { font-size: .92rem; }
+      .price { font-size: 1.05rem; }
+      .locations { font-size: .74rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <h1 class="store-name">Carpenter Bros. Hardware</h1>
+        <div class="store-place">2753 Plymouth Road · Ann Arbor</div>
+      </div>
+      <button class="cart-jump" id="cartJump" type="button">Cart · <span id="cartCount">0</span></button>
+    </div>
+  </header>
+
+  <div class="notice">
+    <strong>Sample inventory.</strong> Product names, prices, quantities, SKUs and shelf locations on this page are synthetic until an authorized Eagle feed is connected.
+  </div>
+
+  <main>
+    <div class="search-row">
+      <input id="search" type="search" placeholder="Search hardware, plumbing, paint, tools…" autocomplete="off">
+      <div class="result-count" id="resultCount"></div>
+    </div>
+    <div class="freshness" id="freshness">Loading catalog…</div>
+
+    <div class="layout">
+      <section class="products" id="products" aria-label="Products"></section>
+      <aside class="cart" id="cart" aria-label="Cart">
+        <h2>Your cart</h2>
+        <div id="cartLines"></div>
+        <div class="cart-total" id="cartTotalRow" hidden>
+          <span>Total</span>
+          <span id="cartTotal">$0.00</span>
+        </div>
+        <div class="cart-note">This draft cart does not reserve stock, place an order, charge a customer, or write anything back to the store.</div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    "use strict";
+
+    const state = {
+      catalog: null,
+      productsById: new Map(),
+      cart: new Map(),
+      query: ""
+    };
+
+    const productsNode = document.getElementById("products");
+    const searchNode = document.getElementById("search");
+    const resultCountNode = document.getElementById("resultCount");
+    const freshnessNode = document.getElementById("freshness");
+    const cartLinesNode = document.getElementById("cartLines");
+    const cartTotalNode = document.getElementById("cartTotal");
+    const cartTotalRowNode = document.getElementById("cartTotalRow");
+    const cartCountNode = document.getElementById("cartCount");
+
+    function money(value) {
+      const number = Number(value);
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD"
+      }).format(number);
+    }
+
+    function categoryLabel(imageIdentity) {
+      return String(imageIdentity || "fixture:hardware")
+        .replace(/^fixture:/, "")
+        .replace(/-/g, " ");
+    }
+
+    function availabilityView(availability) {
+      if (!availability || availability.kind === "unknown") {
+        return { text: "Availability unavailable", css: "unknown", cartable: false };
+      }
+      if (availability.kind === "out_of_stock") {
+        return { text: "Out of stock", css: "out", cartable: false };
+      }
+      return {
+        text: `${availability.amount} available`,
+        css: "in",
+        cartable: true
+      };
+    }
+
+    function searchText(item) {
+      const locations = (item.locations || []).map(location => location.label).join(" ");
+      return `${item.product.name} ${item.product.unit} ${locations}`.toLowerCase();
+    }
+
+    function filteredItems() {
+      if (!state.catalog) return [];
+      const q = state.query.trim().toLowerCase();
+      if (!q) return state.catalog.items;
+      return state.catalog.items.filter(item => searchText(item).includes(q));
+    }
+
+    function renderProducts() {
+      const items = filteredItems();
+      resultCountNode.textContent = `${items.length} item${items.length === 1 ? "" : "s"}`;
+      productsNode.replaceChildren();
+
+      for (const item of items) {
+        const availability = availabilityView(item.availability);
+        const card = document.createElement("article");
+        card.className = "product-card";
+
+        const image = document.createElement("div");
+        image.className = "product-image";
+        image.textContent = categoryLabel(item.product.image);
+
+        const body = document.createElement("div");
+        body.className = "product-body";
+
+        const name = document.createElement("div");
+        name.className = "product-name";
+        name.textContent = item.product.name;
+
+        const price = document.createElement("div");
+        price.className = "price";
+        price.append(document.createTextNode(money(item.product.price)));
+        const unit = document.createElement("span");
+        unit.className = "unit";
+        unit.textContent = `/ ${item.product.unit}`;
+        price.append(unit);
+
+        const availabilityNode = document.createElement("div");
+        availabilityNode.className = `availability ${availability.css}`;
+        availabilityNode.textContent = availability.text;
+
+        const locations = document.createElement("div");
+        locations.className = "locations";
+        locations.textContent = (item.locations || []).map(location => location.label).join(" · ") || "Location unavailable";
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "add-button";
+        button.textContent = availability.cartable ? "Add to cart" : "Not available to add";
+        button.disabled = !availability.cartable;
+        button.addEventListener("click", () => addToCart(item.product.identity));
+
+        body.append(name, price, availabilityNode, locations, button);
+        card.append(image, body);
+        productsNode.append(card);
+      }
+    }
+
+    function addToCart(productIdentity) {
+      const current = state.cart.get(productIdentity) || 0;
+      state.cart.set(productIdentity, current + 1);
+      renderCart();
+    }
+
+    function changeCart(productIdentity, delta) {
+      const current = state.cart.get(productIdentity) || 0;
+      const next = current + delta;
+      if (next <= 0) state.cart.delete(productIdentity);
+      else state.cart.set(productIdentity, next);
+      renderCart();
+    }
+
+    function renderCart() {
+      cartLinesNode.replaceChildren();
+      let total = 0;
+      let occupied = 0;
+
+      for (const [identity, amount] of state.cart.entries()) {
+        const item = state.productsById.get(identity);
+        if (!item) continue;
+
+        occupied += 1;
+        const lineTotal = Number(item.product.price) * amount;
+        total += lineTotal;
+
+        const line = document.createElement("div");
+        line.className = "cart-line";
+
+        const name = document.createElement("div");
+        name.className = "cart-line-name";
+        name.textContent = item.product.name;
+
+        const bottom = document.createElement("div");
+        bottom.className = "cart-line-bottom";
+
+        const quantity = document.createElement("div");
+        quantity.className = "qty";
+
+        const minus = document.createElement("button");
+        minus.type = "button";
+        minus.setAttribute("aria-label", `Decrease ${item.product.name}`);
+        minus.textContent = "−";
+        minus.addEventListener("click", () => changeCart(identity, -1));
+
+        const amountNode = document.createElement("span");
+        amountNode.textContent = String(amount);
+
+        const plus = document.createElement("button");
+        plus.type = "button";
+        plus.setAttribute("aria-label", `Increase ${item.product.name}`);
+        plus.textContent = "+";
+        plus.addEventListener("click", () => changeCart(identity, 1));
+
+        const lineTotalNode = document.createElement("div");
+        lineTotalNode.className = "line-total";
+        lineTotalNode.textContent = money(lineTotal);
+
+        quantity.append(minus, amountNode, plus);
+        bottom.append(quantity, lineTotalNode);
+        line.append(name, bottom);
+        cartLinesNode.append(line);
+      }
+
+      if (occupied === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty-cart";
+        empty.textContent = "Nothing here yet.";
+        cartLinesNode.append(empty);
+      }
+
+      cartCountNode.textContent = String(occupied);
+      cartTotalNode.textContent = money(total);
+      cartTotalRowNode.hidden = occupied === 0;
+    }
+
+    function renderFreshness() {
+      if (!state.catalog) return;
+      const observed = new Date(state.catalog.observed_at);
+      const observedText = Number.isNaN(observed.getTime())
+        ? state.catalog.observed_at
+        : observed.toLocaleString();
+      freshnessNode.textContent = `Sample catalog observed ${observedText}. No Eagle source timestamp is present.`;
+    }
+
+    async function loadCatalog() {
+      try {
+        const response = await fetch("./catalog.fixture.json", { cache: "no-store" });
+        if (!response.ok) throw new Error(`catalog request failed: ${response.status}`);
+        const catalog = await response.json();
+        state.catalog = catalog;
+        state.productsById = new Map(catalog.items.map(item => [item.product.identity, item]));
+        renderFreshness();
+        renderProducts();
+        renderCart();
+      } catch (error) {
+        freshnessNode.textContent = "Catalog unavailable";
+        productsNode.innerHTML = `<div class="error">Could not load catalog.fixture.json. Serve this directory over a small static HTTP server rather than opening the HTML as a local file.<br><br>${String(error)}</div>`;
+      }
+    }
+
+    searchNode.addEventListener("input", event => {
+      state.query = event.target.value;
+      renderProducts();
+    });
+
+    document.getElementById("cartJump").addEventListener("click", () => {
+      document.getElementById("cart").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    loadCatalog();
+  </script>
+</body>
+</html>
