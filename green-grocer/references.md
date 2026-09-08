@@ -1,5 +1,15 @@
 # Green Grocer references
 
+## POS and inventory integration
+
+- [Epicor Eagle inventory integration research](./epicor-eagle-inventory.md)
+  - Research-first boundary for read-only customer inventory.
+  - Covers supported/in-use Eagle extraction paths, SKU/UPC identity, store stock,
+    availability, physical locations, decimal quantities, freshness, licensing,
+    and the proposed adapter types.
+
+## Catalog and fixture sources
+
 Grocery-store fixture and seed-data sources worth mining before inventing our own catalog.
 
 - [Open-Science-Online-Grocery/online-grocery](https://github.com/Open-Science-Online-Grocery/online-grocery)
