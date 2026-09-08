@@ -4,9 +4,9 @@ A small standalone Android picker for entering symbols and text macros from the 
 
 ## Idriç refactor boundary
 
-The first refactor slice moves all eight page definitions and their allowed key actions into `idric/UnicodePicker.idric`. The Idriç type only permits text insertion, paired insertion, and the three pastebin operations; movement keys, signals, and IME actions cannot be placed on a picker page.
+The first refactor slice moves all eight page definitions and their allowed key actions into `idric/UnicodePicker.idric`. The Idriç type only permits text insertion, paired insertion, and the three pastebin operations; movement keys, signals, and IME actions cannot be placed on a picker page. Each pastebin action carries one of the closed `paste_slot` choices rather than an arbitrary natural number. The C snapshot still receives a zero-based unsigned index and defensively checks it before array access.
 
-`idric/GenerateLayouts.idric` emits the deterministic C layout snapshot compiled into the APK. `check-idric-layouts.sh` compiles the Idriç model, runs its picker-specific contract, and rejects a stale generated snapshot. The mutable editing state and Android boundary remain C for now; this slice does not disguise handwritten C as Idriç or ship a Scheme runtime on the phone.
+`idric/GenerateLayouts.idric` emits the deterministic C layout snapshot compiled into the APK. `check-idric-layouts.sh` compiles the Idriç model, runs its picker-specific contract, rejects a stale generated snapshot, and proves that a raw natural number cannot be supplied as a paste slot. The mutable editing state and Android boundary remain C for now; this slice does not disguise handwritten C as Idriç or ship a Scheme runtime on the phone.
 
 The APK contains native C machine code only:
 

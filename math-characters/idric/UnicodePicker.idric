@@ -4,13 +4,26 @@ module UnicodePicker
 
 ||| Actions which a standalone Unicode picker key may perform.
 ||| Hardware movement, signals, and IME actions cannot be represented here.
+||| The native picker owns exactly three session-local paste slots.
+public export
+choice paste_slot one_of
+  slot_one
+  slot_two
+  slot_three
+
+public export
+slot_index : paste_slot → Nat
+slot_index slot_one = 0
+slot_index slot_two = 1
+slot_index slot_three = 2
+
 public export
 choice picker_action one_of
   insert_text String
   insert_pair String
-  view_slot Nat
-  remember_slot Nat
-  write_slot Nat
+  view_slot paste_slot
+  remember_slot paste_slot
+  write_slot paste_slot
 
 public export
 data PickerKey = Key String picker_action
@@ -182,16 +195,16 @@ pages =
       ]
   , Page "Several Pastebins"
       [ Row
-          [ Key "VIEW₁" (view_slot 0), Key "VIEW₂" (view_slot 1)
-          , Key "VIEW₃" (view_slot 2)
+          [ Key "VIEW₁" (view_slot slot_one), Key "VIEW₂" (view_slot slot_two)
+          , Key "VIEW₃" (view_slot slot_three)
           ]
       , Row
-          [ Key "REMEMBER₁" (remember_slot 0), Key "REMEMBER₂" (remember_slot 1)
-          , Key "REMEMBER₃" (remember_slot 2)
+          [ Key "REMEMBER₁" (remember_slot slot_one), Key "REMEMBER₂" (remember_slot slot_two)
+          , Key "REMEMBER₃" (remember_slot slot_three)
           ]
       , Row
-          [ Key "WRITE₁" (write_slot 0), Key "WRITE₂" (write_slot 1)
-          , Key "WRITE₃" (write_slot 2)
+          [ Key "WRITE₁" (write_slot slot_one), Key "WRITE₂" (write_slot slot_two)
+          , Key "WRITE₃" (write_slot slot_three)
           ]
       ]
   ]
