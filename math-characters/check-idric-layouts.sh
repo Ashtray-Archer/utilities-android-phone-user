@@ -37,4 +37,23 @@ if [ "$contract_output" != "picker_contract: all checks passed" ]; then
     exit 1
 fi
 
+refusal_dir="$work_dir/refusal"
+mkdir -p "$refusal_dir"
+ln -s "$project_dir/idric/UnicodePicker.idric" "$refusal_dir/UnicodePicker.idric"
+ln -s "$project_dir/idric/rejected/OutOfRangePasteSlot.idric" \
+    "$refusal_dir/OutOfRangePasteSlot.idric"
+refusal_log="$refusal_dir/refusal.log"
+if (cd "$refusal_dir" &&
+    "$compiler" --check --build-dir "$refusal_dir/build" \
+        OutOfRangePasteSlot.idric) >"$refusal_log" 2>&1; then
+    echo "out-of-range paste slot unexpectedly compiled" >&2
+    exit 1
+fi
+if ! grep -F "Mismatch between: Nat and paste_slot" "$refusal_log" >/dev/null; then
+    echo "out-of-range paste slot failed for an unexpected reason" >&2
+    sed -n '1,120p' "$refusal_log" >&2
+    exit 1
+fi
+
 printf '%s\n' "$contract_output"
+printf '%s\n' "paste_slot: out-of-range construction rejected"
