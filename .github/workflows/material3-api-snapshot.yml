@@ -1,0 +1,39 @@
+name: Material 3 API snapshot
+
+on:
+  push:
+    branches:
+      - material3-api-reference
+    paths:
+      - material3-api/update_material3_api.py
+      - .github/workflows/material3-api-snapshot.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: material3-api-reference
+
+      - name: Snapshot pinned AndroidX Material 3 API
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 material3-api/update_material3_api.py
+
+      - name: Commit generated reference corpus
+        run: |
+          if git diff --quiet -- material3-api && [ -z "$(git ls-files --others --exclude-standard material3-api)" ]; then
+            echo "Material 3 snapshot already matches the pinned AndroidX commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add material3-api
+          git commit -m "Snapshot complete AndroidX Material 3 API"
+          git push origin HEAD:material3-api-reference
