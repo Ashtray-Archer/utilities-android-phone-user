@@ -1,0 +1,11 @@
+{
+  "material3_root": "compose/material3",
+  "requested_ref": "cdeafe5b4e450d61cdb623d58c148efbb0d508cf",
+  "resolved_commit": "cdeafe5b4e450d61cdb623d58c148efbb0d508cf",
+  "selection": [
+    "compose/material3/**/api/*current.txt",
+    "compose/material3/**/bcv/**/current.txt"
+  ],
+  "signature_file_count": 43,
+  "upstream_repository": "androidx/androidx"
+}
