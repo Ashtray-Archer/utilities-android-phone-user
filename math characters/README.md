@@ -4,12 +4,17 @@ A deliberately restricted Android input method for entering a small math-oriente
 
 Current keys:
 
-- arrows: ← → ↑ ↓
-- complex/vector basis: ℂ i j k
-- superscript digits ⁰–⁹ and ⁺ ⁻
-- subscript digits ₀–₉ and ₊ ₋
-- ordinary digits 0–9, decimal point, and Unicode minus
+- arrows: `← ↑ ↓ → ↔ ↦ ⇒`
+- number sets and infinity: `ℂ ℝ ℚ ℤ ℕ ∞`
+- basis / imaginary letters: `i j k`
+- ordinary digits: `0–9`, decimal point, `+`, and Unicode minus `−`
+- superscripts: `⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹ ⁺ ⁻ ⁼ ⁽ ⁾ ⁱ ʲ ᵏ ˡ ⁿ`
+- subscripts: `₀ ₁ ₂ ₃ ₄ ₅ ₆ ₇ ₈ ₉ ₊ ₋ ₌ ₍ ₎ ᵢ ⱼ ₖ ₗ`
 - space, backspace, enter, and a key for switching to the next installed keyboard
+
+The superscript and subscript rows intentionally include the non-digit forms already used by the repository's broader Unicode picker; in particular, superscript `ⁿ` is part of this compact IME.
+
+The larger Unicode picker also carries extended arrows, punctuation, programming symbols, and other pages. Those remain separate rather than turning this keyboard into a full Unicode browser.
 
 Install the APK, open **Math Characters**, enable the input method in Android settings, then use **Choose keyboard now** to select it.
 
