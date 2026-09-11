@@ -26,7 +26,7 @@ public final class MainActivity extends Activity {
         root.addView(title);
 
         TextView description = new TextView(this);
-        description.setText("Restricted keyboard for arrows, ℂ, i/j/k, superscript and subscript digits, and ordinary digits.");
+        description.setText("Restricted keyboard for arrows, number sets, i/j/k, ordinary digits, and complete superscript/subscript rows including ⁿ.");
         description.setTextSize(17);
         description.setPadding(0, dp(16), 0, dp(20));
         root.addView(description);
