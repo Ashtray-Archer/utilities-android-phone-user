@@ -54,4 +54,18 @@ JAVA_HOME=/path/to/jdk ./run-host-tests.sh
 
 The host check exercises standard UTF-8/UTF-16 conversion including embedded NUL, boundary code points, malformed UTF-8, surrogate pairs, and unpaired surrogates. It also compiles the Android-framework JNI bridge against the JDK JNI interface with warnings treated as errors.
 
-That host check proves the C/JNI boundary compiles; Android framework behavior still requires an Android device/emulator acceptance test when the bridge is wired into a concrete app.
+### Native-only Android smoke receipt
+
+`device-smoke/` is a disposable `android.app.NativeActivity` test APK. It has no DEX, Gradle, Java, or Kotlin layer and automatically finishes after the receipt.
+
+With an Android SDK/NDK and one ADB-visible device or emulator:
+
+```sh
+ANDROID_ABI=armeabi-v7a sh device-smoke/run-device-smoke.sh
+```
+
+`ANDROID_ABI` may also be `arm64-v8a` or `x86_64`. The default minimum API is 24 and may be changed with `ANDROID_API`.
+
+A passing receipt proves on the Android framework itself that the bridge initializes from `ANativeActivity`, copies and reads a length-delimited UTF-8 sample containing embedded NUL and non-ASCII characters, reports text presence, executes the sensitive-copy path, clears the clipboard with the documented API split, shuts down, and never injects or executes the pasted bytes.
+
+The smoke receipt does **not** prove background/input-focus withholding, the Android 12 clipboard-read notification, the Android 13+ sensitive preview UI, or deliberately injected framework exceptions. Those remain separate device acceptance boundaries rather than being inferred from the host check.
