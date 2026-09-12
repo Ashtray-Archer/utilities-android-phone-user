@@ -16,6 +16,9 @@ static const char *accelerometer_events_path =
 static const char *accelerometer_control_path =
     "/hardware/sensors/accelerometer/control";
 
+/* ALooper accepts any non-negative application-defined identifier. */
+static const int sensor_looper_id = 1;
+
 static volatile sig_atomic_t stop_requested = 0;
 
 static void request_stop(int signal_number) {
@@ -60,7 +63,6 @@ static int write_info(const ASensor *sensor) {
     printf("vendor\t%s\n", ASensor_getVendor(sensor));
     printf("type\t%d\n", ASensor_getType(sensor));
     printf("units\tm/s^2\n");
-    printf("maximum_range\t%.9g\n", ASensor_getMaxRange(sensor));
     printf("resolution\t%.9g\n", ASensor_getResolution(sensor));
     printf("minimum_delay_us\t%d\n", ASensor_getMinDelay(sensor));
     return 0;
@@ -107,7 +109,7 @@ static int stream_accelerometer(ASensorManager *manager,
     }
 
     queue = ASensorManager_createEventQueue(
-        manager, looper, LOOPER_ID_USER, NULL, NULL);
+        manager, looper, sensor_looper_id, NULL, NULL);
     if (queue == NULL) {
         fprintf(stderr, "could not create accelerometer event queue\n");
         return 1;
