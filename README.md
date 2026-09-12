@@ -9,3 +9,5 @@ Each utility lives in its own folder and should remain independently buildable w
 [`text-pad`](text-pad) records the product direction and phone user stories for a deliberately small plain-text editor. It is a design note rather than an implementation today.
 
 [`android-clipboard`](android-clipboard) is the small reusable C/JNI boundary to Android's system clipboard for native utilities; it keeps application editing and execution semantics outside the framework bridge.
+
+[`hardware`](hardware) is the phone-hardware experiment: a synthetic file-like `/hardware` namespace with a native Android sensor backend, a separate Termux:API path, and explicit probes for how far an ordinary process can reach below Android's stable APIs.
