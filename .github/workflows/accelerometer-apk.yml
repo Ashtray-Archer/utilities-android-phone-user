@@ -1,0 +1,55 @@
+name: accelerometer native APK
+
+on:
+  push:
+    branches: [accelerometer/native-apk]
+    paths:
+      - 'accelerometer/**'
+      - '.github/workflows/accelerometer-apk.yml'
+  pull_request:
+    paths:
+      - 'accelerometer/**'
+      - '.github/workflows/accelerometer-apk.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK and NDK inputs
+        run: |
+          yes | sdkmanager \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;27.2.12479018'
+
+      - name: Build native APK
+        run: sh accelerometer/build-apk.sh
+
+      - name: Inspect APK and ARMv7 Thumb library
+        run: |
+          set -eu
+          apk=accelerometer/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$apk"
+          unzip -l "$apk"
+          if unzip -l "$apk" | grep -q 'classes.dex'; then
+            echo 'unexpected classes.dex in native accelerometer APK' >&2
+            exit 1
+          fi
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            unzip -p "$apk" "lib/$abi/libaccelerometer.so" >"/tmp/libaccelerometer-$abi.so"
+            file "/tmp/libaccelerometer-$abi.so"
+          done
+          readelf -A /tmp/libaccelerometer-armeabi-v7a.so | tee /tmp/arm-attributes.txt
+          grep -Eq 'Tag_CPU_arch: v7|Tag_CPU_arch: v7E-M' /tmp/arm-attributes.txt
+          grep -q 'Tag_THUMB_ISA_use: Thumb-2' /tmp/arm-attributes.txt
+
+      - name: Retain APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: accelerometer-native-apk
+          path: accelerometer/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
