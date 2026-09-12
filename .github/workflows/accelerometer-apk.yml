@@ -27,7 +27,9 @@ jobs:
             'ndk;27.2.12479018'
 
       - name: Build native APK
-        run: sh accelerometer/build-apk.sh
+        run: |
+          ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.2.12479018" \
+            sh accelerometer/build-apk.sh
 
       - name: Inspect APK and ARMv7 Thumb library
         run: |
