@@ -1,0 +1,51 @@
+name: android-hardware-native
+
+on:
+  pull_request:
+    paths:
+      - "hardware/**"
+      - ".github/workflows/android-hardware-native.yml"
+  push:
+    branches:
+      - main
+      - hardware-sensor-namespace
+    paths:
+      - "hardware/**"
+      - ".github/workflows/android-hardware-native.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: 27.2.12479018
+      ANDROID_API: 21
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install pinned Android NDK
+        run: sdkmanager "ndk;${NDK_VERSION}"
+
+      - name: Select pinned Android NDK
+        run: echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build ARMv7, AArch64, and x86_64 probes
+        run: sh hardware/build-android-native.sh
+
+      - name: Record ELF and dynamic dependency evidence
+        run: |
+          readelf_bin="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          for binary in out/android-native/hardware-android-native-*; do
+            echo "== ${binary} =="
+            sha256sum "${binary}"
+            "${readelf_bin}" -h "${binary}" | grep -E 'Class:|Machine:|Type:'
+            "${readelf_bin}" -d "${binary}" | grep -E 'NEEDED.*libandroid.so'
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-hardware-native
+          path: out/android-native/hardware-android-native-*
+          if-no-files-found: error
