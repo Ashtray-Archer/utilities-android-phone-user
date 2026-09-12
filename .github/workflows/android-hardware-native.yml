@@ -44,8 +44,16 @@ jobs:
             "${readelf_bin}" -d "${binary}" | grep -E 'NEEDED.*libandroid.so'
           done
 
+      - name: Package physical-phone smoke test
+        run: |
+          mkdir -p out/phone-hardware-test
+          cp out/android-native/hardware-android-native-* out/phone-hardware-test/
+          cp hardware/test-on-phone.sh out/phone-hardware-test/
+          cp hardware/probe-phone.sh out/phone-hardware-test/
+          cp hardware/termux-api/sample.sh out/phone-hardware-test/termux-api-sample.sh
+
       - uses: actions/upload-artifact@v4
         with:
-          name: android-hardware-native
-          path: out/android-native/hardware-android-native-*
+          name: phone-hardware-test
+          path: out/phone-hardware-test/
           if-no-files-found: error
