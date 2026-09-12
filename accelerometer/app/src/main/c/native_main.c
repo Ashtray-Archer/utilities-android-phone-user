@@ -313,8 +313,6 @@ static void consume_sensor_events(struct accelerometer_state *state)
 
 void android_main(struct android_app *app)
 {
-    app_dummy();
-
     struct accelerometer_state state;
     (void)memset(&state, 0, sizeof(state));
     state.app = app;
