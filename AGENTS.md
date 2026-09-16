@@ -1,5 +1,8 @@
 # Agent instructions
 
+Apply the shared evidence, script-delivery, and acceptance guardrails in
+`isomorphisms/ai-ci/AGENTS.md`.
+
 Before writing or reviewing Idriç in this repository, read:
 
 1. [`STYLE.md`](STYLE.md)
@@ -21,3 +24,9 @@ Resolve repository and file paths from the script's own location, an explicit
 project location, or a discovered repository root, and perform any required
 `cd` inside the script. Never require the human to `cd` first or rely on relative
 paths against their current working directory.
+
+When a phone-side script, executable, APK, or CI artifact is ready for the human
+to exercise, make GitHub the delivery path and provide a self-contained script
+or command that fetches it from the repository, release, or Actions artifact.
+Do not rely on chat attachment downloads unless the human explicitly asks for
+one.
