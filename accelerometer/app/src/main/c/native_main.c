@@ -203,14 +203,16 @@ static void draw_screen(struct accelerometer_state *state)
         scale = 6;
     }
 
+    int32_t text_scale = scale + 1;
+
     int32_t left = 6 * scale;
     int32_t top = 8 * scale;
     int32_t line_height = 12 * scale;
 
-    draw_text(&buffer, "ACCELEROMETER", left, top, scale, foreground);
+    draw_text(&buffer, "ACCELEROMETER", left, top, text_scale, foreground);
 
     if (state->accelerometer == NULL) {
-        draw_text(&buffer, "NO SENSOR", left, top + 2 * line_height, scale, foreground);
+        draw_text(&buffer, "NO SENSOR", left, top + 2 * line_height, text_scale, foreground);
         (void)ANativeWindow_unlockAndPost(state->app->window);
         return;
     }
@@ -222,9 +224,9 @@ static void draw_screen(struct accelerometer_state *state)
     (void)snprintf(y_line, sizeof(y_line), "Y %+7.3f M/S2", (double)state->y);
     (void)snprintf(z_line, sizeof(z_line), "Z %+7.3f M/S2", (double)state->z);
 
-    draw_text(&buffer, x_line, left, top + 2 * line_height, scale, foreground);
-    draw_text(&buffer, y_line, left, top + 4 * line_height, scale, foreground);
-    draw_text(&buffer, z_line, left, top + 6 * line_height, scale, foreground);
+    draw_text(&buffer, x_line, left, top + 2 * line_height, text_scale, foreground);
+    draw_text(&buffer, y_line, left, top + 4 * line_height, text_scale, foreground);
+    draw_text(&buffer, z_line, left, top + 6 * line_height, text_scale, foreground);
 
     int32_t center_x = buffer.width / 2;
     int32_t half_width = (buffer.width - 2 * left) / 2;
