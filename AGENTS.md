@@ -15,3 +15,9 @@ Work on a branch. Preserve each utility's user-facing purpose above Android,
 JNI, C, shell, build, or packaging details. Keep boundary adapters narrow and do
 not duplicate Idriç-owned application logic into them. Run the utility's
 available build or acceptance checks before proposing a merge.
+
+Whenever giving the human a script or command block, assume `$PWD` is arbitrary.
+Resolve repository and file paths from the script's own location, an explicit
+project location, or a discovered repository root, and perform any required
+`cd` inside the script. Never require the human to `cd` first or rely on relative
+paths against their current working directory.
