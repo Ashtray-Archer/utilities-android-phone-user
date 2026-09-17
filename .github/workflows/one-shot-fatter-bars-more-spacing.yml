@@ -1,0 +1,52 @@
+name: one-shot fatter accelerometer bars and spacing
+
+on:
+  push:
+    branches: [accelerometer/mid-screen]
+    paths:
+      - '.github/workflows/one-shot-fatter-bars-more-spacing.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  edit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: accelerometer/mid-screen
+
+      - name: Increase vertical spacing and bar thickness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('accelerometer/app/src/main/c/native_main.c')
+          text = path.read_text()
+
+          replacements = {
+              '    int32_t line_height = 12 * scale;\n': '    int32_t line_height = 16 * scale;\n',
+              '    int32_t bar_height = 2 * scale + 1;\n': '    int32_t bar_height = 6 * scale;\n',
+              '    int32_t track_height = scale;\n': '    int32_t track_height = 2 * scale;\n',
+              '    fill_rect(&buffer, bar_margin, x_bar_y + scale / 2, track_width, track_height, track);\n': '    fill_rect(&buffer, bar_margin, x_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);\n',
+              '    fill_rect(&buffer, bar_margin, y_bar_y + scale / 2, track_width, track_height, track);\n': '    fill_rect(&buffer, bar_margin, y_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);\n',
+              '    fill_rect(&buffer, bar_margin, z_bar_y + scale / 2, track_width, track_height, track);\n': '    fill_rect(&buffer, bar_margin, z_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);\n',
+          }
+
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected exactly one occurrence: {old!r}')
+              text = text.replace(old, new)
+
+          path.write_text(text)
+          PY
+
+          rm .github/workflows/one-shot-fatter-bars-more-spacing.yml
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -A
+          git commit -m 'Use fatter accelerometer bars and more spacing'
+          git push origin HEAD:accelerometer/mid-screen
