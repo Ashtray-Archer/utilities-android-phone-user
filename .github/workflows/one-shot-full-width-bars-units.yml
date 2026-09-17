@@ -1,0 +1,120 @@
+name: one-shot full-width bars and SI units
+
+on:
+  push:
+    branches: [accelerometer/mid-screen]
+    paths:
+      - '.github/workflows/one-shot-full-width-bars-units.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  edit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: accelerometer/mid-screen
+
+      - name: Widen bars and render m/s squared
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('accelerometer/app/src/main/c/native_main.c')
+          text = path.read_text()
+
+          old = "    {'M', {0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11}},\n"
+          new = old + "    {'m', {0x00, 0x00, 0x1a, 0x15, 0x15, 0x15, 0x15}},\n"
+          if text.count(old) != 1:
+              raise SystemExit('expected M glyph once')
+          text = text.replace(old, new)
+
+          old = "    {'S', {0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e}},\n"
+          new = old + "    {'s', {0x00, 0x00, 0x0f, 0x10, 0x0e, 0x01, 0x1e}},\n"
+          if text.count(old) != 1:
+              raise SystemExit('expected S glyph once')
+          text = text.replace(old, new)
+
+          old = '''    const uint32_t foreground = 0xffeeeeeeU;
+              const uint32_t secondary = 0xffa8a8a8U;
+              clear_buffer(&buffer, background);
+          '''
+          new = '''    const uint32_t foreground = 0xffeeeeeeU;
+              const uint32_t secondary = 0xffa8a8a8U;
+              const uint32_t track = 0xff505050U;
+              clear_buffer(&buffer, background);
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('expected color block once')
+          text = text.replace(old, new)
+
+          old = '''    (void)snprintf(x_line, sizeof(x_line), "X %+7.3f M/S2", (double)state->x);
+              (void)snprintf(y_line, sizeof(y_line), "Y %+7.3f M/S2", (double)state->y);
+              (void)snprintf(z_line, sizeof(z_line), "Z %+7.3f M/S2", (double)state->z);
+
+              draw_text(&buffer, x_line, left, top + 2 * line_height, text_scale, foreground);
+              draw_text(&buffer, y_line, left, top + 4 * line_height, text_scale, foreground);
+              draw_text(&buffer, z_line, left, top + 6 * line_height, text_scale, foreground);
+
+              int32_t center_x = buffer.width / 2;
+              int32_t half_width = (buffer.width - 2 * left) / 2;
+              int32_t bar_height = scale + 1;
+              fill_rect(&buffer, center_x, top + 3 * line_height, 1, 5 * line_height, secondary);
+              draw_axis_bar(&buffer, center_x, top + 3 * line_height, half_width, bar_height, state->x, secondary);
+              draw_axis_bar(&buffer, center_x, top + 5 * line_height, half_width, bar_height, state->y, secondary);
+              draw_axis_bar(&buffer, center_x, top + 7 * line_height, half_width, bar_height, state->z, secondary);
+          '''
+          new = '''    (void)snprintf(x_line, sizeof(x_line), "X %+7.3f m/s", (double)state->x);
+              (void)snprintf(y_line, sizeof(y_line), "Y %+7.3f m/s", (double)state->y);
+              (void)snprintf(z_line, sizeof(z_line), "Z %+7.3f m/s", (double)state->z);
+
+              int32_t x_text_y = top + 2 * line_height;
+              int32_t y_text_y = top + 4 * line_height;
+              int32_t z_text_y = top + 6 * line_height;
+              draw_text(&buffer, x_line, left, x_text_y, text_scale, foreground);
+              draw_text(&buffer, y_line, left, y_text_y, text_scale, foreground);
+              draw_text(&buffer, z_line, left, z_text_y, text_scale, foreground);
+
+              int32_t superscript_scale = text_scale > 2 ? text_scale - 1 : text_scale;
+              int32_t x_unit_end = left + (int32_t)strlen(x_line) * 6 * text_scale;
+              int32_t y_unit_end = left + (int32_t)strlen(y_line) * 6 * text_scale;
+              int32_t z_unit_end = left + (int32_t)strlen(z_line) * 6 * text_scale;
+              int32_t superscript_raise = 2 * superscript_scale;
+              draw_glyph(&buffer, '2', x_unit_end, x_text_y - superscript_raise, superscript_scale, foreground);
+              draw_glyph(&buffer, '2', y_unit_end, y_text_y - superscript_raise, superscript_scale, foreground);
+              draw_glyph(&buffer, '2', z_unit_end, z_text_y - superscript_raise, superscript_scale, foreground);
+
+              int32_t bar_margin = 2 * scale;
+              int32_t center_x = buffer.width / 2;
+              int32_t half_width = (buffer.width - 2 * bar_margin) / 2;
+              int32_t bar_height = 2 * scale + 1;
+              int32_t track_height = scale;
+              int32_t track_width = buffer.width - 2 * bar_margin;
+              int32_t x_bar_y = top + 3 * line_height;
+              int32_t y_bar_y = top + 5 * line_height;
+              int32_t z_bar_y = top + 7 * line_height;
+
+              fill_rect(&buffer, bar_margin, x_bar_y + scale / 2, track_width, track_height, track);
+              fill_rect(&buffer, bar_margin, y_bar_y + scale / 2, track_width, track_height, track);
+              fill_rect(&buffer, bar_margin, z_bar_y + scale / 2, track_width, track_height, track);
+              fill_rect(&buffer, center_x, x_bar_y, 1, z_bar_y - x_bar_y + bar_height, secondary);
+              draw_axis_bar(&buffer, center_x, x_bar_y, half_width, bar_height, state->x, secondary);
+              draw_axis_bar(&buffer, center_x, y_bar_y, half_width, bar_height, state->y, secondary);
+              draw_axis_bar(&buffer, center_x, z_bar_y, half_width, bar_height, state->z, secondary);
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('expected readings/bar block once')
+          text = text.replace(old, new)
+
+          path.write_text(text)
+          PY
+          rm .github/workflows/one-shot-full-width-bars-units.yml
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -A
+          git commit -m 'Use full-width bars and m/s squared units'
+          git push origin HEAD:accelerometer/mid-screen
