@@ -39,10 +39,12 @@ static const struct glyph glyphs[] = {
     {'E', {0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f}},
     {'L', {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f}},
     {'M', {0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11}},
+    {'m', {0x00, 0x00, 0x1a, 0x15, 0x15, 0x15, 0x15}},
     {'N', {0x11, 0x19, 0x19, 0x15, 0x13, 0x13, 0x11}},
     {'O', {0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e}},
     {'R', {0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11}},
     {'S', {0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e}},
+    {'s', {0x00, 0x00, 0x0f, 0x10, 0x0e, 0x01, 0x1e}},
     {'T', {0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
     {'X', {0x11, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x11}},
     {'Y', {0x11, 0x11, 0x0a, 0x04, 0x04, 0x04, 0x04}},
@@ -194,6 +196,7 @@ static void draw_screen(struct accelerometer_state *state)
     const uint32_t background = 0xff181818U;
     const uint32_t foreground = 0xffeeeeeeU;
     const uint32_t secondary = 0xffa8a8a8U;
+    const uint32_t track = 0xff505050U;
     clear_buffer(&buffer, background);
 
     int32_t scale = buffer.width / 180;
@@ -206,8 +209,12 @@ static void draw_screen(struct accelerometer_state *state)
     int32_t text_scale = scale + 1;
 
     int32_t left = 6 * scale;
-    int32_t top = 8 * scale;
-    int32_t line_height = 12 * scale;
+    int32_t line_height = 16 * scale;
+    int32_t display_height = 8 * line_height;
+    int32_t top = (buffer.height - display_height) / 2;
+    if (top < 8 * scale) {
+        top = 8 * scale;
+    }
 
     draw_text(&buffer, "ACCELEROMETER", left, top, text_scale, foreground);
 
@@ -220,21 +227,43 @@ static void draw_screen(struct accelerometer_state *state)
     char x_line[48];
     char y_line[48];
     char z_line[48];
-    (void)snprintf(x_line, sizeof(x_line), "X %+7.3f M/S2", (double)state->x);
-    (void)snprintf(y_line, sizeof(y_line), "Y %+7.3f M/S2", (double)state->y);
-    (void)snprintf(z_line, sizeof(z_line), "Z %+7.3f M/S2", (double)state->z);
+    (void)snprintf(x_line, sizeof(x_line), "X %+7.3f m/s", (double)state->x);
+    (void)snprintf(y_line, sizeof(y_line), "Y %+7.3f m/s", (double)state->y);
+    (void)snprintf(z_line, sizeof(z_line), "Z %+7.3f m/s", (double)state->z);
 
-    draw_text(&buffer, x_line, left, top + 2 * line_height, text_scale, foreground);
-    draw_text(&buffer, y_line, left, top + 4 * line_height, text_scale, foreground);
-    draw_text(&buffer, z_line, left, top + 6 * line_height, text_scale, foreground);
+    int32_t x_text_y = top + 2 * line_height;
+    int32_t y_text_y = top + 4 * line_height;
+    int32_t z_text_y = top + 6 * line_height;
+    draw_text(&buffer, x_line, left, x_text_y, text_scale, foreground);
+    draw_text(&buffer, y_line, left, y_text_y, text_scale, foreground);
+    draw_text(&buffer, z_line, left, z_text_y, text_scale, foreground);
 
+    int32_t superscript_scale = text_scale > 2 ? text_scale - 1 : text_scale;
+    int32_t x_unit_end = left + (int32_t)strlen(x_line) * 6 * text_scale;
+    int32_t y_unit_end = left + (int32_t)strlen(y_line) * 6 * text_scale;
+    int32_t z_unit_end = left + (int32_t)strlen(z_line) * 6 * text_scale;
+    int32_t superscript_raise = 2 * superscript_scale;
+    draw_glyph(&buffer, '2', x_unit_end, x_text_y - superscript_raise, superscript_scale, foreground);
+    draw_glyph(&buffer, '2', y_unit_end, y_text_y - superscript_raise, superscript_scale, foreground);
+    draw_glyph(&buffer, '2', z_unit_end, z_text_y - superscript_raise, superscript_scale, foreground);
+
+    int32_t bar_margin = 2 * scale;
     int32_t center_x = buffer.width / 2;
-    int32_t half_width = (buffer.width - 2 * left) / 2;
-    int32_t bar_height = scale + 1;
-    fill_rect(&buffer, center_x, top + 3 * line_height, 1, 5 * line_height, secondary);
-    draw_axis_bar(&buffer, center_x, top + 3 * line_height, half_width, bar_height, state->x, secondary);
-    draw_axis_bar(&buffer, center_x, top + 5 * line_height, half_width, bar_height, state->y, secondary);
-    draw_axis_bar(&buffer, center_x, top + 7 * line_height, half_width, bar_height, state->z, secondary);
+    int32_t half_width = (buffer.width - 2 * bar_margin) / 2;
+    int32_t bar_height = 6 * scale;
+    int32_t track_height = 2 * scale;
+    int32_t track_width = buffer.width - 2 * bar_margin;
+    int32_t x_bar_y = top + 3 * line_height;
+    int32_t y_bar_y = top + 5 * line_height;
+    int32_t z_bar_y = top + 7 * line_height;
+
+    fill_rect(&buffer, bar_margin, x_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);
+    fill_rect(&buffer, bar_margin, y_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);
+    fill_rect(&buffer, bar_margin, z_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);
+    fill_rect(&buffer, center_x, x_bar_y, 1, z_bar_y - x_bar_y + bar_height, secondary);
+    draw_axis_bar(&buffer, center_x, x_bar_y, half_width, bar_height, state->x, secondary);
+    draw_axis_bar(&buffer, center_x, y_bar_y, half_width, bar_height, state->y, secondary);
+    draw_axis_bar(&buffer, center_x, z_bar_y, half_width, bar_height, state->z, secondary);
 
     (void)ANativeWindow_unlockAndPost(state->app->window);
 }
