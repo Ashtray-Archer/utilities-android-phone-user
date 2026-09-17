@@ -1,0 +1,50 @@
+name: one-shot move accelerometer mid-screen
+
+on:
+  push:
+    branches: [accelerometer/mid-screen]
+    paths:
+      - '.github/workflows/one-shot-mid-screen-accelerometer.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  edit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: accelerometer/mid-screen
+
+      - name: Center display block vertically
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('accelerometer/app/src/main/c/native_main.c')
+          text = path.read_text()
+          old = '''    int32_t left = 6 * scale;
+              int32_t top = 8 * scale;
+              int32_t line_height = 12 * scale;
+          '''
+          new = '''    int32_t left = 6 * scale;
+              int32_t line_height = 12 * scale;
+              int32_t display_height = 8 * line_height;
+              int32_t top = (buffer.height - display_height) / 2;
+              if (top < 8 * scale) {
+                  top = 8 * scale;
+              }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('expected one vertical-origin block')
+          path.write_text(text.replace(old, new))
+          PY
+          rm .github/workflows/one-shot-mid-screen-accelerometer.yml
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -A
+          git commit -m 'Move accelerometer display to mid-screen'
+          git push origin HEAD:accelerometer/mid-screen
