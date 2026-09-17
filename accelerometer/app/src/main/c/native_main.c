@@ -206,8 +206,12 @@ static void draw_screen(struct accelerometer_state *state)
     int32_t text_scale = scale + 1;
 
     int32_t left = 6 * scale;
-    int32_t top = 8 * scale;
     int32_t line_height = 12 * scale;
+    int32_t display_height = 8 * line_height;
+    int32_t top = (buffer.height - display_height) / 2;
+    if (top < 8 * scale) {
+        top = 8 * scale;
+    }
 
     draw_text(&buffer, "ACCELEROMETER", left, top, text_scale, foreground);
 
