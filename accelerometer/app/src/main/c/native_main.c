@@ -209,7 +209,7 @@ static void draw_screen(struct accelerometer_state *state)
     int32_t text_scale = scale + 1;
 
     int32_t left = 6 * scale;
-    int32_t line_height = 12 * scale;
+    int32_t line_height = 16 * scale;
     int32_t display_height = 8 * line_height;
     int32_t top = (buffer.height - display_height) / 2;
     if (top < 8 * scale) {
@@ -250,16 +250,16 @@ static void draw_screen(struct accelerometer_state *state)
     int32_t bar_margin = 2 * scale;
     int32_t center_x = buffer.width / 2;
     int32_t half_width = (buffer.width - 2 * bar_margin) / 2;
-    int32_t bar_height = 2 * scale + 1;
-    int32_t track_height = scale;
+    int32_t bar_height = 6 * scale;
+    int32_t track_height = 2 * scale;
     int32_t track_width = buffer.width - 2 * bar_margin;
     int32_t x_bar_y = top + 3 * line_height;
     int32_t y_bar_y = top + 5 * line_height;
     int32_t z_bar_y = top + 7 * line_height;
 
-    fill_rect(&buffer, bar_margin, x_bar_y + scale / 2, track_width, track_height, track);
-    fill_rect(&buffer, bar_margin, y_bar_y + scale / 2, track_width, track_height, track);
-    fill_rect(&buffer, bar_margin, z_bar_y + scale / 2, track_width, track_height, track);
+    fill_rect(&buffer, bar_margin, x_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);
+    fill_rect(&buffer, bar_margin, y_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);
+    fill_rect(&buffer, bar_margin, z_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);
     fill_rect(&buffer, center_x, x_bar_y, 1, z_bar_y - x_bar_y + bar_height, secondary);
     draw_axis_bar(&buffer, center_x, x_bar_y, half_width, bar_height, state->x, secondary);
     draw_axis_bar(&buffer, center_x, y_bar_y, half_width, bar_height, state->y, secondary);
