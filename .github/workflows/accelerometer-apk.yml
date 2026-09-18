@@ -94,7 +94,6 @@ jobs:
             set -eu
             adb install -r downloaded-apk/app-debug.apk
             adb install -r downloaded-apk/app-debug.apk
-            adb shell am start -W -n com.ashtrayarcher.accelerometer/android.app.NativeActivity \
-              | tee /tmp/accelerometer-start.txt
+            adb shell am start -W -n com.ashtrayarcher.accelerometer/android.app.NativeActivity | tee /tmp/accelerometer-start.txt
             grep -Fq 'Status: ok' /tmp/accelerometer-start.txt
             test -n "$(adb shell pidof com.ashtrayarcher.accelerometer | tr -d '\r')"
