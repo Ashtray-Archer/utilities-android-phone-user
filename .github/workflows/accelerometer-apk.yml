@@ -92,9 +92,8 @@ jobs:
           disable-animations: true
           script: |
             set -eu
-            apk=downloaded-apk/app-debug.apk
-            adb install -r "$apk"
-            adb install -r "$apk"
+            adb install -r downloaded-apk/app-debug.apk
+            adb install -r downloaded-apk/app-debug.apk
             adb shell am start -W -n com.ashtrayarcher.accelerometer/android.app.NativeActivity \
               | tee /tmp/accelerometer-start.txt
             grep -Fq 'Status: ok' /tmp/accelerometer-start.txt
