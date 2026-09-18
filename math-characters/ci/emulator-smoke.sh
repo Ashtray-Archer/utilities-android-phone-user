@@ -12,6 +12,7 @@ package=com.isomorphisms.programmersunicodepad
 component=$package/android.app.NativeActivity
 
 adb install -r "$apk" >/dev/null
+adb install -r "$apk" >/dev/null
 adb logcat -c
 adb shell am force-stop "$package"
 adb shell am start -W -n "$component" | tee /tmp/programmers-unicode-pad-start.txt
