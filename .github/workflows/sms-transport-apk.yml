@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager             'platforms;android-36'             'build-tools;36.0.0'
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Run source and hostile-fixture checks
         shell: bash
@@ -72,7 +72,7 @@ jobs:
           test -s "$apk"
           unzip -l "$apk" | tee /tmp/sms-transport-zip.txt
           grep -Fq 'classes.dex' /tmp/sms-transport-zip.txt
-          unzip -p "$apk" classes.dex | strings | grep -Fq 'Landroid/telephony/SmsManager;'
+          unzip -p "$apk" classes.dex > /tmp/sms-transport-classes.dex\n          strings /tmp/sms-transport-classes.dex > /tmp/sms-transport-classes.strings\n          grep -Fq 'Landroid/telephony/SmsManager;' /tmp/sms-transport-classes.strings
 
           source_sha=$(git rev-parse HEAD)
           apk_sha=$(sha256sum "$apk" | awk '{print $1}')
