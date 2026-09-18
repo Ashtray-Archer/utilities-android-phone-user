@@ -23,6 +23,26 @@ package name and test signer so a new APK can replace the installed one without
 an uninstall. Treat any package-name or signer change as an explicit migration,
 not installation cleanup.
 
+## SMS transport evidence boundary
+
+`sms-transport` is outbound-only in its first slice. A source check, APK build,
+signature check, installation, launch, or successful `SmsManager` call is not
+proof that another physical handset received the text. A physical receipt must
+name the exact APK/source revision and separately record the Android send result
+and observation of the exact message on the destination handset.
+
+Do not add inbound `RECEIVE_SMS`, default-SMS-role ownership, command parsing,
+scheduling, principal resolution, or authorization semantics to the outbound
+transport merely to make the first carrier test convenient. Those meanings stay
+with Idric-Net and Grease.
+
+The first test ingress to `SendActivity` is deliberately restricted to callers
+holding `android.permission.DUMP`, which includes the adb shell on ordinary
+debug/test-device workflows and excludes normal third-party apps. Do not weaken
+that component to an unguarded exported SMS sender. A future same-device Grease
+bridge needs an explicit IPC/security design rather than broadening this test
+ingress.
+
 Work on a branch. Preserve each utility's user-facing purpose above Android,
 JNI, C, shell, build, or packaging details. Keep boundary adapters narrow and do
 not duplicate Idriç-owned application logic into them. Run the utility's

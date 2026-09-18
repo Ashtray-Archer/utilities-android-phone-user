@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <application>
+        <activity
+            android:name=".SendActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+        </activity>
+    </application>
+</manifest>
