@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.ashtrayarcher.smstransport">
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <application android:hasCode="false">
+        <activity
+            android:name="android.app.NativeActivity"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="sms_transport" />
+        </activity>
+    </application>
+</manifest>

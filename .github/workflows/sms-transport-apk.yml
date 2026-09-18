@@ -1,0 +1,115 @@
+name: SMS transport APK
+
+on:
+  push:
+    branches:
+      - sms/android-transport
+    paths:
+      - 'sms-transport/**'
+      - '.github/workflows/sms-transport-apk.yml'
+  pull_request:
+    paths:
+      - 'sms-transport/**'
+      - '.github/workflows/sms-transport-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
+      ANDROID_KEYSTORE_PASSWORD: wegert-debug
+      ANDROID_KEY_PASSWORD: wegert-debug
+      ANDROID_KEY_ALIAS: wegert-debug
+      ANDROID_EXPECTED_CERT_SHA256: DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9
+
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Check out stable public test signer
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphismes/wegert
+          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
+          path: .test-signing
+          sparse-checkout: _/build/app/wegert-debug.keystore
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          packages: ''
+
+      - name: Install Android SDK and NDK inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager             'platforms;android-36'             'build-tools;36.0.0'             'ndk;27.2.12479018'
+
+      - name: Run source and hostile-fixture checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh sms-transport/tests/self-test.sh
+
+      - name: Build signed native APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh sms-transport/build-apk.sh
+
+      - name: Inspect exact artifact and write receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=sms-transport/app/build/outputs/apk/debug/sms-transport.apk
+          test -s "$apk"
+          unzip -l "$apk" | tee /tmp/sms-transport-zip.txt
+
+          grep -Fq 'lib/armeabi-v7a/libsms_transport.so' /tmp/sms-transport-zip.txt
+          grep -Fq 'lib/arm64-v8a/libsms_transport.so' /tmp/sms-transport-zip.txt
+          grep -Fq 'lib/x86_64/libsms_transport.so' /tmp/sms-transport-zip.txt
+          if grep -Fq 'classes.dex' /tmp/sms-transport-zip.txt; then
+            printf '%s\n' 'application DEX unexpectedly present in native SMS APK' >&2
+            exit 1
+          fi
+
+          unzip -p "$apk" lib/armeabi-v7a/libsms_transport.so > /tmp/libsms_transport.so
+          strings /tmp/libsms_transport.so > /tmp/libsms_transport.strings
+          grep -Fq 'android/telephony/SmsManager' /tmp/libsms_transport.strings
+          grep -Fq 'sendTextMessage' /tmp/libsms_transport.strings
+
+          source_sha=$(git rev-parse HEAD)
+          apk_sha=$(sha256sum "$apk" | awk '{print $1}')
+          mkdir -p sms-transport/build
+          {
+            printf 'SMS_TRANSPORT_BUILD\t1\n'
+            printf 'source\t%s\n' "$source_sha"
+            printf 'package\tcom.ashtrayarcher.smstransport\n'
+            printf 'version_code\t1\n'
+            printf 'apk_sha256\t%s\n' "$apk_sha"
+            printf 'stage\tsource_contract\tPASS\n'
+            printf 'stage\tapk_build\tPASS\n'
+            printf 'stage\tpackage_inspection\tPASS\n'
+            printf 'claim\tnative_jni_sms_api\tPASS\tSmsManager JNI binding present in exact APK\n'
+            printf 'claim\tphysical_carrier_send\tPENDING\tphysical_device_required\n'
+            printf 'claim\tinbound_sms\tNOT_INCLUDED\toutbound_only_slice\n'
+            printf 'claim\tdefault_sms_role\tNOT_INCLUDED\toutbound_only_slice\n'
+          } | tee sms-transport/build/receipt.tsv
+
+      - name: Retain exact SMS transport APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sms-transport-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            sms-transport/app/build/outputs/apk/debug/sms-transport.apk
+            sms-transport/build/receipt.tsv
+            sms-transport/test-physical.sh
+            sms-transport/README.md
+          if-no-files-found: error
