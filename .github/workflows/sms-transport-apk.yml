@@ -101,4 +101,6 @@ jobs:
           path: |
             sms-transport/app/build/outputs/apk/debug/sms-transport.apk
             sms-transport/build/receipt.tsv
+            sms-transport/test-physical.sh
+            sms-transport/README.md
           if-no-files-found: error
