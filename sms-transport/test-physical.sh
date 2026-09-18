@@ -2,7 +2,16 @@
 set -eu
 
 apk=${1:?usage: test-physical.sh APK DESTINATION}
-destination=${2:?usage: test-physical.sh APK DESTINATION}
+destination=${2:-}
+
+if [ -z "$destination" ]; then
+    printf 'Destination telephone number: ' >&2
+    IFS= read -r destination
+fi
+[ -n "$destination" ] || {
+    printf 'destination telephone number is required\n' >&2
+    exit 2
+}
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     cyan='\033[1;36m'
