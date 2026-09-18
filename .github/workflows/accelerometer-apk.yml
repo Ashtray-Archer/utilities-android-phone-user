@@ -73,3 +73,29 @@ jobs:
           name: accelerometer-native-apk
           path: accelerometer/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+  replacement-install:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: accelerometer-native-apk
+          path: downloaded-apk
+
+      - name: Install and replace without uninstall
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -eu
+            apk=downloaded-apk/app-debug.apk
+            adb install -r "$apk"
+            adb install -r "$apk"
+            adb shell am start -W -n com.ashtrayarcher.accelerometer/android.app.NativeActivity \
+              | tee /tmp/accelerometer-start.txt
+            grep -Fq 'Status: ok' /tmp/accelerometer-start.txt
+            test -n "$(adb shell pidof com.ashtrayarcher.accelerometer | tr -d '\r')"
