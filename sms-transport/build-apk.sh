@@ -8,10 +8,12 @@ if [ -z "$sdk_root" ]; then
     exit 2
 fi
 
+ndk_root=${ANDROID_NDK_ROOT:-${ANDROID_NDK_HOME:-$sdk_root/ndk/27.2.12479018}}
+toolchain="$ndk_root/toolchains/llvm/prebuilt/linux-x86_64"
 build_tools="$sdk_root/build-tools/36.0.0"
 platform_jar="$sdk_root/platforms/android-36/android.jar"
 
-for required in     "$build_tools/aapt2"     "$build_tools/d8"     "$build_tools/zipalign"     "$build_tools/apksigner"     "$platform_jar"
+for required in     "$toolchain/bin/aarch64-linux-android26-clang"     "$toolchain/bin/armv7a-linux-androideabi26-clang"     "$toolchain/bin/x86_64-linux-android26-clang"     "$build_tools/aapt2"     "$build_tools/zipalign"     "$build_tools/apksigner"     "$platform_jar"
 do
     if [ ! -e "$required" ]; then
         echo "missing Android build dependency: $required" >&2
@@ -19,7 +21,7 @@ do
     fi
 done
 
-for command_name in javac jar zip keytool; do
+for command_name in zip keytool; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "missing host build dependency: $command_name" >&2
         exit 2
@@ -29,25 +31,28 @@ done
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/sms-transport-build.XXXXXX")
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
 
-classes_dir="$work_dir/classes"
-dex_dir="$work_dir/dex"
 staging_dir="$work_dir/staging"
 output_dir="$project_dir/app/build/outputs/apk/debug"
-mkdir -p "$classes_dir" "$dex_dir" "$staging_dir" "$output_dir"
+mkdir -p "$staging_dir" "$output_dir"
 
-source_list="$work_dir/java-sources.txt"
-find "$project_dir/app/src/main/java" -type f -name '*.java' -print | sort >"$source_list"
-if [ ! -s "$source_list" ]; then
-    echo "no Java sources found" >&2
-    exit 2
-fi
+compile_abi() {
+    abi=$1
+    compiler_name=$2
+    architecture_flags=$3
+    compiler="$toolchain/bin/$compiler_name"
+    library_dir="$staging_dir/lib/$abi"
+    mkdir -p "$library_dir"
 
-javac     -encoding UTF-8     -source 8     -target 8     -classpath "$platform_jar"     -d "$classes_dir"     @"$source_list"
+    common_flags="-std=c17 -O2 -g -fPIC -ffunction-sections -fdata-sections"
+    warnings="-Wall -Wextra -Werror -Wpedantic -Wshadow"
 
-classes_jar="$work_dir/classes.jar"
-jar cf "$classes_jar" -C "$classes_dir" .
+    # shellcheck disable=SC2086
+    "$compiler"         $common_flags $warnings $architecture_flags         -fstack-protector-strong         -D_FORTIFY_SOURCE=2         -shared         -Wl,--no-undefined         -Wl,--gc-sections         -Wl,-z,relro,-z,now         -Wl,-u,ANativeActivity_onCreate         "$project_dir/app/src/main/c/native_sms_transport.c"         -landroid         -llog         -o "$library_dir/libsms_transport.so"
+}
 
-"$build_tools/d8"     --lib "$platform_jar"     --min-api 26     --output "$dex_dir"     "$classes_jar"
+compile_abi arm64-v8a aarch64-linux-android26-clang ""
+compile_abi armeabi-v7a armv7a-linux-androideabi26-clang "-mthumb -march=armv7-a"
+compile_abi x86_64 x86_64-linux-android26-clang ""
 
 base_apk="$work_dir/base.apk"
 unsigned_apk="$work_dir/unsigned.apk"
@@ -57,10 +62,9 @@ final_apk="$output_dir/sms-transport.apk"
 "$build_tools/aapt2" link     -I "$platform_jar"     --manifest "$project_dir/app/src/main/AndroidManifest.xml"     --min-sdk-version 26     --target-sdk-version 36     --version-code 1     --version-name 0.1.0     -o "$base_apk"
 
 cp "$base_apk" "$unsigned_apk"
-cp "$dex_dir/classes.dex" "$staging_dir/classes.dex"
 (
     cd "$staging_dir"
-    zip -0 -q "$unsigned_apk" classes.dex
+    zip -0 -q "$unsigned_apk"         lib/arm64-v8a/libsms_transport.so         lib/armeabi-v7a/libsms_transport.so         lib/x86_64/libsms_transport.so
 )
 
 "$build_tools/zipalign" -f -P 16 4 "$unsigned_apk" "$aligned_apk"

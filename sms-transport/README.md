@@ -20,19 +20,45 @@ The permanent fake outbox remains the deterministic provider-independent receipt
 This APK is an additional physical transport adapter for the same outbound
 destination/body.
 
+## Native boundary
+
+There is no Java, Kotlin, Gradle, or application DEX layer.
+
+The APK uses `android.app.NativeActivity` from the Android framework and a small
+C shared library. That library calls `SmsManager.sendTextMessage` through JNI.
+The framework remains the native Android SMS boundary; the C code is only the
+narrow adapter needed to reach it.
+
+The first test ingress is deliberately restricted to callers holding
+`android.permission.DUMP`. On ordinary device-test workflows that includes adb
+shell and excludes normal third-party applications. The activity reads only
+three intent extras:
+
+```text
+destination
+body
+request_id
+```
+
+A future same-device Grease bridge needs an explicit IPC/security design rather
+than weakening this exported test ingress.
+
 ## Build
 
-There is no Gradle or Kotlin build.
+`build-apk.sh` uses the Android NDK and SDK tools directly. It builds
+`libsms_transport.so` for:
 
-`build-apk.sh` uses the Android SDK's `aapt2`, `d8`, `zipalign`, and
-`apksigner` directly. The package identity is:
+```text
+armeabi-v7a
+arm64-v8a
+x86_64
+```
+
+and packages them into an APK with stable package identity:
 
 ```text
 com.ashtrayarcher.smstransport
 ```
-
-The APK deliberately contains DEX because `SmsManager` is an Android framework
-API. Application SMS semantics remain outside that DEX boundary.
 
 Like the other installable utilities in this repository, the build refuses to
 invent a temporary signer. `ANDROID_KEYSTORE` must point at the persistent
@@ -40,44 +66,38 @@ public test keystore established by the stable-signing work.
 
 ## Permission boundary
 
-Android declares `SEND_SMS` as a dangerous, hard-restricted permission. The
-installer must allowlist the restricted permission before the app can hold it.
+The APK requests only `SEND_SMS` for SMS. It deliberately does not request
+`RECEIVE_SMS`.
 
-For the physical test path, adb's package installer is appropriate. Android's
-package-manager shell grants requested runtime permissions with `-g` and,
-unless `--restrict-permissions` is supplied, retains the install-time
-allowlisting of restricted permissions.
-
-The launchable `MainActivity` only reports/request the permission. It never
-sends a text.
-
-The actual `SendActivity` is exported only for the first device-test bridge and
-requires the caller to hold `android.permission.DUMP`. That makes adb shell a
-usable ingress without turning the APK into an unguarded exported SMS sender.
-This is **not** yet the final same-device Grease IPC boundary.
+The physical-test path installs with `adb install -r -g` and verifies from
+package-manager state that `SEND_SMS` is actually granted before attempting a
+carrier send.
 
 ## Physical test
 
-`test-physical.sh` takes an exact built APK and an explicitly supplied
-destination number. It:
+The Actions artifact contains the exact APK, build receipt, this README, and
+`test-physical.sh`.
 
-1. replacement-installs the APK with `adb install -r -g`;
-2. verifies that `SEND_SMS` is actually granted;
-3. invokes the protected sender through adb shell with exact body `hey`;
-4. records the adapter's request-submitted and Android sent-result log lines.
+Run the test script from a machine or Android device that already controls the
+target phone through adb. The destination is prompted locally so it does not
+need to be pasted into chat or stored in shell history.
 
-A successful Android sent result is still not a destination-handset receipt.
-End-to-end physical acceptance additionally requires observing the exact `hey`
-message on the destination phone and recording that observation against the
-same source/APK revision.
+The script:
 
-If a carrier, SIM, device policy, or vendor build blocks sending, record that as
-a physical transport result. Do not relabel a source/APK build as carrier
-acceptance.
+1. replacement-installs the exact APK;
+2. verifies `SEND_SMS` is actually granted;
+3. starts the protected native activity with exact body `hey`;
+4. requires the native JNI adapter to report that
+   `SmsManager.sendTextMessage` accepted the request;
+5. leaves end-to-end acceptance pending until the destination handset is
+   observed receiving exact body `hey`.
+
+The JNI call returning without an Android exception is not itself proof of
+carrier delivery. The destination-handset observation is the physical receipt.
 
 ## Next boundary
 
 After the first real carrier send is observed, the next slice is a secure
 same-device bridge from Grease to this adapter. It should consume the same
 destination/body produced by the existing outbound event while preserving the
-fake outbox. Do not make `SendActivity` generally callable as a shortcut.
+fake outbox.

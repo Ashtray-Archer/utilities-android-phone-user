@@ -46,11 +46,11 @@ jobs:
         with:
           packages: ''
 
-      - name: Install Android SDK inputs
+      - name: Install Android SDK and NDK inputs
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          sdkmanager             'platforms;android-36'             'build-tools;36.0.0'             'ndk;27.2.12479018'
 
       - name: Run source and hostile-fixture checks
         shell: bash
@@ -58,7 +58,7 @@ jobs:
           set -euo pipefail
           sh sms-transport/tests/self-test.sh
 
-      - name: Build signed APK
+      - name: Build signed native APK
         shell: bash
         run: |
           set -euo pipefail
@@ -71,10 +71,19 @@ jobs:
           apk=sms-transport/app/build/outputs/apk/debug/sms-transport.apk
           test -s "$apk"
           unzip -l "$apk" | tee /tmp/sms-transport-zip.txt
-          grep -Fq 'classes.dex' /tmp/sms-transport-zip.txt
-          unzip -p "$apk" classes.dex > /tmp/sms-transport-classes.dex
-          strings /tmp/sms-transport-classes.dex > /tmp/sms-transport-classes.strings
-          grep -Fq 'Landroid/telephony/SmsManager;' /tmp/sms-transport-classes.strings
+
+          grep -Fq 'lib/armeabi-v7a/libsms_transport.so' /tmp/sms-transport-zip.txt
+          grep -Fq 'lib/arm64-v8a/libsms_transport.so' /tmp/sms-transport-zip.txt
+          grep -Fq 'lib/x86_64/libsms_transport.so' /tmp/sms-transport-zip.txt
+          if grep -Fq 'classes.dex' /tmp/sms-transport-zip.txt; then
+            printf '%s\n' 'application DEX unexpectedly present in native SMS APK' >&2
+            exit 1
+          fi
+
+          unzip -p "$apk" lib/armeabi-v7a/libsms_transport.so > /tmp/libsms_transport.so
+          strings /tmp/libsms_transport.so > /tmp/libsms_transport.strings
+          grep -Fq 'android/telephony/SmsManager' /tmp/libsms_transport.strings
+          grep -Fq 'sendTextMessage' /tmp/libsms_transport.strings
 
           source_sha=$(git rev-parse HEAD)
           apk_sha=$(sha256sum "$apk" | awk '{print $1}')
@@ -88,7 +97,7 @@ jobs:
             printf 'stage\tsource_contract\tPASS\n'
             printf 'stage\tapk_build\tPASS\n'
             printf 'stage\tpackage_inspection\tPASS\n'
-            printf 'claim\toutbound_sms_api\tPASS\tSmsManager present in exact APK\n'
+            printf 'claim\tnative_jni_sms_api\tPASS\tSmsManager JNI binding present in exact APK\n'
             printf 'claim\tphysical_carrier_send\tPENDING\tphysical_device_required\n'
             printf 'claim\tinbound_sms\tNOT_INCLUDED\toutbound_only_slice\n'
             printf 'claim\tdefault_sms_role\tNOT_INCLUDED\toutbound_only_slice\n'
