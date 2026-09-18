@@ -17,25 +17,9 @@ permissions:
 jobs:
   idric-layout-contract:
     runs-on: ubuntu-latest
-
-    env:
-      ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
-      ANDROID_KEYSTORE_PASSWORD: wegert-debug
-      ANDROID_KEY_PASSWORD: wegert-debug
-      ANDROID_KEY_ALIAS: wegert-debug
-      ANDROID_EXPECTED_CERT_SHA256: DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
-
-      - name: Check out stable public test signer
-        uses: actions/checkout@v4
-        with:
-          repository: isomorphismes/wegert
-          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
-          path: .test-signing
-          sparse-checkout: _/build/app/wegert-debug.keystore
-          sparse-checkout-cone-mode: false
 
       - uses: actions/checkout@v6
         with:
@@ -69,8 +53,23 @@ jobs:
   test-build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
+      ANDROID_KEYSTORE_PASSWORD: wegert-debug
+      ANDROID_KEY_PASSWORD: wegert-debug
+      ANDROID_KEY_ALIAS: wegert-debug
+      ANDROID_EXPECTED_CERT_SHA256: DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9
     steps:
       - uses: actions/checkout@v6
+
+      - name: Check out stable public test signer
+        uses: actions/checkout@v4
+        with:
+          repository: isomorphismes/wegert
+          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
+          path: .test-signing
+          sparse-checkout: _/build/app/wegert-debug.keystore
+          sparse-checkout-cone-mode: false
 
       - uses: actions/setup-java@v5
         with:
