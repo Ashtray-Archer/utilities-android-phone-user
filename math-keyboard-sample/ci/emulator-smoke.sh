@@ -23,6 +23,9 @@ sleep 2
 adb shell uiautomator dump /sdcard/math-sample.xml
 adb pull /sdcard/math-sample.xml /tmp/math-sample.xml
 sed 's/></>\n</g' /tmp/math-sample.xml > /tmp/math-sample-nodes.xml
+adb exec-out screencap -p > /tmp/math-keyboard-sample.png
+printf '%s\n' 'UI NODES BEFORE KEY TAP'
+sed -n '1,200p' /tmp/math-sample-nodes.xml
 
 for symbol in ℕ ℤ ℚ ℝ ℂ = ≠ ≟ ∧ → λ π ∂ ∫ ∞ ⁿ ᵢ ² − –
 do
