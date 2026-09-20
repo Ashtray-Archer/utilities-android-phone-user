@@ -135,3 +135,11 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: sh math-keyboard-sample/ci/emulator-smoke.sh downloaded-apk/math-keyboard-sample.apk
+
+      - name: Upload emulator screen
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: math-keyboard-sample-screen
+          path: /tmp/math-keyboard-sample.png
+          if-no-files-found: warn
