@@ -1,0 +1,159 @@
+name: Compact Math Keyboard Sample
+
+on:
+  pull_request:
+    paths:
+      - 'math-keyboard-sample/**'
+      - '.github/workflows/math-keyboard-sample.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'math-keyboard-sample/**'
+      - '.github/workflows/math-keyboard-sample.yml'
+
+permissions:
+  contents: read
+
+env:
+  SAMPLE_DIR: math-keyboard-sample
+  BUILD_TOOLS: '36.0.0'
+  ANDROID_PLATFORM: 'android-36'
+  ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
+  ANDROID_KEYSTORE_PASSWORD: wegert-debug
+  ANDROID_KEY_PASSWORD: wegert-debug
+  ANDROID_KEY_ALIAS: wegert-debug
+  ANDROID_EXPECTED_CERT_SHA256: DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Check out persistent public test signer
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphismes/wegert
+          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
+          path: .test-signing
+          sparse-checkout: _/build/app/wegert-debug.keystore
+          sparse-checkout-cone-mode: false
+
+      - name: Install Android platform tools
+        run: sdkmanager "platforms;${ANDROID_PLATFORM}" "build-tools;${BUILD_TOOLS}"
+
+      - name: Prove exact compact key contract and hostile dash case
+        working-directory: math-keyboard-sample
+        run: |
+          set -eu
+          mkdir -p out/key-test
+          javac -encoding UTF-8 -d out/key-test \
+            src/com/ashtrayarcher/mathsamplekeyboard/Keyset.java \
+            src/com/ashtrayarcher/mathsamplekeyboard/KeysetTest.java
+          java -cp out/key-test com.ashtrayarcher.mathsamplekeyboard.KeysetTest
+
+      - name: Compile and package keyboard APK
+        working-directory: math-keyboard-sample
+        run: |
+          set -eu
+          tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
+          android_jar="$ANDROID_HOME/platforms/$ANDROID_PLATFORM/android.jar"
+          mkdir -p out/classes out/dex
+          javac -encoding UTF-8 -source 8 -target 8 -classpath "$android_jar" -d out/classes \
+            src/com/ashtrayarcher/mathsamplekeyboard/Keyset.java \
+            src/com/ashtrayarcher/mathsamplekeyboard/MainActivity.java \
+            src/com/ashtrayarcher/mathsamplekeyboard/MathSampleIme.java
+          jar --create --file out/classes.jar -C out/classes .
+          "$tools/d8" --lib "$android_jar" --output out/dex out/classes.jar
+          "$tools/aapt2" compile --dir res -o out/resources.zip
+          "$tools/aapt2" link \
+            -o out/unsigned-unaligned.apk \
+            --manifest AndroidManifest.xml \
+            -I "$android_jar" \
+            --min-sdk-version 23 \
+            --target-sdk-version 36 \
+            --version-code 1 \
+            --version-name 0.1.0 \
+            out/resources.zip
+          zip -q -j out/unsigned-unaligned.apk out/dex/classes.dex
+          "$tools/zipalign" -f 4 out/unsigned-unaligned.apk out/unsigned-aligned.apk
+          "$tools/apksigner" sign \
+            --ks "$ANDROID_KEYSTORE" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+            --out out/math-keyboard-sample.apk \
+            out/unsigned-aligned.apk
+
+      - name: Verify finished APK identity and signer
+        working-directory: math-keyboard-sample
+        run: |
+          set -eu
+          tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
+          "$tools/aapt2" dump badging out/math-keyboard-sample.apk | tee out/badging.txt
+          grep -Fq "package: name='com.ashtrayarcher.mathsamplekeyboard' versionCode='1' versionName='0.1.0'" out/badging.txt
+          "$tools/apksigner" verify --verbose --print-certs out/math-keyboard-sample.apk | tee out/signing.txt
+          expected=$(printf '%s' "$ANDROID_EXPECTED_CERT_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')
+          grep -Fq "Signer #1 certificate SHA-256 digest: $expected" out/signing.txt
+          unzip -l out/math-keyboard-sample.apk | tee out/archive.txt
+          grep -Fq 'classes.dex' out/archive.txt
+
+      - name: Upload usable APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: math-keyboard-sample-apk
+          path: math-keyboard-sample/out/math-keyboard-sample.apk
+          if-no-files-found: error
+
+  emulator:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: math-keyboard-sample-apk
+          path: downloaded-apk
+
+      - name: Install twice and type lambda
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 29
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -eu
+            package=com.ashtrayarcher.mathsamplekeyboard
+            component="$package/.MainActivity"
+            ime="$package/.MathSampleIme"
+            apk=downloaded-apk/math-keyboard-sample.apk
+            adb install -r "$apk"
+            adb install -r "$apk"
+            adb shell ime enable "$ime"
+            adb shell ime set "$ime"
+            adb shell am start -W -n "$component" | tee /tmp/start.txt
+            grep -Fq 'Status: ok' /tmp/start.txt
+            sleep 2
+            adb shell uiautomator dump /sdcard/math-sample.xml
+            adb pull /sdcard/math-sample.xml /tmp/math-sample.xml
+            sed 's/></>\n</g' /tmp/math-sample.xml > /tmp/math-sample-nodes.xml
+            for symbol in ℕ ℤ ℚ ℝ ℂ = ≠ ≟ ∧ → λ π ∂ ∫ ∞ ⁿ ᵢ ² − –
+            do
+              grep -Fq "text=\"$symbol\"" /tmp/math-sample-nodes.xml
+            done
+            lambda_bounds=$(sed -n 's/.*text="λ"[^>]*bounds="\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]".*/\1 \2 \3 \4/p' /tmp/math-sample-nodes.xml | head -n 1)
+            test -n "$lambda_bounds"
+            read -r x1 y1 x2 y2 <<EOF
+            $lambda_bounds
+            EOF
+            adb shell input tap "$(((x1 + x2) / 2))" "$(((y1 + y2) / 2))"
+            sleep 1
+            adb shell uiautomator dump /sdcard/math-sample-after.xml
+            adb pull /sdcard/math-sample-after.xml /tmp/math-sample-after.xml
+            sed 's/></>\n</g' /tmp/math-sample-after.xml > /tmp/math-sample-after-nodes.xml
+            grep -F 'class="android.widget.EditText"' /tmp/math-sample-after-nodes.xml | grep -F 'text="λ"' | grep -Fq 'content-desc="sample_target"'
+            printf 'PASS keyboard surfaced all 20 compact keys and typed λ\n'
