@@ -16,6 +16,7 @@ adb install -r "$apk"
 adb install -r "$apk"
 adb shell ime enable "$ime"
 adb shell ime set "$ime"
+adb shell settings put secure show_ime_with_hard_keyboard 1
 adb shell am start -W -n "$component" | tee /tmp/start.txt
 grep -Fq 'Status: ok' /tmp/start.txt
 sleep 2
@@ -24,11 +25,8 @@ adb shell uiautomator dump /sdcard/math-sample.xml
 adb pull /sdcard/math-sample.xml /tmp/math-sample.xml
 sed 's/></>\n</g' /tmp/math-sample.xml > /tmp/math-sample-nodes.xml
 
-target_bounds=$(
-    sed -n 's/.*content-desc="sample_target"[^>]*bounds="\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]".*/\1 \2 \3 \4/p' \
-        /tmp/math-sample-nodes.xml |
-        head -n 1
-)
+target_node=$(sed -n '/content-desc="sample_target"/p' /tmp/math-sample-nodes.xml | head -n 1)
+target_bounds=$(printf '%s\n' "$target_node" | sed -n 's/.*bounds="\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]".*/\1 \2 \3 \4/p')
 test -n "$target_bounds"
 set -- $target_bounds
 x=$((($1 + $3) / 2))
@@ -48,11 +46,8 @@ do
     grep -Fq "text=\"$symbol\"" /tmp/math-sample-nodes.xml
 done
 
-lambda_bounds=$(
-    sed -n 's/.*text="λ"[^>]*bounds="\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]".*/\1 \2 \3 \4/p' \
-        /tmp/math-sample-nodes.xml |
-        head -n 1
-)
+lambda_node=$(sed -n '/text="λ"/p' /tmp/math-sample-nodes.xml | head -n 1)
+lambda_bounds=$(printf '%s\n' "$lambda_node" | sed -n 's/.*bounds="\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]".*/\1 \2 \3 \4/p')
 test -n "$lambda_bounds"
 set -- $lambda_bounds
 x=$((($1 + $3) / 2))
