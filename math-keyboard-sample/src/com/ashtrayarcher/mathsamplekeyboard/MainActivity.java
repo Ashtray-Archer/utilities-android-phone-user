@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
@@ -25,6 +26,10 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE |
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        );
 
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -78,7 +83,7 @@ public final class MainActivity extends Activity {
                 InputMethodManager manager =
                     (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
                 if (manager != null) {
-                    manager.showSoftInput(sample, InputMethodManager.SHOW_IMPLICIT);
+                    manager.showSoftInput(sample, InputMethodManager.SHOW_FORCED);
                 }
             }
         }, 500);
