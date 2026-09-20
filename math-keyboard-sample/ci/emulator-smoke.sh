@@ -24,19 +24,25 @@ sleep 2
 adb shell uiautomator dump /sdcard/math-sample.xml
 adb pull /sdcard/math-sample.xml /tmp/math-sample.xml
 sed 's/></>\n</g' /tmp/math-sample.xml > /tmp/math-sample-nodes.xml
+printf '%s\n' 'INITIAL UI NODES'
+sed -n '1,200p' /tmp/math-sample-nodes.xml
 
-target_node=$(sed -n '/content-desc="sample_target"/p' /tmp/math-sample-nodes.xml | head -n 1)
-target_bounds=$(printf '%s\n' "$target_node" | sed -n 's/.*bounds="\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]".*/\1 \2 \3 \4/p')
-test -n "$target_bounds"
-set -- $target_bounds
-x=$((($1 + $3) / 2))
-y=$((($2 + $4) / 2))
-adb shell input tap "$x" "$y"
-sleep 2
+if grep -Fq 'text="λ"' /tmp/math-sample-nodes.xml; then
+    printf '%s\n' 'Keyboard was already visible after activity launch'
+else
+    target_node=$(sed -n '/content-desc="sample_target"/p' /tmp/math-sample-nodes.xml | head -n 1)
+    target_bounds=$(printf '%s\n' "$target_node" | sed -n 's/.*bounds="\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]".*/\1 \2 \3 \4/p')
+    test -n "$target_bounds"
+    set -- $target_bounds
+    x=$((($1 + $3) / 2))
+    y=$((($2 + $4) / 2))
+    adb shell input tap "$x" "$y"
+    sleep 2
 
-adb shell uiautomator dump /sdcard/math-keyboard.xml
-adb pull /sdcard/math-keyboard.xml /tmp/math-keyboard.xml
-sed 's/></>\n</g' /tmp/math-keyboard.xml > /tmp/math-sample-nodes.xml
+    adb shell uiautomator dump /sdcard/math-keyboard.xml
+    adb pull /sdcard/math-keyboard.xml /tmp/math-keyboard.xml
+    sed 's/></>\n</g' /tmp/math-keyboard.xml > /tmp/math-sample-nodes.xml
+fi
 adb exec-out screencap -p > /tmp/math-keyboard-sample.png
 printf '%s\n' 'UI NODES BEFORE KEY TAP'
 sed -n '1,200p' /tmp/math-sample-nodes.xml
