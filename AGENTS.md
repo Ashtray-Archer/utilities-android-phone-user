@@ -23,6 +23,12 @@ package name and test signer so a new APK can replace the installed one without
 an uninstall. Treat any package-name or signer change as an explicit migration,
 not installation cleanup.
 
+The current emulator replacement check installs the exact same candidate APK
+twice. It proves that candidate can be reinstalled with Android's replacement
+path; it does not prove an arbitrary earlier build can upgrade to the candidate,
+or that replacement succeeds on a physical device. Record cross-build and
+physical-device upgrade acceptance separately when each is actually exercised.
+
 Work on a branch. Preserve each utility's user-facing purpose above Android,
 JNI, C, shell, build, or packaging details. Keep boundary adapters narrow and do
 not duplicate Idriç-owned application logic into them. Run the utility's

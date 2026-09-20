@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check out stable public test signer
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphismes/wegert
           ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
@@ -78,13 +78,13 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: accelerometer-native-apk
           path: downloaded-apk
 
-      - name: Install and replace without uninstall
-        uses: reactivecircus/android-emulator-runner@v2
+      - name: Install exact candidate twice without uninstall
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 29
           arch: x86_64
