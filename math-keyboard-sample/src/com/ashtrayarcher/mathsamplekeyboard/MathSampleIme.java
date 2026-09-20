@@ -9,6 +9,11 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 
 public final class MathSampleIme extends InputMethodService {
+    @Override
+    public boolean onEvaluateInputViewShown() {
+        return true;
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
