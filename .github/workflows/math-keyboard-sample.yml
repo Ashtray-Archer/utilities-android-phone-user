@@ -134,35 +134,4 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: |
-            set -eu
-            package=com.ashtrayarcher.mathsamplekeyboard
-            component="$package/.MainActivity"
-            ime="$package/.MathSampleIme"
-            apk=downloaded-apk/math-keyboard-sample.apk
-            adb install -r "$apk"
-            adb install -r "$apk"
-            adb shell ime enable "$ime"
-            adb shell ime set "$ime"
-            adb shell am start -W -n "$component" | tee /tmp/start.txt
-            grep -Fq 'Status: ok' /tmp/start.txt
-            sleep 2
-            adb shell uiautomator dump /sdcard/math-sample.xml
-            adb pull /sdcard/math-sample.xml /tmp/math-sample.xml
-            sed 's/></>\n</g' /tmp/math-sample.xml > /tmp/math-sample-nodes.xml
-            for symbol in ℕ ℤ ℚ ℝ ℂ = ≠ ≟ ∧ → λ π ∂ ∫ ∞ ⁿ ᵢ ² − –
-            do
-              grep -Fq "text=\"$symbol\"" /tmp/math-sample-nodes.xml
-            done
-            lambda_bounds=$(sed -n 's/.*text="λ"[^>]*bounds="\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]".*/\1 \2 \3 \4/p' /tmp/math-sample-nodes.xml | head -n 1)
-            test -n "$lambda_bounds"
-            read -r x1 y1 x2 y2 <<EOF
-            $lambda_bounds
-            EOF
-            adb shell input tap "$(((x1 + x2) / 2))" "$(((y1 + y2) / 2))"
-            sleep 1
-            adb shell uiautomator dump /sdcard/math-sample-after.xml
-            adb pull /sdcard/math-sample-after.xml /tmp/math-sample-after.xml
-            sed 's/></>\n</g' /tmp/math-sample-after.xml > /tmp/math-sample-after-nodes.xml
-            grep -F 'class="android.widget.EditText"' /tmp/math-sample-after-nodes.xml | grep -F 'text="λ"' | grep -Fq 'content-desc="sample_target"'
-            printf 'PASS keyboard surfaced all 20 compact keys and typed λ\n'
+          script: sh math-keyboard-sample/ci/emulator-smoke.sh downloaded-apk/math-keyboard-sample.apk
