@@ -30,6 +30,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Check out persistent public test signer
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -39,6 +41,9 @@ jobs:
           path: .test-signing
           sparse-checkout: _/build/app/wegert-debug.keystore
           sparse-checkout-cone-mode: false
+
+      - name: Set up Android command-line tools
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
 
       - name: Install Android platform tools
         run: sdkmanager "platforms;${ANDROID_PLATFORM}" "build-tools;${BUILD_TOOLS}"
@@ -112,6 +117,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
