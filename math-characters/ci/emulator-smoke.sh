@@ -80,7 +80,7 @@ wait_for_app_log() {
 
 adb install -r "$apk" >/dev/null
 adb install -r "$apk" >/dev/null
-adb logcat -c
+adb logcat -b main -c
 adb shell am force-stop "$package"
 adb shell am start -W -n "$component" | tee /tmp/programmers-unicode-pad-start.txt
 grep -F 'Status: ok' /tmp/programmers-unicode-pad-start.txt >/dev/null
