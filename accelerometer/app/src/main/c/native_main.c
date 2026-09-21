@@ -13,6 +13,8 @@
 #define LOG_TAG "Accelerometer"
 #define SENSOR_PERIOD_US 20000
 
+_Static_assert(sizeof(_Float16) == 2U, "_Float16 must use two-byte storage");
+
 struct glyph {
     char character;
     uint8_t rows[7];
@@ -43,13 +45,25 @@ static const struct glyph glyphs[] = {
     {'I', {0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x1f}},
     {'L', {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f}},
     {'M', {0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11}},
+    {'a', {0x00, 0x00, 0x0e, 0x01, 0x0f, 0x11, 0x0f}},
+    {'d', {0x01, 0x01, 0x0f, 0x11, 0x11, 0x11, 0x0f}},
+    {'e', {0x00, 0x00, 0x0e, 0x11, 0x1f, 0x10, 0x0e}},
+    {'h', {0x10, 0x10, 0x1e, 0x11, 0x11, 0x11, 0x11}},
+    {'i', {0x04, 0x00, 0x0c, 0x04, 0x04, 0x04, 0x0e}},
     {'m', {0x00, 0x00, 0x1a, 0x15, 0x15, 0x15, 0x15}},
+    {'n', {0x00, 0x00, 0x1e, 0x11, 0x11, 0x11, 0x11}},
+    {'o', {0x00, 0x00, 0x0e, 0x11, 0x11, 0x11, 0x0e}},
+    {'p', {0x00, 0x00, 0x1e, 0x11, 0x1e, 0x10, 0x10}},
+    {'r', {0x00, 0x00, 0x16, 0x19, 0x10, 0x10, 0x10}},
+    {'s', {0x00, 0x00, 0x0f, 0x10, 0x0e, 0x01, 0x1e}},
+    {'t', {0x04, 0x04, 0x1f, 0x04, 0x04, 0x04, 0x03}},
+    {'u', {0x00, 0x00, 0x11, 0x11, 0x11, 0x13, 0x0d}},
+    {'y', {0x00, 0x00, 0x11, 0x11, 0x0f, 0x01, 0x0e}},
     {'N', {0x11, 0x19, 0x19, 0x15, 0x13, 0x13, 0x11}},
     {'O', {0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e}},
     {'P', {0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10}},
     {'R', {0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11}},
     {'S', {0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e}},
-    {'s', {0x00, 0x00, 0x0f, 0x10, 0x0e, 0x01, 0x1e}},
     {'T', {0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
     {'U', {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e}},
     {'X', {0x11, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x11}},
@@ -63,9 +77,9 @@ struct accelerometer_state {
     ASensorManager *sensor_manager;
     const ASensor *accelerometer;
     ASensorEventQueue *sensor_queue;
-    float x;
-    float y;
-    float z;
+    _Float16 x;
+    _Float16 y;
+    _Float16 z;
     bool sensor_enabled;
     bool have_sample;
     unsigned int log_counter;
@@ -398,7 +412,7 @@ static void draw_screen(struct accelerometer_state *state)
         top = 8 * scale;
     }
 
-    draw_text_centered(&buffer, "THERE ARE", top, text_scale, secondary);
+    draw_text_centered(&buffer, "there are", top, text_scale, secondary);
     draw_text_centered(
         &buffer,
         "SPRINGS",
@@ -407,13 +421,13 @@ static void draw_screen(struct accelerometer_state *state)
         foreground);
     draw_text_centered(
         &buffer,
-        "INSIDE",
+        "inside",
         top + 2 * title_line_height,
         text_scale,
         secondary);
     draw_text_centered(
         &buffer,
-        "YOUR PHONE",
+        "your phone",
         top + 3 * title_line_height,
         text_scale,
         secondary);
@@ -538,9 +552,9 @@ static void consume_sensor_events(struct accelerometer_state *state)
             continue;
         }
 
-        state->x = event.acceleration.x;
-        state->y = event.acceleration.y;
-        state->z = event.acceleration.z;
+        state->x = (_Float16)event.acceleration.x;
+        state->y = (_Float16)event.acceleration.y;
+        state->z = (_Float16)event.acceleration.z;
         state->have_sample = true;
 
         state->log_counter += 1U;
@@ -548,7 +562,7 @@ static void consume_sensor_events(struct accelerometer_state *state)
             __android_log_print(
                 ANDROID_LOG_INFO,
                 LOG_TAG,
-                "x=%.4f y=%.4f z=%.4f m/s2",
+                "x=%.2f y=%.2f z=%.2f m/s2",
                 (double)state->x,
                 (double)state->y,
                 (double)state->z);
