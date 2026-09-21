@@ -5,6 +5,7 @@
         android:allowBackup="false"
         android:extractNativeLibs="false"
         android:hasCode="false"
+        android:icon="@drawable/accelerometer_springs"
         android:label="Accelerometer"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
