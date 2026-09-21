@@ -54,7 +54,7 @@ compile_abi() {
     "$compiler" $common_flags $architecture_flags -isystem "$glue_dir" -c "$glue_dir/android_native_app_glue.c" -o "$object_dir/native_app_glue.o"
 
     # shellcheck disable=SC2086
-    "$compiler" $architecture_flags -shared -Wl,--no-undefined -Wl,--gc-sections -Wl,-z,relro,-z,now -Wl,-u,ANativeActivity_onCreate "$object_dir/native_main.o" "$object_dir/native_app_glue.o" -landroid -llog -o "$library_dir/libaccelerometer.so"
+    "$compiler" $architecture_flags -shared -Wl,--no-undefined -Wl,--gc-sections -Wl,-z,relro,-z,now -Wl,-u,ANativeActivity_onCreate "$object_dir/native_main.o" "$object_dir/native_app_glue.o" -landroid -llog -lm -o "$library_dir/libaccelerometer.so"
 }
 
 compile_abi arm64-v8a aarch64-linux-android26-clang ""
