@@ -3,6 +3,7 @@
 #include <android/native_window.h>
 #include <android/sensor.h>
 #include <android_native_app_glue.h>
+#include <jni.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -10,9 +11,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #define LOG_TAG "Accelerometer"
 #define SENSOR_PERIOD_US 20000
+#define CAPTURE_DURATION_NS 60000000000LL
 
 _Static_assert(sizeof(_Float16) == 2U, "_Float16 must use two-byte storage");
 
@@ -84,11 +88,307 @@ struct accelerometer_state {
     bool sensor_enabled;
     bool have_sample;
     unsigned int log_counter;
+    FILE *capture_file;
+    int64_t capture_start_ns;
+    bool capture_finished;
+    char capture_name[80];
 };
 
 static float magnitude3(float x, float y, float z)
 {
     return sqrtf(x * x + y * y + z * z);
+}
+
+static JNIEnv *get_jni_env(JavaVM *vm, bool *attached)
+{
+    JNIEnv *env = NULL;
+    *attached = false;
+
+    jint status = (*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_6);
+    if (status == JNI_OK) {
+        return env;
+    }
+    if (status != JNI_EDETACHED) {
+        return NULL;
+    }
+    if ((*vm)->AttachCurrentThread(vm, &env, NULL) != JNI_OK) {
+        return NULL;
+    }
+
+    *attached = true;
+    return env;
+}
+
+static void clear_jni_exception(JNIEnv *env, const char *where)
+{
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        __android_log_print(
+            ANDROID_LOG_ERROR,
+            LOG_TAG,
+            "JNI exception while %s",
+            where);
+    }
+}
+
+static FILE *open_download_capture(
+    struct accelerometer_state *state,
+    const char *display_name)
+{
+    ANativeActivity *activity = state->app->activity;
+    bool attached = false;
+    JNIEnv *env = get_jni_env(activity->vm, &attached);
+    if (env == NULL) {
+        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "could not get JNI environment");
+        return NULL;
+    }
+
+    FILE *file = NULL;
+    jobject resolver = NULL;
+    jobject values = NULL;
+    jobject downloads_uri = NULL;
+    jobject capture_uri = NULL;
+    jobject parcel_fd = NULL;
+
+    jclass activity_class = (*env)->GetObjectClass(env, activity->clazz);
+    jmethodID get_content_resolver = activity_class == NULL
+        ? NULL
+        : (*env)->GetMethodID(
+              env,
+              activity_class,
+              "getContentResolver",
+              "()Landroid/content/ContentResolver;");
+    if (get_content_resolver == NULL) {
+        clear_jni_exception(env, "finding ContentResolver");
+        goto done;
+    }
+
+    resolver = (*env)->CallObjectMethod(env, activity->clazz, get_content_resolver);
+    if (resolver == NULL || (*env)->ExceptionCheck(env)) {
+        clear_jni_exception(env, "getting ContentResolver");
+        goto done;
+    }
+
+    jclass downloads_class = (*env)->FindClass(env, "android/provider/MediaStore$Downloads");
+    if (downloads_class == NULL) {
+        clear_jni_exception(env, "finding MediaStore.Downloads");
+        goto done;
+    }
+    jfieldID external_uri_field = (*env)->GetStaticFieldID(
+        env,
+        downloads_class,
+        "EXTERNAL_CONTENT_URI",
+        "Landroid/net/Uri;");
+    if (external_uri_field == NULL) {
+        clear_jni_exception(env, "finding Downloads URI");
+        goto done;
+    }
+    downloads_uri = (*env)->GetStaticObjectField(env, downloads_class, external_uri_field);
+    if (downloads_uri == NULL || (*env)->ExceptionCheck(env)) {
+        clear_jni_exception(env, "getting Downloads URI");
+        goto done;
+    }
+
+    jclass values_class = (*env)->FindClass(env, "android/content/ContentValues");
+    jmethodID values_ctor = values_class == NULL
+        ? NULL
+        : (*env)->GetMethodID(env, values_class, "<init>", "()V");
+    jmethodID put_string = values_class == NULL
+        ? NULL
+        : (*env)->GetMethodID(
+              env,
+              values_class,
+              "put",
+              "(Ljava/lang/String;Ljava/lang/String;)V");
+    if (values_ctor == NULL || put_string == NULL) {
+        clear_jni_exception(env, "constructing ContentValues");
+        goto done;
+    }
+
+    values = (*env)->NewObject(env, values_class, values_ctor);
+    if (values == NULL || (*env)->ExceptionCheck(env)) {
+        clear_jni_exception(env, "creating ContentValues");
+        goto done;
+    }
+
+    const char *keys[] = {"_display_name", "mime_type", "relative_path"};
+    const char *texts[] = {display_name, "text/csv", "Download/"};
+    for (size_t index = 0; index < 3U; ++index) {
+        jstring key = (*env)->NewStringUTF(env, keys[index]);
+        jstring text = (*env)->NewStringUTF(env, texts[index]);
+        if (key == NULL || text == NULL) {
+            clear_jni_exception(env, "creating MediaStore text");
+            if (key != NULL) {
+                (*env)->DeleteLocalRef(env, key);
+            }
+            if (text != NULL) {
+                (*env)->DeleteLocalRef(env, text);
+            }
+            goto done;
+        }
+        (*env)->CallVoidMethod(env, values, put_string, key, text);
+        (*env)->DeleteLocalRef(env, key);
+        (*env)->DeleteLocalRef(env, text);
+        if ((*env)->ExceptionCheck(env)) {
+            clear_jni_exception(env, "filling ContentValues");
+            goto done;
+        }
+    }
+
+    jclass resolver_class = (*env)->GetObjectClass(env, resolver);
+    jmethodID insert = resolver_class == NULL
+        ? NULL
+        : (*env)->GetMethodID(
+              env,
+              resolver_class,
+              "insert",
+              "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;");
+    if (insert == NULL) {
+        clear_jni_exception(env, "finding ContentResolver.insert");
+        goto done;
+    }
+
+    capture_uri = (*env)->CallObjectMethod(env, resolver, insert, downloads_uri, values);
+    if (capture_uri == NULL || (*env)->ExceptionCheck(env)) {
+        clear_jni_exception(env, "creating Downloads capture");
+        goto done;
+    }
+
+    jmethodID open_file_descriptor = (*env)->GetMethodID(
+        env,
+        resolver_class,
+        "openFileDescriptor",
+        "(Landroid/net/Uri;Ljava/lang/String;)Landroid/os/ParcelFileDescriptor;");
+    if (open_file_descriptor == NULL) {
+        clear_jni_exception(env, "finding openFileDescriptor");
+        goto done;
+    }
+
+    jstring mode = (*env)->NewStringUTF(env, "w");
+    if (mode == NULL) {
+        clear_jni_exception(env, "creating file mode");
+        goto done;
+    }
+    parcel_fd = (*env)->CallObjectMethod(
+        env,
+        resolver,
+        open_file_descriptor,
+        capture_uri,
+        mode);
+    (*env)->DeleteLocalRef(env, mode);
+    if (parcel_fd == NULL || (*env)->ExceptionCheck(env)) {
+        clear_jni_exception(env, "opening Downloads capture");
+        goto done;
+    }
+
+    jclass parcel_fd_class = (*env)->GetObjectClass(env, parcel_fd);
+    jmethodID detach_fd = parcel_fd_class == NULL
+        ? NULL
+        : (*env)->GetMethodID(env, parcel_fd_class, "detachFd", "()I");
+    if (detach_fd == NULL) {
+        clear_jni_exception(env, "finding detachFd");
+        goto done;
+    }
+
+    jint fd = (*env)->CallIntMethod(env, parcel_fd, detach_fd);
+    if (fd < 0 || (*env)->ExceptionCheck(env)) {
+        clear_jni_exception(env, "detaching capture fd");
+        goto done;
+    }
+
+    file = fdopen(fd, "w");
+    if (file == NULL) {
+        close(fd);
+        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "fdopen failed");
+        goto done;
+    }
+
+done:
+    if (parcel_fd != NULL) {
+        (*env)->DeleteLocalRef(env, parcel_fd);
+    }
+    if (capture_uri != NULL) {
+        (*env)->DeleteLocalRef(env, capture_uri);
+    }
+    if (downloads_uri != NULL) {
+        (*env)->DeleteLocalRef(env, downloads_uri);
+    }
+    if (values != NULL) {
+        (*env)->DeleteLocalRef(env, values);
+    }
+    if (resolver != NULL) {
+        (*env)->DeleteLocalRef(env, resolver);
+    }
+    if (attached) {
+        (*activity->vm)->DetachCurrentThread(activity->vm);
+    }
+    return file;
+}
+
+static void start_capture(struct accelerometer_state *state)
+{
+    time_t now = time(NULL);
+    struct tm local_time;
+    if (localtime_r(&now, &local_time) == NULL ||
+        strftime(
+            state->capture_name,
+            sizeof(state->capture_name),
+            "accelerometer-diagnostic-%Y%m%d-%H%M%S.csv",
+            &local_time) == 0U) {
+        (void)snprintf(
+            state->capture_name,
+            sizeof(state->capture_name),
+            "accelerometer-diagnostic.csv");
+    }
+
+    state->capture_file = open_download_capture(state, state->capture_name);
+    if (state->capture_file == NULL) {
+        return;
+    }
+
+    (void)fprintf(
+        state->capture_file,
+        "# accelerometer one-minute binary32-to-Float16 capture\n");
+    if (state->accelerometer != NULL) {
+        (void)fprintf(
+            state->capture_file,
+            "# sensor_name=%s\n# sensor_vendor=%s\n# sensor_resolution=%.9g\n# sensor_min_delay_us=%d\n",
+            ASensor_getName(state->accelerometer),
+            ASensor_getVendor(state->accelerometer),
+            (double)ASensor_getResolution(state->accelerometer),
+            ASensor_getMinDelay(state->accelerometer));
+    }
+    (void)fprintf(
+        state->capture_file,
+        "elapsed_ms,event_timestamp_ns,sensor_type,"
+        "raw_x,raw_y,raw_z,raw_norm,"
+        "stored_f16_x,stored_f16_y,stored_f16_z,stored_f16_norm\n");
+    (void)fflush(state->capture_file);
+
+    __android_log_print(
+        ANDROID_LOG_INFO,
+        LOG_TAG,
+        "capturing first minute to Downloads/%s",
+        state->capture_name);
+}
+
+static void finish_capture(struct accelerometer_state *state)
+{
+    if (state->capture_file == NULL) {
+        return;
+    }
+
+    (void)fprintf(state->capture_file, "# capture_complete\n");
+    (void)fflush(state->capture_file);
+    (void)fclose(state->capture_file);
+    state->capture_file = NULL;
+    state->capture_finished = true;
+
+    __android_log_print(
+        ANDROID_LOG_INFO,
+        LOG_TAG,
+        "capture complete: Downloads/%s",
+        state->capture_name);
 }
 
 static const uint8_t *glyph_rows(char character)
@@ -585,11 +885,40 @@ static void consume_sensor_events(struct accelerometer_state *state)
         state->z = (_Float16)raw_z;
         state->have_sample = true;
 
+        float stored_x = (float)state->x;
+        float stored_y = (float)state->y;
+        float stored_z = (float)state->z;
+
+        if (state->capture_file != NULL && !state->capture_finished) {
+            if (state->capture_start_ns == 0) {
+                state->capture_start_ns = event.timestamp;
+            }
+
+            int64_t elapsed_ns = event.timestamp - state->capture_start_ns;
+            if (elapsed_ns < CAPTURE_DURATION_NS) {
+                (void)fprintf(
+                    state->capture_file,
+                    "%lld,%lld,%d,"
+                    "%.9g,%.9g,%.9g,%.9g,"
+                    "%.9g,%.9g,%.9g,%.9g\n",
+                    (long long)(elapsed_ns / 1000000LL),
+                    (long long)event.timestamp,
+                    (int)event.type,
+                    (double)raw_x,
+                    (double)raw_y,
+                    (double)raw_z,
+                    (double)magnitude3(raw_x, raw_y, raw_z),
+                    (double)stored_x,
+                    (double)stored_y,
+                    (double)stored_z,
+                    (double)magnitude3(stored_x, stored_y, stored_z));
+            } else {
+                finish_capture(state);
+            }
+        }
+
         state->log_counter += 1U;
         if (state->log_counter >= 25U) {
-            float stored_x = (float)state->x;
-            float stored_y = (float)state->y;
-            float stored_z = (float)state->z;
             __android_log_print(
                 ANDROID_LOG_INFO,
                 LOG_TAG,
@@ -633,6 +962,8 @@ void android_main(struct android_app *app)
             NULL);
     }
 
+    start_capture(&state);
+
     for (;;) {
         int events = 0;
         struct android_poll_source *source = NULL;
@@ -654,6 +985,7 @@ void android_main(struct android_app *app)
     }
 
     set_sensor_enabled(&state, false);
+    finish_capture(&state);
     if (state.sensor_manager != NULL && state.sensor_queue != NULL) {
         (void)ASensorManager_destroyEventQueue(state.sensor_manager, state.sensor_queue);
     }
