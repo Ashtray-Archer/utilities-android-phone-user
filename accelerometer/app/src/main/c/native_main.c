@@ -13,6 +13,8 @@
 #define LOG_TAG "Accelerometer"
 #define SENSOR_PERIOD_US 20000
 
+_Static_assert(sizeof(_Float16) == 2U, "_Float16 must use two-byte storage");
+
 struct glyph {
     char character;
     uint8_t rows[7];
@@ -57,9 +59,9 @@ struct accelerometer_state {
     ASensorManager *sensor_manager;
     const ASensor *accelerometer;
     ASensorEventQueue *sensor_queue;
-    float x;
-    float y;
-    float z;
+    _Float16 x;
+    _Float16 y;
+    _Float16 z;
     bool sensor_enabled;
     bool have_sample;
     unsigned int log_counter;
@@ -206,10 +208,22 @@ static void draw_screen(struct accelerometer_state *state)
         scale = 6;
     }
 
-    int32_t text_scale = scale + 1;
-
     int32_t left = 6 * scale;
     int32_t line_height = 16 * scale;
+    int32_t text_scale = scale + 3;
+    int32_t max_text_scale_width =
+        (buffer.width - 2 * left) / ((int32_t)strlen("ACCELEROMETER") * 6);
+    int32_t max_text_scale_height = line_height / 7;
+    if (text_scale > max_text_scale_width) {
+        text_scale = max_text_scale_width;
+    }
+    if (text_scale > max_text_scale_height) {
+        text_scale = max_text_scale_height;
+    }
+    if (text_scale < 1) {
+        text_scale = 1;
+    }
+
     int32_t display_height = 8 * line_height;
     int32_t top = (buffer.height - display_height) / 2;
     if (top < 8 * scale) {
@@ -227,9 +241,9 @@ static void draw_screen(struct accelerometer_state *state)
     char x_line[48];
     char y_line[48];
     char z_line[48];
-    (void)snprintf(x_line, sizeof(x_line), "X %+7.3f m/s", (double)state->x);
-    (void)snprintf(y_line, sizeof(y_line), "Y %+7.3f m/s", (double)state->y);
-    (void)snprintf(z_line, sizeof(z_line), "Z %+7.3f m/s", (double)state->z);
+    (void)snprintf(x_line, sizeof(x_line), "X %+5.1f m/s", (double)state->x);
+    (void)snprintf(y_line, sizeof(y_line), "Y %+5.1f m/s", (double)state->y);
+    (void)snprintf(z_line, sizeof(z_line), "Z %+5.1f m/s", (double)state->z);
 
     int32_t x_text_y = top + 2 * line_height;
     int32_t y_text_y = top + 4 * line_height;
@@ -321,9 +335,9 @@ static void consume_sensor_events(struct accelerometer_state *state)
             continue;
         }
 
-        state->x = event.acceleration.x;
-        state->y = event.acceleration.y;
-        state->z = event.acceleration.z;
+        state->x = (_Float16)event.acceleration.x;
+        state->y = (_Float16)event.acceleration.y;
+        state->z = (_Float16)event.acceleration.z;
         state->have_sample = true;
 
         state->log_counter += 1U;
@@ -331,7 +345,7 @@ static void consume_sensor_events(struct accelerometer_state *state)
             __android_log_print(
                 ANDROID_LOG_INFO,
                 LOG_TAG,
-                "x=%.4f y=%.4f z=%.4f m/s2",
+                "x=%.2f y=%.2f z=%.2f m/s2",
                 (double)state->x,
                 (double)state->y,
                 (double)state->z);
