@@ -86,6 +86,81 @@ static void put_pixel(ANativeWindow_Buffer *buffer, int32_t x, int32_t y, uint32
     pixels[offset] = value;
 }
 
+static void blend_pixel(
+    ANativeWindow_Buffer *buffer,
+    int32_t x,
+    int32_t y,
+    uint32_t value,
+    uint8_t coverage)
+{
+    if (x < 0 || y < 0 || x >= buffer->width || y >= buffer->height || coverage == 0U) {
+        return;
+    }
+
+    uint32_t *pixels = (uint32_t *)buffer->bits;
+    size_t offset = (size_t)y * (size_t)buffer->stride + (size_t)x;
+    if (coverage == 255U) {
+        pixels[offset] = value;
+        return;
+    }
+
+    uint32_t under = pixels[offset];
+    uint32_t inverse = 255U - (uint32_t)coverage;
+    uint32_t mixed = 0U;
+    for (unsigned int shift = 0U; shift < 32U; shift += 8U) {
+        uint32_t under_channel = (under >> shift) & 0xffU;
+        uint32_t value_channel = (value >> shift) & 0xffU;
+        uint32_t channel =
+            (under_channel * inverse + value_channel * (uint32_t)coverage + 127U) / 255U;
+        mixed |= channel << shift;
+    }
+    pixels[offset] = mixed;
+}
+
+static bool glyph_cell_on(const uint8_t *rows, int32_t row, int32_t column)
+{
+    if (row < 0 || row >= 7 || column < 0 || column >= 5) {
+        return false;
+    }
+    uint8_t mask = (uint8_t)(1U << (unsigned int)(4 - column));
+    return (rows[row] & mask) != 0U;
+}
+
+/*
+ * Keep the 5x7 bitmap as the glyph definition, but use the physical pixels
+ * inside each scaled cell to soften exposed corners. A 4x4 subpixel coverage
+ * grid gives grayscale antialiasing without assuming an RGB subpixel order.
+ */
+static uint8_t rounded_corner_coverage(int32_t x, int32_t y, int32_t scale)
+{
+    if (scale < 3) {
+        return 255U;
+    }
+
+    int32_t radius = scale / 2;
+    if (radius < 1 || x >= radius || y >= radius) {
+        return 255U;
+    }
+
+    int32_t radius_eighths = radius * 8;
+    int32_t radius_squared = radius_eighths * radius_eighths;
+    int32_t covered = 0;
+
+    for (int32_t sample_y = 1; sample_y < 8; sample_y += 2) {
+        for (int32_t sample_x = 1; sample_x < 8; sample_x += 2) {
+            int32_t x_eighths = x * 8 + sample_x;
+            int32_t y_eighths = y * 8 + sample_y;
+            int32_t dx = radius_eighths - x_eighths;
+            int32_t dy = radius_eighths - y_eighths;
+            if (dx * dx + dy * dy <= radius_squared) {
+                covered += 1;
+            }
+        }
+    }
+
+    return (uint8_t)((covered * 255 + 8) / 16);
+}
+
 static void fill_rect(
     ANativeWindow_Buffer *buffer,
     int32_t left,
@@ -112,15 +187,74 @@ static void draw_glyph(
     const uint8_t *rows = glyph_rows(character);
     for (int32_t row = 0; row < 7; ++row) {
         for (int32_t column = 0; column < 5; ++column) {
-            uint8_t mask = (uint8_t)(1U << (unsigned int)(4 - column));
-            if ((rows[row] & mask) != 0U) {
-                fill_rect(
-                    buffer,
-                    left + column * scale,
-                    top + row * scale,
-                    scale,
-                    scale,
-                    value);
+            if (!glyph_cell_on(rows, row, column)) {
+                continue;
+            }
+
+            bool north = glyph_cell_on(rows, row - 1, column);
+            bool south = glyph_cell_on(rows, row + 1, column);
+            bool west = glyph_cell_on(rows, row, column - 1);
+            bool east = glyph_cell_on(rows, row, column + 1);
+
+            /*
+             * Preserve a square corner when a diagonal cell touches it. The
+             * original 5x7 font uses those diagonal contacts as real strokes.
+             */
+            bool round_top_left =
+                !north && !west && !glyph_cell_on(rows, row - 1, column - 1);
+            bool round_top_right =
+                !north && !east && !glyph_cell_on(rows, row - 1, column + 1);
+            bool round_bottom_left =
+                !south && !west && !glyph_cell_on(rows, row + 1, column - 1);
+            bool round_bottom_right =
+                !south && !east && !glyph_cell_on(rows, row + 1, column + 1);
+
+            for (int32_t pixel_y = 0; pixel_y < scale; ++pixel_y) {
+                for (int32_t pixel_x = 0; pixel_x < scale; ++pixel_x) {
+                    uint8_t coverage = 255U;
+
+                    if (round_top_left) {
+                        uint8_t corner =
+                            rounded_corner_coverage(pixel_x, pixel_y, scale);
+                        if (corner < coverage) {
+                            coverage = corner;
+                        }
+                    }
+                    if (round_top_right) {
+                        uint8_t corner = rounded_corner_coverage(
+                            scale - 1 - pixel_x,
+                            pixel_y,
+                            scale);
+                        if (corner < coverage) {
+                            coverage = corner;
+                        }
+                    }
+                    if (round_bottom_left) {
+                        uint8_t corner = rounded_corner_coverage(
+                            pixel_x,
+                            scale - 1 - pixel_y,
+                            scale);
+                        if (corner < coverage) {
+                            coverage = corner;
+                        }
+                    }
+                    if (round_bottom_right) {
+                        uint8_t corner = rounded_corner_coverage(
+                            scale - 1 - pixel_x,
+                            scale - 1 - pixel_y,
+                            scale);
+                        if (corner < coverage) {
+                            coverage = corner;
+                        }
+                    }
+
+                    blend_pixel(
+                        buffer,
+                        left + column * scale + pixel_x,
+                        top + row * scale + pixel_y,
+                        value,
+                        coverage);
+                }
             }
         }
     }
