@@ -446,12 +446,19 @@ static void draw_screen(struct accelerometer_state *state)
     }
 
     char values[3][16];
-    (void)snprintf(values[0], sizeof(values[0]), "X %+.1f", (double)state->x);
-    (void)snprintf(values[1], sizeof(values[1]), "Y %+.1f", (double)state->y);
-    (void)snprintf(values[2], sizeof(values[2]), "Z %+.1f", (double)state->z);
+    (void)snprintf(values[0], sizeof(values[0]), "%+.1f", (double)state->x);
+    (void)snprintf(values[1], sizeof(values[1]), "%+.1f", (double)state->y);
+    (void)snprintf(values[2], sizeof(values[2]), "%+.1f", (double)state->z);
 
-    int32_t left = 4 * scale;
-    int32_t unit_gap = 2 * scale;
+    /*
+     * Treat the three reading fields like tab stops rather than one text run.
+     * This leaves deliberate horizontal space and keeps all rows aligned even
+     * as the signs and digits change.
+     */
+    const char axes[3] = {'X', 'Y', 'Z'};
+    int32_t axis_left = 4 * scale;
+    int32_t value_left = buffer.width / 4;
+    int32_t unit_left = (7 * buffer.width) / 10;
     int32_t bar_margin = 2 * scale;
     int32_t center_x = buffer.width / 2;
     int32_t half_width = (buffer.width - 2 * bar_margin) / 2;
@@ -461,9 +468,21 @@ static void draw_screen(struct accelerometer_state *state)
 
     for (int32_t axis = 0; axis < 3; ++axis) {
         int32_t text_y = readings_top + axis * reading_stride;
-        draw_text(&buffer, values[axis], left, text_y, text_scale, foreground);
+        draw_glyph(
+            &buffer,
+            axes[axis],
+            axis_left,
+            text_y,
+            text_scale,
+            foreground);
+        draw_text(
+            &buffer,
+            values[axis],
+            value_left,
+            text_y,
+            text_scale,
+            foreground);
 
-        int32_t unit_left = left + text_width(values[axis], text_scale) + unit_gap;
         int32_t unit_y = text_y + 7 * (text_scale - unit_scale);
         draw_text(&buffer, "m/s", unit_left, unit_y, unit_scale, foreground);
 
