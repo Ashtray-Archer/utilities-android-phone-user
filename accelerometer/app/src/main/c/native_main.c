@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -84,6 +85,11 @@ struct accelerometer_state {
     bool have_sample;
     unsigned int log_counter;
 };
+
+static float magnitude3(float x, float y, float z)
+{
+    return sqrtf(x * x + y * y + z * z);
+}
 
 static const uint8_t *glyph_rows(char character)
 {
@@ -571,20 +577,33 @@ static void consume_sensor_events(struct accelerometer_state *state)
             continue;
         }
 
-        state->x = (_Float16)event.acceleration.x;
-        state->y = (_Float16)event.acceleration.y;
-        state->z = (_Float16)event.acceleration.z;
+        float raw_x = event.acceleration.x;
+        float raw_y = event.acceleration.y;
+        float raw_z = event.acceleration.z;
+        state->x = (_Float16)raw_x;
+        state->y = (_Float16)raw_y;
+        state->z = (_Float16)raw_z;
         state->have_sample = true;
 
         state->log_counter += 1U;
         if (state->log_counter >= 25U) {
+            float stored_x = (float)state->x;
+            float stored_y = (float)state->y;
+            float stored_z = (float)state->z;
             __android_log_print(
                 ANDROID_LOG_INFO,
                 LOG_TAG,
-                "x=%.2f y=%.2f z=%.2f m/s2",
-                (double)state->x,
-                (double)state->y,
-                (double)state->z);
+                "type=%d raw=(%.3f,%.3f,%.3f) norm=%.3f "
+                "stored=(%.3f,%.3f,%.3f) norm=%.3f m/s2",
+                (int)event.type,
+                (double)raw_x,
+                (double)raw_y,
+                (double)raw_z,
+                (double)magnitude3(raw_x, raw_y, raw_z),
+                (double)stored_x,
+                (double)stored_y,
+                (double)stored_z,
+                (double)magnitude3(stored_x, stored_y, stored_z));
             state->log_counter = 0U;
         }
     }
