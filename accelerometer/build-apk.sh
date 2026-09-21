@@ -65,6 +65,11 @@ base_apk="$work_dir/base.apk"
 unsigned_apk="$work_dir/unsigned.apk"
 aligned_apk="$work_dir/aligned.apk"
 final_apk="$output_dir/app-debug.apk"
+compiled_resources="$work_dir/compiled-resources.zip"
+
+"$build_tools/aapt2" compile \
+    --dir "$project_dir/app/src/main/res" \
+    -o "$compiled_resources"
 
 "$build_tools/aapt2" link \
     -I "$platform_jar" \
@@ -73,7 +78,8 @@ final_apk="$output_dir/app-debug.apk"
     --target-sdk-version 36 \
     --version-code 1 \
     --version-name 0.1.0 \
-    -o "$base_apk"
+    -o "$base_apk" \
+    "$compiled_resources"
 cp "$base_apk" "$unsigned_apk"
 (
     cd "$staging_dir"

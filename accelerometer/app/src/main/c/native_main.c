@@ -13,6 +13,8 @@
 #define LOG_TAG "Accelerometer"
 #define SENSOR_PERIOD_US 20000
 
+_Static_assert(sizeof(_Float16) == 2U, "_Float16 must use two-byte storage");
+
 struct glyph {
     char character;
     uint8_t rows[7];
@@ -36,16 +38,34 @@ static const struct glyph glyphs[] = {
     {'9', {0x0e, 0x11, 0x11, 0x0f, 0x01, 0x01, 0x0e}},
     {'A', {0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11}},
     {'C', {0x0f, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0f}},
+    {'D', {0x1e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1e}},
     {'E', {0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f}},
+    {'G', {0x0f, 0x10, 0x10, 0x17, 0x11, 0x11, 0x0f}},
+    {'H', {0x11, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11}},
+    {'I', {0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x1f}},
     {'L', {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f}},
     {'M', {0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11}},
+    {'a', {0x00, 0x00, 0x0e, 0x01, 0x0f, 0x11, 0x0f}},
+    {'d', {0x01, 0x01, 0x0f, 0x11, 0x11, 0x11, 0x0f}},
+    {'e', {0x00, 0x00, 0x0e, 0x11, 0x1f, 0x10, 0x0e}},
+    {'h', {0x10, 0x10, 0x1e, 0x11, 0x11, 0x11, 0x11}},
+    {'i', {0x04, 0x00, 0x0c, 0x04, 0x04, 0x04, 0x0e}},
     {'m', {0x00, 0x00, 0x1a, 0x15, 0x15, 0x15, 0x15}},
+    {'n', {0x00, 0x00, 0x1e, 0x11, 0x11, 0x11, 0x11}},
+    {'o', {0x00, 0x00, 0x0e, 0x11, 0x11, 0x11, 0x0e}},
+    {'p', {0x00, 0x00, 0x1e, 0x11, 0x1e, 0x10, 0x10}},
+    {'r', {0x00, 0x00, 0x16, 0x19, 0x10, 0x10, 0x10}},
+    {'s', {0x00, 0x00, 0x0f, 0x10, 0x0e, 0x01, 0x1e}},
+    {'t', {0x04, 0x04, 0x1f, 0x04, 0x04, 0x04, 0x03}},
+    {'u', {0x00, 0x00, 0x11, 0x11, 0x11, 0x13, 0x0d}},
+    {'y', {0x00, 0x00, 0x11, 0x11, 0x0f, 0x01, 0x0e}},
     {'N', {0x11, 0x19, 0x19, 0x15, 0x13, 0x13, 0x11}},
     {'O', {0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e}},
+    {'P', {0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10}},
     {'R', {0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11}},
     {'S', {0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e}},
-    {'s', {0x00, 0x00, 0x0f, 0x10, 0x0e, 0x01, 0x1e}},
     {'T', {0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
+    {'U', {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e}},
     {'X', {0x11, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x11}},
     {'Y', {0x11, 0x11, 0x0a, 0x04, 0x04, 0x04, 0x04}},
     {'Z', {0x1f, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1f}},
@@ -57,9 +77,9 @@ struct accelerometer_state {
     ASensorManager *sensor_manager;
     const ASensor *accelerometer;
     ASensorEventQueue *sensor_queue;
-    float x;
-    float y;
-    float z;
+    _Float16 x;
+    _Float16 y;
+    _Float16 z;
     bool sensor_enabled;
     bool have_sample;
     unsigned int log_counter;
@@ -84,6 +104,81 @@ static void put_pixel(ANativeWindow_Buffer *buffer, int32_t x, int32_t y, uint32
     uint32_t *pixels = (uint32_t *)buffer->bits;
     size_t offset = (size_t)y * (size_t)buffer->stride + (size_t)x;
     pixels[offset] = value;
+}
+
+static void blend_pixel(
+    ANativeWindow_Buffer *buffer,
+    int32_t x,
+    int32_t y,
+    uint32_t value,
+    uint8_t coverage)
+{
+    if (x < 0 || y < 0 || x >= buffer->width || y >= buffer->height || coverage == 0U) {
+        return;
+    }
+
+    uint32_t *pixels = (uint32_t *)buffer->bits;
+    size_t offset = (size_t)y * (size_t)buffer->stride + (size_t)x;
+    if (coverage == 255U) {
+        pixels[offset] = value;
+        return;
+    }
+
+    uint32_t under = pixels[offset];
+    uint32_t inverse = 255U - (uint32_t)coverage;
+    uint32_t mixed = 0U;
+    for (unsigned int shift = 0U; shift < 32U; shift += 8U) {
+        uint32_t under_channel = (under >> shift) & 0xffU;
+        uint32_t value_channel = (value >> shift) & 0xffU;
+        uint32_t channel =
+            (under_channel * inverse + value_channel * (uint32_t)coverage + 127U) / 255U;
+        mixed |= channel << shift;
+    }
+    pixels[offset] = mixed;
+}
+
+static bool glyph_cell_on(const uint8_t *rows, int32_t row, int32_t column)
+{
+    if (row < 0 || row >= 7 || column < 0 || column >= 5) {
+        return false;
+    }
+    uint8_t mask = (uint8_t)(1U << (unsigned int)(4 - column));
+    return (rows[row] & mask) != 0U;
+}
+
+/*
+ * Keep the 5x7 bitmap as the glyph definition, but use the physical pixels
+ * inside each scaled cell to soften exposed corners. A 4x4 subpixel coverage
+ * grid gives grayscale antialiasing without assuming an RGB subpixel order.
+ */
+static uint8_t rounded_corner_coverage(int32_t x, int32_t y, int32_t scale)
+{
+    if (scale < 3) {
+        return 255U;
+    }
+
+    int32_t radius = scale / 2;
+    if (radius < 1 || x >= radius || y >= radius) {
+        return 255U;
+    }
+
+    int32_t radius_eighths = radius * 8;
+    int32_t radius_squared = radius_eighths * radius_eighths;
+    int32_t covered = 0;
+
+    for (int32_t sample_y = 1; sample_y < 8; sample_y += 2) {
+        for (int32_t sample_x = 1; sample_x < 8; sample_x += 2) {
+            int32_t x_eighths = x * 8 + sample_x;
+            int32_t y_eighths = y * 8 + sample_y;
+            int32_t dx = radius_eighths - x_eighths;
+            int32_t dy = radius_eighths - y_eighths;
+            if (dx * dx + dy * dy <= radius_squared) {
+                covered += 1;
+            }
+        }
+    }
+
+    return (uint8_t)((covered * 255 + 8) / 16);
 }
 
 static void fill_rect(
@@ -112,15 +207,74 @@ static void draw_glyph(
     const uint8_t *rows = glyph_rows(character);
     for (int32_t row = 0; row < 7; ++row) {
         for (int32_t column = 0; column < 5; ++column) {
-            uint8_t mask = (uint8_t)(1U << (unsigned int)(4 - column));
-            if ((rows[row] & mask) != 0U) {
-                fill_rect(
-                    buffer,
-                    left + column * scale,
-                    top + row * scale,
-                    scale,
-                    scale,
-                    value);
+            if (!glyph_cell_on(rows, row, column)) {
+                continue;
+            }
+
+            bool north = glyph_cell_on(rows, row - 1, column);
+            bool south = glyph_cell_on(rows, row + 1, column);
+            bool west = glyph_cell_on(rows, row, column - 1);
+            bool east = glyph_cell_on(rows, row, column + 1);
+
+            /*
+             * Preserve a square corner when a diagonal cell touches it. The
+             * original 5x7 font uses those diagonal contacts as real strokes.
+             */
+            bool round_top_left =
+                !north && !west && !glyph_cell_on(rows, row - 1, column - 1);
+            bool round_top_right =
+                !north && !east && !glyph_cell_on(rows, row - 1, column + 1);
+            bool round_bottom_left =
+                !south && !west && !glyph_cell_on(rows, row + 1, column - 1);
+            bool round_bottom_right =
+                !south && !east && !glyph_cell_on(rows, row + 1, column + 1);
+
+            for (int32_t pixel_y = 0; pixel_y < scale; ++pixel_y) {
+                for (int32_t pixel_x = 0; pixel_x < scale; ++pixel_x) {
+                    uint8_t coverage = 255U;
+
+                    if (round_top_left) {
+                        uint8_t corner =
+                            rounded_corner_coverage(pixel_x, pixel_y, scale);
+                        if (corner < coverage) {
+                            coverage = corner;
+                        }
+                    }
+                    if (round_top_right) {
+                        uint8_t corner = rounded_corner_coverage(
+                            scale - 1 - pixel_x,
+                            pixel_y,
+                            scale);
+                        if (corner < coverage) {
+                            coverage = corner;
+                        }
+                    }
+                    if (round_bottom_left) {
+                        uint8_t corner = rounded_corner_coverage(
+                            pixel_x,
+                            scale - 1 - pixel_y,
+                            scale);
+                        if (corner < coverage) {
+                            coverage = corner;
+                        }
+                    }
+                    if (round_bottom_right) {
+                        uint8_t corner = rounded_corner_coverage(
+                            scale - 1 - pixel_x,
+                            scale - 1 - pixel_y,
+                            scale);
+                        if (corner < coverage) {
+                            coverage = corner;
+                        }
+                    }
+
+                    blend_pixel(
+                        buffer,
+                        left + column * scale + pixel_x,
+                        top + row * scale + pixel_y,
+                        value,
+                        coverage);
+                }
             }
         }
     }
@@ -139,6 +293,26 @@ static void draw_text(
         draw_glyph(buffer, *cursor, x, top, scale, value);
         x += 6 * scale;
     }
+}
+
+static int32_t text_width(const char *text, int32_t scale)
+{
+    size_t count = strlen(text);
+    if (count == 0U) {
+        return 0;
+    }
+    return ((int32_t)count * 6 - 1) * scale;
+}
+
+static void draw_text_centered(
+    ANativeWindow_Buffer *buffer,
+    const char *text,
+    int32_t top,
+    int32_t scale,
+    uint32_t value)
+{
+    int32_t left = (buffer->width - text_width(text, scale)) / 2;
+    draw_text(buffer, text, left, top, scale, value);
 }
 
 static void clear_buffer(ANativeWindow_Buffer *buffer, uint32_t value)
@@ -206,64 +380,140 @@ static void draw_screen(struct accelerometer_state *state)
         scale = 6;
     }
 
-    int32_t text_scale = scale + 1;
+    /*
+     * The first phone-sized version used scale + 1, which is 4 on the MIRO A1.
+     * Use roughly twice that size now, capped only so the longest title line
+     * still fits on unusually narrow displays.
+     */
+    int32_t text_scale = 2 * (scale + 1);
+    int32_t title_fit_scale = buffer.width / 60;
+    if (text_scale > title_fit_scale) {
+        text_scale = title_fit_scale;
+    }
+    if (text_scale < 2) {
+        text_scale = 2;
+    }
 
-    int32_t left = 6 * scale;
-    int32_t line_height = 16 * scale;
-    int32_t display_height = 8 * line_height;
-    int32_t top = (buffer.height - display_height) / 2;
+    int32_t unit_scale = text_scale - scale;
+    if (unit_scale < 3) {
+        unit_scale = 3;
+    }
+    int32_t superscript_scale = unit_scale > 2 ? unit_scale - 1 : unit_scale;
+
+    int32_t title_line_height = 9 * text_scale;
+    int32_t title_block_height = 4 * title_line_height;
+    int32_t title_gap = 5 * scale;
+    int32_t reading_stride = 14 * text_scale;
+    int32_t bar_height = 6 * scale;
+    int32_t last_bar_bottom =
+        title_block_height + title_gap + 2 * reading_stride + 9 * text_scale + bar_height;
+    int32_t top = (buffer.height - last_bar_bottom) / 2;
     if (top < 8 * scale) {
         top = 8 * scale;
     }
 
-    draw_text(&buffer, "ACCELEROMETER", left, top, text_scale, foreground);
+    draw_text_centered(&buffer, "there are", top, text_scale, secondary);
+    draw_text_centered(
+        &buffer,
+        "SPRINGS",
+        top + title_line_height,
+        text_scale,
+        foreground);
+    draw_text_centered(
+        &buffer,
+        "inside",
+        top + 2 * title_line_height,
+        text_scale,
+        secondary);
+    draw_text_centered(
+        &buffer,
+        "your phone",
+        top + 3 * title_line_height,
+        text_scale,
+        secondary);
+
+    int32_t readings_top = top + title_block_height + title_gap;
 
     if (state->accelerometer == NULL) {
-        draw_text(&buffer, "NO SENSOR", left, top + 2 * line_height, text_scale, foreground);
+        draw_text_centered(
+            &buffer,
+            "NO SENSOR",
+            readings_top + reading_stride,
+            text_scale,
+            foreground);
         (void)ANativeWindow_unlockAndPost(state->app->window);
         return;
     }
 
-    char x_line[48];
-    char y_line[48];
-    char z_line[48];
-    (void)snprintf(x_line, sizeof(x_line), "X %+7.3f m/s", (double)state->x);
-    (void)snprintf(y_line, sizeof(y_line), "Y %+7.3f m/s", (double)state->y);
-    (void)snprintf(z_line, sizeof(z_line), "Z %+7.3f m/s", (double)state->z);
+    char values[3][16];
+    (void)snprintf(values[0], sizeof(values[0]), "%+.1f", (double)state->x);
+    (void)snprintf(values[1], sizeof(values[1]), "%+.1f", (double)state->y);
+    (void)snprintf(values[2], sizeof(values[2]), "%+.1f", (double)state->z);
 
-    int32_t x_text_y = top + 2 * line_height;
-    int32_t y_text_y = top + 4 * line_height;
-    int32_t z_text_y = top + 6 * line_height;
-    draw_text(&buffer, x_line, left, x_text_y, text_scale, foreground);
-    draw_text(&buffer, y_line, left, y_text_y, text_scale, foreground);
-    draw_text(&buffer, z_line, left, z_text_y, text_scale, foreground);
-
-    int32_t superscript_scale = text_scale > 2 ? text_scale - 1 : text_scale;
-    int32_t x_unit_end = left + (int32_t)strlen(x_line) * 6 * text_scale;
-    int32_t y_unit_end = left + (int32_t)strlen(y_line) * 6 * text_scale;
-    int32_t z_unit_end = left + (int32_t)strlen(z_line) * 6 * text_scale;
-    int32_t superscript_raise = 2 * superscript_scale;
-    draw_glyph(&buffer, '2', x_unit_end, x_text_y - superscript_raise, superscript_scale, foreground);
-    draw_glyph(&buffer, '2', y_unit_end, y_text_y - superscript_raise, superscript_scale, foreground);
-    draw_glyph(&buffer, '2', z_unit_end, z_text_y - superscript_raise, superscript_scale, foreground);
-
+    /*
+     * Treat the three reading fields like tab stops rather than one text run.
+     * This leaves deliberate horizontal space and keeps all rows aligned even
+     * as the signs and digits change.
+     */
+    const char axes[3] = {'X', 'Y', 'Z'};
+    int32_t axis_left = 4 * scale;
+    int32_t value_left = buffer.width / 4;
+    int32_t unit_left = (7 * buffer.width) / 10;
     int32_t bar_margin = 2 * scale;
     int32_t center_x = buffer.width / 2;
     int32_t half_width = (buffer.width - 2 * bar_margin) / 2;
-    int32_t bar_height = 6 * scale;
     int32_t track_height = 2 * scale;
     int32_t track_width = buffer.width - 2 * bar_margin;
-    int32_t x_bar_y = top + 3 * line_height;
-    int32_t y_bar_y = top + 5 * line_height;
-    int32_t z_bar_y = top + 7 * line_height;
+    float accelerations[3] = {state->x, state->y, state->z};
 
-    fill_rect(&buffer, bar_margin, x_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);
-    fill_rect(&buffer, bar_margin, y_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);
-    fill_rect(&buffer, bar_margin, z_bar_y + (bar_height - track_height) / 2, track_width, track_height, track);
-    fill_rect(&buffer, center_x, x_bar_y, 1, z_bar_y - x_bar_y + bar_height, secondary);
-    draw_axis_bar(&buffer, center_x, x_bar_y, half_width, bar_height, state->x, secondary);
-    draw_axis_bar(&buffer, center_x, y_bar_y, half_width, bar_height, state->y, secondary);
-    draw_axis_bar(&buffer, center_x, z_bar_y, half_width, bar_height, state->z, secondary);
+    for (int32_t axis = 0; axis < 3; ++axis) {
+        int32_t text_y = readings_top + axis * reading_stride;
+        draw_glyph(
+            &buffer,
+            axes[axis],
+            axis_left,
+            text_y,
+            text_scale,
+            foreground);
+        draw_text(
+            &buffer,
+            values[axis],
+            value_left,
+            text_y,
+            text_scale,
+            foreground);
+
+        int32_t unit_y = text_y + 7 * (text_scale - unit_scale);
+        draw_text(&buffer, "m/s", unit_left, unit_y, unit_scale, foreground);
+
+        int32_t unit_end = unit_left + text_width("m/s", unit_scale) + unit_scale;
+        int32_t superscript_raise = 2 * superscript_scale;
+        draw_glyph(
+            &buffer,
+            '2',
+            unit_end,
+            unit_y - superscript_raise,
+            superscript_scale,
+            foreground);
+
+        int32_t bar_y = text_y + 9 * text_scale;
+        fill_rect(
+            &buffer,
+            bar_margin,
+            bar_y + (bar_height - track_height) / 2,
+            track_width,
+            track_height,
+            track);
+        fill_rect(&buffer, center_x, bar_y, 1, bar_height, secondary);
+        draw_axis_bar(
+            &buffer,
+            center_x,
+            bar_y,
+            half_width,
+            bar_height,
+            accelerations[axis],
+            secondary);
+    }
 
     (void)ANativeWindow_unlockAndPost(state->app->window);
 }
@@ -321,9 +571,9 @@ static void consume_sensor_events(struct accelerometer_state *state)
             continue;
         }
 
-        state->x = event.acceleration.x;
-        state->y = event.acceleration.y;
-        state->z = event.acceleration.z;
+        state->x = (_Float16)event.acceleration.x;
+        state->y = (_Float16)event.acceleration.y;
+        state->z = (_Float16)event.acceleration.z;
         state->have_sample = true;
 
         state->log_counter += 1U;
@@ -331,7 +581,7 @@ static void consume_sensor_events(struct accelerometer_state *state)
             __android_log_print(
                 ANDROID_LOG_INFO,
                 LOG_TAG,
-                "x=%.4f y=%.4f z=%.4f m/s2",
+                "x=%.2f y=%.2f z=%.2f m/s2",
                 (double)state->x,
                 (double)state->y,
                 (double)state->z);

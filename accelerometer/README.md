@@ -12,7 +12,8 @@ This first implementation is deliberately small and native:
 - `android.app.NativeActivity`;
 - no `classes.dex`, Java, Kotlin, Gradle, or Compose;
 - Android NDK `ASENSOR_TYPE_ACCELEROMETER` input;
-- direct native-window rendering of the changing numeric values;
+- direct native-window rendering of the changing numeric values, shown to one decimal place;
+- the retained x/y/z sample state uses two-byte `_Float16` values after Android's float-valued sensor event crosses the platform boundary;
 - ARMv7 (`armeabi-v7a`), AArch64, and x86_64 builds from the same source;
 - the ARMv7 library is compiled explicitly as Thumb code.
 
