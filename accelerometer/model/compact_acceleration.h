@@ -198,17 +198,26 @@ static inline enum compact_acceleration_encode_status compact_acceleration_encod
 
     struct physical_acceleration difference =
         acceleration_difference_from_balanced_gravity(measured);
-    float residual_magnitude = physical_acceleration_magnitude(difference);
+    float scale = fmaxf(
+        fabsf(difference.x),
+        fmaxf(fabsf(difference.y), fabsf(difference.z)));
 
-    if (residual_magnitude == 0.0F) {
+    if (scale == 0.0F) {
         *encoded = compact_acceleration_canonical_zero();
         return COMPACT_ACCELERATION_ENCODE_OK;
     }
 
+    float scaled_x = difference.x / scale;
+    float scaled_y = difference.y / scale;
+    float scaled_z = difference.z / scale;
+    float scaled_norm =
+        sqrtf(scaled_x * scaled_x + scaled_y * scaled_y + scaled_z * scaled_z);
+    float residual_magnitude = scale * scaled_norm;
+
     compact_acceleration_encode_direction(
-        difference.x / residual_magnitude,
-        difference.y / residual_magnitude,
-        difference.z / residual_magnitude,
+        scaled_x / scaled_norm,
+        scaled_y / scaled_norm,
+        scaled_z / scaled_norm,
         encoded);
 
     float maximum_magnitude = 255.0F * compact_acceleration_magnitude_quantum();
