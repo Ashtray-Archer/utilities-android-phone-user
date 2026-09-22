@@ -27,6 +27,8 @@ Accelerometer values are in metres per second squared. The native `events` strea
 
 The public model is the operation on a named source. `ASensorManager`, Binder, HAL transactions, `/dev` nodes, Termux sockets, JNI, and libc details are implementation choices beneath that model.
 
+For the native Android backend, `sample` and `events` now consume the same `accelerometer/android/android_accelerometer.[ch]` acquisition source as the graphical accelerometer APK. That shared source calls its result an **Android accelerometer reading**: binary32 x/y/z values and the Android event timestamp reported through the Android sensor stack. It deliberately does not call those values chip-raw data, ADC counts, or register contents.
+
 ## Native Android backend
 
 `android-native/hardware_sensor.c` uses the Android NDK sensor API in `libandroid`.
