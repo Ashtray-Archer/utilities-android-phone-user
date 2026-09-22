@@ -18,7 +18,9 @@ This first implementation is deliberately small and native:
 - ARMv7 (`armeabi-v7a`), AArch64, and x86_64 builds from the same source;
 - the ARMv7 library is compiled explicitly as Thumb code.
 
-The C implementation is a platform oracle, not the intended permanent owner of the application semantics. The useful boundary is a stream of samples containing timestamp, x, y, and z. A terminal presentation, this native screen, and a later Android Material 3 shell should consume that same logical stream rather than each reimplementing sensor access.
+The C implementation is a platform oracle, not the intended permanent owner of the application semantics. The Android boundary now lives in `android/android_accelerometer.[ch]` and names its output an **Android accelerometer reading**: the timestamp plus three binary32 acceleration components reported through Android's sensor stack in m/s². Those values are not ADC counts or sensor-chip register contents.
+
+The native screen and the command-line `hardware-android-native` utility compile that same acquisition source. The latter exposes one-shot `sample` and streaming `events` output on stdout, so Grease and other programs can consume the Android accelerometer reading without launching the graphical application. Above that shared boundary, the screen passes the reading through the compact geometric model and seventh-based presentation rather than retaining a second axis copy.
 
 [`COMPACT-STATE.md`](COMPACT-STATE.md) defines the balanced reference, residual codec, explicit overflow and malformed-state behavior, rejected three-byte design, and deterministic reconstruction-error study. Raw Android values remain available transiently for comparison logging; they are not retained application state and do not feed the renderer.
 
