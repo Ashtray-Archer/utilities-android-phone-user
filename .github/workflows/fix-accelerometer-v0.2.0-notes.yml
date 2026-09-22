@@ -1,0 +1,47 @@
+name: Fix accelerometer native 0.2.0 release notes
+
+on:
+  push:
+    branches:
+      - release/accelerometer-native-v0.2.0
+    paths:
+      - '.github/workflows/fix-accelerometer-v0.2.0-notes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-notes:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Rewrite release notes
+        run: |
+          cat > /tmp/release-notes.md <<'EOF'
+          Stable native accelerometer release after PR #58, “Supersample whole accelerometer glyphs,” merged as `bf44102c1cec8b27498fc98410a418be8e2a66c8`.
+
+          Release source is the exact physical-phone-tested PR head `340381176f8f7c89427bd1e41286a1e0ae1cf0d1`. The attached APK is the retained output from successful Actions run `35690545955`, artifact `10677804951`; it was not rebuilt for publication.
+
+          Physical MIRO A1 evidence for this exact APK:
+          - installed and launched successfully on the real ARMv7 phone;
+          - percentage-based vertical layout from PR #57 remains visually accepted;
+          - full-glyph 4×4 grayscale supersampling substantially improves X and other diagonal strokes;
+          - the resulting display was accepted for release, with a few glyphs still somewhat bubbly.
+
+          Known measurement issue:
+          - one observed stationary frame showed approximately X +1.2, Y +7.8, Z +0.1 m/s², whose Euclidean magnitude is about 7.9 m/s² rather than approximately 9.8 m/s²;
+          - this release therefore does not claim calibrated acceleration magnitude. The under-reading remains a separate measurement-path issue.
+
+          Provenance:
+          - PR #58: Supersample whole accelerometer glyphs
+          - PR head: `340381176f8f7c89427bd1e41286a1e0ae1cf0d1`
+          - merge commit: `bf44102c1cec8b27498fc98410a418be8e2a66c8`
+          - Actions run: `35690545955`
+          - retained artifact: `10677804951`
+          - APK SHA-256: `61885896fb66ec14b8325b2559ce3d784996dd9cbf74fe418e924eb48fd8632b`
+          - native package includes ARMv7, AArch64, and x86_64 libraries and no `classes.dex`.
+          EOF
+          gh release edit accelerometer-native-v0.2.0 \
+            --repo "$GITHUB_REPOSITORY" \
+            --notes-file /tmp/release-notes.md
