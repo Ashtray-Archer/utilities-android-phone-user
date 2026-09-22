@@ -1,0 +1,90 @@
+name: Publish accelerometer native 0.2.0
+
+on:
+  push:
+    branches:
+      - release/accelerometer-native-v0.2.0
+    paths:
+      - '.github/workflows/publish-accelerometer-v0.2.0.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: accelerometer-native-v0.2.0
+      TITLE: Accelerometer native 0.2.0
+      SOURCE_SHA: 340381176f8f7c89427bd1e41286a1e0ae1cf0d1
+      MERGE_SHA: bf44102c1cec8b27498fc98410a418be8e2a66c8
+      ARTIFACT_ID: '10677804951'
+      APK_SHA256: 61885896fb66ec14b8325b2559ce3d784996dd9cbf74fe418e924eb48fd8632b
+      ASSET_NAME: accelerometer-native-v0.2.0.apk
+    steps:
+      - name: Download exact phone-tested Actions artifact
+        run: |
+          set -eu
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
+            > /tmp/accelerometer-artifact.zip
+          mkdir -p /tmp/accelerometer-artifact
+          unzip -q /tmp/accelerometer-artifact.zip -d /tmp/accelerometer-artifact
+          test -f /tmp/accelerometer-artifact/app-debug.apk
+          cp /tmp/accelerometer-artifact/app-debug.apk "/tmp/$ASSET_NAME"
+
+      - name: Verify exact APK
+        run: |
+          set -eu
+          actual=$(sha256sum "/tmp/$ASSET_NAME" | awk '{print $1}')
+          test "$actual" = "$APK_SHA256"
+          unzip -l "/tmp/$ASSET_NAME" | tee /tmp/archive.txt
+          ! grep -q 'classes.dex' /tmp/archive.txt
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            grep -q "lib/$abi/libaccelerometer.so" /tmp/archive.txt
+          done
+
+      - name: Write release notes
+        run: |
+          cat > /tmp/release-notes.md <<EOF
+          Stable native accelerometer release after PR #58, “Supersample whole accelerometer glyphs,” merged as `$MERGE_SHA`.
+
+          Release source is the exact physical-phone-tested PR head `$SOURCE_SHA`. The attached APK is the retained output from successful Actions run `35690545955`, artifact `$ARTIFACT_ID`; it is not rebuilt for publication.
+
+          Physical MIRO A1 evidence for this exact APK:
+          - installed and launched successfully on the real ARMv7 phone;
+          - percentage-based vertical layout from PR #57 remains visually accepted;
+          - full-glyph 4×4 grayscale supersampling substantially improves X and other diagonal strokes;
+          - the user accepted the resulting display for release, while noting a few glyphs remain somewhat bubbly.
+
+          Known measurement issue:
+          - one observed stationary frame showed approximately X +1.2, Y +7.8, Z +0.1 m/s², whose Euclidean magnitude is about 7.9 m/s² rather than approximately 9.8 m/s²;
+          - this release therefore does not claim calibrated acceleration magnitude. The under-reading remains a separate measurement-path issue.
+
+          Provenance:
+          - PR #58 title: Supersample whole accelerometer glyphs
+          - PR head: `$SOURCE_SHA`
+          - merge commit: `$MERGE_SHA`
+          - Actions run: `35690545955`
+          - retained artifact: `$ARTIFACT_ID`
+          - APK SHA-256: `$APK_SHA256`
+          - native package includes ARMv7, AArch64, and x86_64 libraries and no `classes.dex`.
+          EOF
+
+      - name: Publish release with exact retained APK
+        run: |
+          set -eu
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $TAG already exists" >&2
+            exit 1
+          fi
+          gh release create "$TAG" \
+            "/tmp/$ASSET_NAME#$ASSET_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --title "$TITLE" \
+            --notes-file /tmp/release-notes.md
