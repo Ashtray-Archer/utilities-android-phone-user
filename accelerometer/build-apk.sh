@@ -13,11 +13,13 @@ toolchain="$ndk_root/toolchains/llvm/prebuilt/linux-x86_64"
 glue_dir="$ndk_root/sources/android/native_app_glue"
 build_tools="$sdk_root/build-tools/36.0.0"
 platform_jar="$sdk_root/platforms/android-36/android.jar"
+strip_tool="$toolchain/bin/llvm-strip"
 
 for required in \
     "$toolchain/bin/aarch64-linux-android26-clang" \
     "$toolchain/bin/armv7a-linux-androideabi26-clang" \
     "$toolchain/bin/x86_64-linux-android26-clang" \
+    "$strip_tool" \
     "$glue_dir/android_native_app_glue.c" \
     "$build_tools/aapt2" \
     "$build_tools/zipalign" \
@@ -32,8 +34,9 @@ done
 
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/accelerometer-build.XXXXXX")
 staging_dir="$work_dir/staging"
-output_dir="$project_dir/app/build/outputs/apk/debug"
-mkdir -p "$staging_dir" "$output_dir"
+debug_output_dir="$project_dir/app/build/outputs/apk/debug"
+distribution_output_dir="$project_dir/app/build/outputs/apk/distribution"
+mkdir -p "$staging_dir" "$debug_output_dir" "$distribution_output_dir"
 
 compile_abi() {
     abi=$1
@@ -62,9 +65,6 @@ compile_abi armeabi-v7a armv7a-linux-androideabi26-clang "-mthumb -march=armv7-a
 compile_abi x86_64 x86_64-linux-android26-clang ""
 
 base_apk="$work_dir/base.apk"
-unsigned_apk="$work_dir/unsigned.apk"
-aligned_apk="$work_dir/aligned.apk"
-final_apk="$output_dir/app-debug.apk"
 compiled_resources="$work_dir/compiled-resources.zip"
 
 "$build_tools/aapt2" compile \
@@ -80,16 +80,6 @@ compiled_resources="$work_dir/compiled-resources.zip"
     --version-name 0.1.0 \
     -o "$base_apk" \
     "$compiled_resources"
-cp "$base_apk" "$unsigned_apk"
-(
-    cd "$staging_dir"
-    zip -0 -q "$unsigned_apk" \
-        lib/arm64-v8a/libaccelerometer.so \
-        lib/armeabi-v7a/libaccelerometer.so \
-        lib/x86_64/libaccelerometer.so
-)
-
-"$build_tools/zipalign" -f -P 16 4 "$unsigned_apk" "$aligned_apk"
 
 keystore=${ANDROID_KEYSTORE:-}
 keystore_password=${ANDROID_KEYSTORE_PASSWORD:-wegert-debug}
@@ -119,16 +109,88 @@ if [ "$signer_sha256" != "$expected_signer_sha256" ]; then
     exit 2
 fi
 
-"$build_tools/apksigner" sign \
-    --ks "$keystore" \
-    --ks-key-alias "$key_alias" \
-    --ks-pass "pass:$keystore_password" \
-    --key-pass "pass:$key_password" \
-    --out "$final_apk" \
-    "$aligned_apk"
+sign_apk() {
+    input_apk=$1
+    output_apk=$2
+    label=$3
 
-"$build_tools/apksigner" verify --verbose --print-certs "$final_apk" |
-    tee "$work_dir/apk-signing.txt"
-grep -Fq "Signer #1 certificate SHA-256 digest: $(printf '%s' "$expected_signer_sha256" | tr '[:upper:]' '[:lower:]' | tr -d ':')" "$work_dir/apk-signing.txt"
+    "$build_tools/apksigner" sign \
+        --ks "$keystore" \
+        --ks-key-alias "$key_alias" \
+        --ks-pass "pass:$keystore_password" \
+        --key-pass "pass:$key_password" \
+        --out "$output_apk" \
+        "$input_apk"
 
-echo "$final_apk"
+    "$build_tools/apksigner" verify --verbose --print-certs "$output_apk" |
+        tee "$work_dir/apk-signing-$label.txt"
+    grep -Fq "Signer #1 certificate SHA-256 digest: $(printf '%s' "$expected_signer_sha256" | tr '[:upper:]' '[:lower:]' | tr -d ':')" "$work_dir/apk-signing-$label.txt"
+}
+
+package_apk() {
+    label=$1
+    output_apk=$2
+    strip_native=$3
+    shift 3
+
+    package_dir="$work_dir/package-$label"
+    package_staging="$package_dir/staging"
+    unsigned_apk="$package_dir/unsigned.apk"
+    aligned_apk="$package_dir/aligned.apk"
+    mkdir -p "$package_staging"
+
+    for abi in "$@"; do
+        target_dir="$package_staging/lib/$abi"
+        mkdir -p "$target_dir"
+        cp "$staging_dir/lib/$abi/libaccelerometer.so" "$target_dir/libaccelerometer.so"
+        if [ "$strip_native" = yes ]; then
+            "$strip_tool" --strip-unneeded "$target_dir/libaccelerometer.so"
+        fi
+    done
+
+    cp "$base_apk" "$unsigned_apk"
+    (
+        cd "$package_staging"
+        zip -0 -q -r "$unsigned_apk" lib
+    )
+
+    "$build_tools/zipalign" -f -P 16 4 "$unsigned_apk" "$aligned_apk"
+    sign_apk "$aligned_apk" "$output_apk" "$label"
+}
+
+# Preserve the existing universal debug artifact for exact-head testing.
+package_apk \
+    universal-debug \
+    "$debug_output_dir/app-debug.apk" \
+    no \
+    arm64-v8a armeabi-v7a x86_64
+
+# Direct-distribution APKs contain stripped native code. A person downloading
+# directly can take only the ABI their device executes; the universal file is
+# retained as a fallback when the ABI is not known.
+package_apk \
+    armeabi-v7a \
+    "$distribution_output_dir/accelerometer-armeabi-v7a.apk" \
+    yes \
+    armeabi-v7a
+package_apk \
+    arm64-v8a \
+    "$distribution_output_dir/accelerometer-arm64-v8a.apk" \
+    yes \
+    arm64-v8a
+package_apk \
+    x86_64 \
+    "$distribution_output_dir/accelerometer-x86_64.apk" \
+    yes \
+    x86_64
+package_apk \
+    universal \
+    "$distribution_output_dir/accelerometer-universal.apk" \
+    yes \
+    arm64-v8a armeabi-v7a x86_64
+
+printf '%s\n' "$debug_output_dir/app-debug.apk"
+printf '%s\n' "$distribution_output_dir/accelerometer-armeabi-v7a.apk"
+printf '%s\n' "$distribution_output_dir/accelerometer-arm64-v8a.apk"
+printf '%s\n' "$distribution_output_dir/accelerometer-x86_64.apk"
+printf '%s\n' "$distribution_output_dir/accelerometer-universal.apk"
