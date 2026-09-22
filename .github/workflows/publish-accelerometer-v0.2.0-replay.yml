@@ -1,0 +1,42 @@
+name: Publish accelerometer native 0.2.0 replay
+
+on:
+  push:
+    branches:
+      - release/accelerometer-native-v0.2.0
+    paths:
+      - '.github/workflows/publish-accelerometer-v0.2.0-replay.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: accelerometer-native-v0.2.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install renderer dependencies
+        run: python3 -m pip install --disable-pip-version-check numpy pillow imageio-ffmpeg
+
+      - name: Render recorded accelerometer replay
+        run: |
+          set -eu
+          mkdir -p /tmp/accelerometer-replay
+          python3 accelerometer/media/render-replay.py \
+            accelerometer/media/replay-v0.2.0.csv \
+            /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay.mp4 \
+            /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay-poster.png
+          sha256sum /tmp/accelerometer-replay/*
+
+      - name: Attach replay to the existing release
+        run: |
+          set -eu
+          gh release upload "$TAG" \
+            /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay.mp4 \
+            /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay-poster.png \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
