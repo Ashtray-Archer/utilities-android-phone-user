@@ -29,12 +29,12 @@ jobs:
           set -eu
           mkdir -p "$RUNNER_TEMP/accelerometer-tests"
           cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
-            -Iaccelerometer/app/src/main/c \
+            -Iaccelerometer/model \
             accelerometer/tests/compact_acceleration_test.c \
             -lm \
             -o "$RUNNER_TEMP/accelerometer-tests/compact-acceleration-test"
           cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
-            -Iaccelerometer/app/src/main/c \
+            -Iaccelerometer/model \
             accelerometer/tests/error_study.c \
             -lm \
             -o "$RUNNER_TEMP/accelerometer-tests/error-study"
