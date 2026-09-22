@@ -410,14 +410,14 @@ static void draw_screen(struct accelerometer_state *state)
     int32_t title_line_height = 15 * title_scale;
     int32_t title_block_height = 4 * title_line_height;
     int32_t title_gap = 14 * scale;
-    int32_t reading_stride = 17 * text_scale;
+    int32_t reading_stride = 20 * text_scale;
     int32_t bar_height = 6 * scale;
-    int32_t last_bar_bottom =
-        title_block_height + title_gap + 2 * reading_stride + 9 * text_scale + bar_height;
-    int32_t top = (buffer.height - last_bar_bottom) / 2;
-    if (top < 8 * scale) {
-        top = 8 * scale;
-    }
+
+    /*
+     * Keep the title anchored near the top of the drawable area instead of
+     * vertically centering the whole title-and-readings composition.
+     */
+    int32_t top = 6 * scale;
 
     draw_text_centered(&buffer, "there are", top, title_scale, secondary);
     draw_text_centered(
