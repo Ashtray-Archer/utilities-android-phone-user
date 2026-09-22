@@ -48,6 +48,7 @@ static const struct glyph glyphs[] = {
     {'a', {0x00, 0x00, 0x0e, 0x01, 0x0f, 0x11, 0x0f}},
     {'d', {0x01, 0x01, 0x0f, 0x11, 0x11, 0x11, 0x0f}},
     {'e', {0x00, 0x00, 0x0e, 0x11, 0x1f, 0x10, 0x0e}},
+    {'g', {0x00, 0x00, 0x0f, 0x11, 0x0f, 0x01, 0x0e}},
     {'h', {0x10, 0x10, 0x1e, 0x11, 0x11, 0x11, 0x11}},
     {'i', {0x04, 0x00, 0x0c, 0x04, 0x04, 0x04, 0x0e}},
     {'m', {0x00, 0x00, 0x1a, 0x15, 0x15, 0x15, 0x15}},
@@ -394,16 +395,22 @@ static void draw_screen(struct accelerometer_state *state)
         text_scale = 2;
     }
 
+    int32_t title_scale = text_scale - 4;
+    if (title_scale < 3) {
+        title_scale = 3;
+    }
+
     int32_t unit_scale = text_scale - scale;
     if (unit_scale < 3) {
         unit_scale = 3;
     }
     int32_t superscript_scale = unit_scale > 2 ? unit_scale - 1 : unit_scale;
 
-    int32_t title_line_height = 9 * text_scale;
+    int32_t springs_scale = title_scale + 1;
+    int32_t title_line_height = 15 * title_scale;
     int32_t title_block_height = 4 * title_line_height;
-    int32_t title_gap = 5 * scale;
-    int32_t reading_stride = 14 * text_scale;
+    int32_t title_gap = 14 * scale;
+    int32_t reading_stride = 17 * text_scale;
     int32_t bar_height = 6 * scale;
     int32_t last_bar_bottom =
         title_block_height + title_gap + 2 * reading_stride + 9 * text_scale + bar_height;
@@ -412,24 +419,24 @@ static void draw_screen(struct accelerometer_state *state)
         top = 8 * scale;
     }
 
-    draw_text_centered(&buffer, "there are", top, text_scale, secondary);
+    draw_text_centered(&buffer, "there are", top, title_scale, secondary);
     draw_text_centered(
         &buffer,
         "SPRINGS",
         top + title_line_height,
-        text_scale,
+        springs_scale,
         foreground);
     draw_text_centered(
         &buffer,
         "inside",
         top + 2 * title_line_height,
-        text_scale,
+        title_scale,
         secondary);
     draw_text_centered(
         &buffer,
         "your phone",
         top + 3 * title_line_height,
-        text_scale,
+        title_scale,
         secondary);
 
     int32_t readings_top = top + title_block_height + title_gap;

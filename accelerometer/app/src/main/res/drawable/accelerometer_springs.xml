@@ -8,27 +8,42 @@
         android:fillColor="#161A1D"
         android:pathData="M4,4H104V104H4Z" />
 
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M24,14L24,22C14,25 14,31 24,34C34,37 34,43 24,46C14,49 14,55 24,58C34,61 34,67 24,70C14,73 14,79 24,82L24,94"
-        android:strokeColor="#F2F2F2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="5" />
-
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M54,14L54,22C44,25 44,31 54,34C64,37 64,43 54,46C44,49 44,55 54,58C64,61 64,67 54,70C44,73 44,79 54,82L54,94"
-        android:strokeColor="#F2F2F2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="5" />
-
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M84,14L84,22C74,25 74,31 84,34C94,37 94,43 84,46C74,49 74,55 84,58C94,61 94,67 84,70C74,73 74,79 84,82L84,94"
-        android:strokeColor="#F2F2F2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="5" />
+    <!-- Three mutually perpendicular axes in isometric projection.
+         The projected springs share one center and are 120 degrees apart. -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="0">
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M54,54L54,50L60,47L48,43L60,39L48,35L60,31L48,27L54,24L54,14"
+            android:strokeColor="#F2F2F2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="5" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="120">
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M54,54L54,50L60,47L48,43L60,39L48,35L60,31L48,27L54,24L54,14"
+            android:strokeColor="#F2F2F2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="5" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="240">
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M54,54L54,50L60,47L48,43L60,39L48,35L60,31L48,27L54,24L54,14"
+            android:strokeColor="#F2F2F2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="5" />
+    </group>
 </vector>
