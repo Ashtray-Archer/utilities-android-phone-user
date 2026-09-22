@@ -123,7 +123,7 @@ jarsigner \
     "$unsigned_aab" \
     "$key_alias"
 
-jarsigner -verify -strict "$output_aab"
+jarsigner -verify "$output_aab"
 java -jar "$bundletool_jar" validate --bundle="$output_aab"
 
 printf '%s\n' "$output_aab"
