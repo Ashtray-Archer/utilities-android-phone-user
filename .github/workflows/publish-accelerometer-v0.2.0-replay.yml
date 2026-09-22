@@ -6,6 +6,8 @@ on:
       - release/accelerometer-native-v0.2.0
     paths:
       - '.github/workflows/publish-accelerometer-v0.2.0-replay.yml'
+      - 'accelerometer/media/replay-v0.2.0.csv'
+      - 'accelerometer/media/render-replay.py'
 
 permissions:
   contents: write
@@ -29,7 +31,8 @@ jobs:
           python3 accelerometer/media/render-replay.py \
             accelerometer/media/replay-v0.2.0.csv \
             /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay.mp4 \
-            /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay-poster.png
+            /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay-poster.png \
+            /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay.gif
           sha256sum /tmp/accelerometer-replay/*
 
       - name: Attach replay to the existing release
@@ -38,5 +41,6 @@ jobs:
           gh release upload "$TAG" \
             /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay.mp4 \
             /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay-poster.png \
+            /tmp/accelerometer-replay/accelerometer-native-v0.2.0-replay.gif \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
