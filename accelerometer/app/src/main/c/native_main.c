@@ -1,10 +1,10 @@
 #include <android/log.h>
 #include <android/looper.h>
 #include <android/native_window.h>
-#include <android/sensor.h>
 #include <android_native_app_glue.h>
 
 #include "accelerometer_model.h"
+#include "android_accelerometer.h"
 #include "sevenths_display.h"
 
 #include <stdbool.h>
@@ -77,11 +77,8 @@ static const struct glyph glyphs[] = {
 
 struct accelerometer_state {
     struct android_app *app;
-    ASensorManager *sensor_manager;
-    const ASensor *accelerometer;
-    ASensorEventQueue *sensor_queue;
+    struct android_accelerometer android_sensor;
     struct accelerometer_model model;
-    bool sensor_enabled;
     unsigned int log_counter;
 };
 
@@ -563,7 +560,7 @@ static void draw_screen(struct accelerometer_state *state)
 
     int32_t readings_top = (2 * buffer.height) / 5;
 
-    if (state->accelerometer == NULL) {
+    if (!android_accelerometer_is_available(&state->android_sensor)) {
         draw_text_centered(
             &buffer,
             "NO SENSOR",
@@ -655,22 +652,19 @@ static void draw_screen(struct accelerometer_state *state)
 
 static void set_sensor_enabled(struct accelerometer_state *state, bool enabled)
 {
-    if (state->sensor_queue == NULL || state->accelerometer == NULL) {
-        state->sensor_enabled = false;
+    if (!enabled) {
+        android_accelerometer_disable(&state->android_sensor);
         return;
     }
 
-    if (enabled && !state->sensor_enabled) {
-        if (ASensorEventQueue_enableSensor(state->sensor_queue, state->accelerometer) == 0) {
-            (void)ASensorEventQueue_setEventRate(
-                state->sensor_queue,
-                state->accelerometer,
-                SENSOR_PERIOD_US);
-            state->sensor_enabled = true;
-        }
-    } else if (!enabled && state->sensor_enabled) {
-        (void)ASensorEventQueue_disableSensor(state->sensor_queue, state->accelerometer);
-        state->sensor_enabled = false;
+    enum android_accelerometer_status status =
+        android_accelerometer_enable(&state->android_sensor, SENSOR_PERIOD_US);
+    if (status != ANDROID_ACCELEROMETER_OK) {
+        __android_log_print(
+            ANDROID_LOG_ERROR,
+            LOG_TAG,
+            "%s",
+            android_accelerometer_status_text(status));
     }
 }
 
@@ -696,20 +690,29 @@ static void handle_app_command(struct android_app *app, int32_t command)
 
 static void consume_sensor_events(struct accelerometer_state *state)
 {
-    if (state->sensor_queue == NULL) {
+    if (!android_accelerometer_is_available(&state->android_sensor)) {
         return;
     }
 
-    ASensorEvent event;
-    while (ASensorEventQueue_getEvents(state->sensor_queue, &event, 1) > 0) {
-        if (event.type != ASENSOR_TYPE_ACCELEROMETER) {
-            continue;
+    for (;;) {
+        struct android_accelerometer_reading reported;
+        enum android_accelerometer_read_result read_result =
+            android_accelerometer_next(&state->android_sensor, &reported);
+        if (read_result == ANDROID_ACCELEROMETER_READ_EMPTY) {
+            break;
+        }
+        if (read_result == ANDROID_ACCELEROMETER_READ_ERROR) {
+            __android_log_print(
+                ANDROID_LOG_ERROR,
+                LOG_TAG,
+                "could not read an Android accelerometer event");
+            break;
         }
 
         struct physical_acceleration measured = {
-            event.acceleration.x,
-            event.acceleration.y,
-            event.acceleration.z};
+            reported.x,
+            reported.y,
+            reported.z};
         enum compact_acceleration_encode_status encode_status =
             accelerometer_model_accept(&state->model, measured);
         if (encode_status == COMPACT_ACCELERATION_ENCODE_NONFINITE) {
@@ -733,7 +736,7 @@ static void consume_sensor_events(struct accelerometer_state *state)
             __android_log_print(
                 ANDROID_LOG_INFO,
                 LOG_TAG,
-                "raw=(%.4f,%.4f,%.4f) decoded=(%.4f,%.4f,%.4f) compact=%02x%02x%02x:%u decode=%s",
+                "android=(%.4f,%.4f,%.4f) decoded=(%.4f,%.4f,%.4f) compact=%02x%02x%02x:%u decode=%s",
                 (double)measured.x,
                 (double)measured.y,
                 (double)measured.z,
@@ -761,25 +764,25 @@ void android_main(struct android_app *app)
     app->userData = &state;
     app->onAppCmd = handle_app_command;
 
-    state.sensor_manager = ASensorManager_getInstanceForPackage(
-        "com.ashtrayarcher.accelerometer");
-    if (state.sensor_manager != NULL) {
-        state.accelerometer = ASensorManager_getDefaultSensor(
-            state.sensor_manager,
-            ASENSOR_TYPE_ACCELEROMETER);
-        state.sensor_queue = ASensorManager_createEventQueue(
-            state.sensor_manager,
+    enum android_accelerometer_status sensor_status =
+        android_accelerometer_open(
+            &state.android_sensor,
             app->looper,
             LOOPER_ID_USER,
-            NULL,
-            NULL);
+            "com.ashtrayarcher.accelerometer");
+    if (sensor_status != ANDROID_ACCELEROMETER_OK) {
+        __android_log_print(
+            ANDROID_LOG_ERROR,
+            LOG_TAG,
+            "%s",
+            android_accelerometer_status_text(sensor_status));
     }
 
     for (;;) {
         int events = 0;
         struct android_poll_source *source = NULL;
         int ident = ALooper_pollOnce(
-            state.sensor_enabled ? -1 : 100,
+            android_accelerometer_is_enabled(&state.android_sensor) ? -1 : 100,
             NULL,
             &events,
             (void **)&source);
@@ -796,8 +799,6 @@ void android_main(struct android_app *app)
     }
 
     set_sensor_enabled(&state, false);
-    if (state.sensor_manager != NULL && state.sensor_queue != NULL) {
-        (void)ASensorManager_destroyEventQueue(state.sensor_manager, state.sensor_queue);
-    }
+    android_accelerometer_close(&state.android_sensor);
     clear_glyph_mask_cache();
 }

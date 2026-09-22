@@ -18,9 +18,11 @@ This first implementation is deliberately small and native:
 - ARMv7 (`armeabi-v7a`), AArch64, and x86_64 builds from the same source;
 - the ARMv7 library is compiled explicitly as Thumb code.
 
-The C implementation is a platform oracle, not the intended permanent owner of the application semantics. The useful boundary is a stream of samples containing timestamp, x, y, and z. A terminal presentation, this native screen, and a later Android Material 3 shell should consume that same logical stream rather than each reimplementing sensor access.
+The C implementation is a platform oracle, not the intended permanent owner of the application semantics. The Android boundary now lives in `android/android_accelerometer.[ch]` and names its output an **Android accelerometer reading**: the timestamp plus three binary32 acceleration components reported through Android's sensor stack in m/s². Those values are not ADC counts or sensor-chip register contents.
 
-[`COMPACT-STATE.md`](COMPACT-STATE.md) defines the balanced reference, residual codec, explicit overflow and malformed-state behavior, rejected three-byte design, and deterministic reconstruction-error study. Raw Android values remain available transiently for comparison logging; they are not retained application state and do not feed the renderer.
+The native screen and the command-line `hardware-android-native` utility compile that same acquisition source. The latter exposes one-shot `sample` and streaming `events` output on stdout, so Grease and other programs can consume the Android accelerometer reading without launching the graphical application. It also exposes `inspect` and `inspect-events`, which run the reading through the same shared `model/` code used by the instrument and report the balanced-gravity difference, compact residual direction as a unit pure quaternion, compact bytes, reconstruction, and seventh-based screen values. Above the Android boundary, the screen and command line therefore share the mathematics rather than reimplementing it.
+
+[`COMPACT-STATE.md`](COMPACT-STATE.md) defines the balanced reference, residual codec, explicit overflow and malformed-state behavior, rejected three-byte design, and deterministic reconstruction-error study. The Android accelerometer reading remains available transiently for comparison logging; it is not retained application state and does not feed the renderer.
 
 ## ARM/Thumb handoff
 

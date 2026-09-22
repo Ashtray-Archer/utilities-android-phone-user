@@ -70,6 +70,33 @@ static inline struct physical_acceleration compact_acceleration_balanced_referen
     return (struct physical_acceleration){component, component, component};
 }
 
+
+static inline struct physical_acceleration acceleration_difference_from_balanced_gravity(
+    struct physical_acceleration measured)
+{
+    struct physical_acceleration reference = compact_acceleration_balanced_reference();
+    return (struct physical_acceleration){
+        measured.x - reference.x,
+        measured.y - reference.y,
+        measured.z - reference.z};
+}
+
+static inline float physical_acceleration_magnitude(struct physical_acceleration value)
+{
+    float scale = fmaxf(fabsf(value.x), fmaxf(fabsf(value.y), fabsf(value.z)));
+    if (scale == 0.0F) {
+        return 0.0F;
+    }
+
+    float scaled_x = value.x / scale;
+    float scaled_y = value.y / scale;
+    float scaled_z = value.z / scale;
+    return scale * sqrtf(
+        scaled_x * scaled_x +
+        scaled_y * scaled_y +
+        scaled_z * scaled_z);
+}
+
 static inline struct compact_acceleration compact_acceleration_canonical_zero(void)
 {
     return (struct compact_acceleration){0U, 0U, 0U, 0U};
@@ -169,20 +196,20 @@ static inline enum compact_acceleration_encode_status compact_acceleration_encod
         return COMPACT_ACCELERATION_ENCODE_NONFINITE;
     }
 
-    struct physical_acceleration reference = compact_acceleration_balanced_reference();
-    float residual_x = measured.x - reference.x;
-    float residual_y = measured.y - reference.y;
-    float residual_z = measured.z - reference.z;
-    float scale = fmaxf(fabsf(residual_x), fmaxf(fabsf(residual_y), fabsf(residual_z)));
+    struct physical_acceleration difference =
+        acceleration_difference_from_balanced_gravity(measured);
+    float scale = fmaxf(
+        fabsf(difference.x),
+        fmaxf(fabsf(difference.y), fabsf(difference.z)));
 
     if (scale == 0.0F) {
         *encoded = compact_acceleration_canonical_zero();
         return COMPACT_ACCELERATION_ENCODE_OK;
     }
 
-    float scaled_x = residual_x / scale;
-    float scaled_y = residual_y / scale;
-    float scaled_z = residual_z / scale;
+    float scaled_x = difference.x / scale;
+    float scaled_y = difference.y / scale;
+    float scaled_z = difference.z / scale;
     float scaled_norm =
         sqrtf(scaled_x * scaled_x + scaled_y * scaled_y + scaled_z * scaled_z);
     float residual_magnitude = scale * scaled_norm;

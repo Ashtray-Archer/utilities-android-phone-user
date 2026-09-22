@@ -13,6 +13,8 @@ The namespace is synthetic for now. It does not require a Linux mount, FUSE, roo
       info
       sample
       events
+      inspect
+      inspect-events
       control
 ```
 
@@ -20,12 +22,18 @@ The paths mean:
 
 - `info` — report the selected accelerometer and its stable metadata;
 - `sample` — read one measurement, write `x y z`, then exit;
-- `events` — remain open and write measurements until stopped;
+- `events` — remain open and write Android accelerometer readings until stopped;
+- `inspect` — read one measurement and expose every current semantic view with descriptive section headings and stable dotted keys;
+- `inspect-events` — stream those complete inspection records until stopped;
 - `control` — explicit settings such as sampling period; reserved until write semantics are settled.
 
 Accelerometer values are in metres per second squared. The native `events` stream prefixes each measurement with the Android sensor event timestamp in nanoseconds. `sample` deliberately stays the smallest useful program and writes only the three axes.
 
+`inspect` and `inspect-events` expose the same reading through the shared instrument model. Their sections are **Android accelerometer reading**, **Difference from balanced gravity**, **Residual direction represented by compact state (unit pure quaternion)**, **Compact geometric state**, **Reconstructed from compact state**, and **What the screen shows**. The quaternion section is the compact residual direction with real part zero; it is not a claim of full phone orientation.
+
 The public model is the operation on a named source. `ASensorManager`, Binder, HAL transactions, `/dev` nodes, Termux sockets, JNI, and libc details are implementation choices beneath that model.
+
+For the native Android backend, `sample` and `events` now consume the same `accelerometer/android/android_accelerometer.[ch]` acquisition source as the graphical accelerometer APK. That shared source calls its result an **Android accelerometer reading**: binary32 x/y/z values and the Android event timestamp reported through the Android sensor stack. It deliberately does not call those values chip-raw data, ADC counts, or register contents.
 
 ## Native Android backend
 
@@ -38,6 +46,8 @@ hardware-android-native-armv7 read /hardware/sensors/accelerometer/info
 hardware-android-native-armv7 read /hardware/sensors/accelerometer/sample
 hardware-android-native-armv7 read /hardware/sensors/accelerometer/events 10
 hardware-android-native-armv7 read /hardware/sensors/accelerometer/events
+hardware-android-native-armv7 read /hardware/sensors/accelerometer/inspect
+hardware-android-native-armv7 read /hardware/sensors/accelerometer/inspect-events 3
 ```
 
 The last form streams until interrupted.

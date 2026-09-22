@@ -29,17 +29,33 @@ jobs:
           set -eu
           mkdir -p "$RUNNER_TEMP/accelerometer-tests"
           cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
-            -Iaccelerometer/app/src/main/c \
+            -Iaccelerometer/model \
             accelerometer/tests/compact_acceleration_test.c \
             -lm \
             -o "$RUNNER_TEMP/accelerometer-tests/compact-acceleration-test"
           cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
-            -Iaccelerometer/app/src/main/c \
+            -Iaccelerometer/model \
             accelerometer/tests/error_study.c \
             -lm \
             -o "$RUNNER_TEMP/accelerometer-tests/error-study"
+          cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
+            -Iaccelerometer/model \
+            accelerometer/tests/accelerometer_snapshot_test.c \
+            -lm \
+            -o "$RUNNER_TEMP/accelerometer-tests/accelerometer-snapshot-test"
+          cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
+            -Iaccelerometer/model \
+            -Iaccelerometer/command \
+            accelerometer/tests/inspection_fixture.c \
+            -lm \
+            -o "$RUNNER_TEMP/accelerometer-tests/inspection-fixture"
           "$RUNNER_TEMP/accelerometer-tests/compact-acceleration-test"
           "$RUNNER_TEMP/accelerometer-tests/error-study"
+          "$RUNNER_TEMP/accelerometer-tests/accelerometer-snapshot-test"
+          "$RUNNER_TEMP/accelerometer-tests/inspection-fixture" > "$RUNNER_TEMP/accelerometer-tests/inspection.tsv"
+          grep -Fqx "$(printf 'android.x_m_per_s2\t1.25')" "$RUNNER_TEMP/accelerometer-tests/inspection.tsv"
+          grep -Fqx "$(printf 'compact.encode_status\tok')" "$RUNNER_TEMP/accelerometer-tests/inspection.tsv"
+          grep -Fq 'What the screen shows' "$RUNNER_TEMP/accelerometer-tests/inspection.tsv"
 
       - name: Check out stable public test signer
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

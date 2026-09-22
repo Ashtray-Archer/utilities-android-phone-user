@@ -42,7 +42,7 @@ The deterministic study covers 8,660,069 samples: a Fibonacci sweep across `S²`
 
 The screen quantum is `1/7 m/s² = 0.142857… m/s²`. The three-byte candidate's worst component error is several screen steps. Seventh rounding would conceal rather than repair that loss. Q0.11 keeps the measured maximum component error below 75 percent of one screen quantum over the tested domain. Since two Q0.11 coordinates require 24 bits, four bytes are the smallest byte-aligned form of this direct dyadic octahedral correction.
 
-These are deterministic host results, not physical-phone accuracy evidence. A MIRO A1 run still has to compare transient raw Android values with the decoded compact state.
+These are deterministic host results, not physical-phone accuracy evidence. A MIRO A1 run still has to compare the transient Android accelerometer reading with the decoded compact state.
 
 ## Live path and presentation
 
@@ -50,7 +50,7 @@ The live path is:
 
 `Android binary32 measurement → compact encode → four retained bytes → compact decode → reconstructed x/y/z → nearest-seventh presentation`.
 
-The application state contains the compact record, not retained raw or `_Float16` axis values. Periodic logs print the current raw Android sample beside the decoded value solely as an oracle for later physical acceptance.
+The application state contains the compact record, not a retained copy of the Android binary32 axes or `_Float16` shadow axes. Periodic logs print the current Android accelerometer reading beside the decoded value solely as an oracle for later physical acceptance.
 
 The renderer rounds each decoded component by `round(7a)` and presents the sign, integral part, and numerator `0` through `6`. Integral values omit `0/7`; signed values near zero are rounded before their sign is chosen, so a value that rounds to zero is displayed as `+0` rather than `−0`.
 
@@ -59,3 +59,5 @@ The renderer rounds each decoded component by `round(7a)` and presents the sign,
 `tests/compact_acceleration_test.c` checks the byte size, balanced and antipodal points, axis directions, unit-sphere reconstruction, all 256 magnitude meanings, zero normalization, saturation, nonfinite and malformed input, the retained-state-only screen model, and seventh formatting.
 
 `tests/error_study.c` performs the deterministic sweep summarized above and fails unless the rejected Q0.7 candidate exceeds one screen quantum while the production codec retains a 25 percent margin below it.
+
+`tests/accelerometer_snapshot_test.c` checks the shared semantic path used by command-line inspection: Android accelerometer reading → difference from balanced gravity → compact state and unit pure residual-direction quaternion → reconstruction → screen sevenths.
