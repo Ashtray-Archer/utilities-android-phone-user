@@ -106,8 +106,8 @@ def load_points(path):
     return np.array(rows,dtype=float)
 
 def main():
-    if len(sys.argv) != 4:
-        raise SystemExit("usage: render-replay.py sample.csv replay.mp4 poster.png")
+    if len(sys.argv) != 5:
+        raise SystemExit("usage: render-replay.py sample.csv replay.mp4 poster.png preview.gif")
     points=load_points(sys.argv[1])
     t=(points[:,0]-points[0,0])/1e9
     times=np.arange(0,float(t[-1])+0.5/FPS,1/FPS)
@@ -167,13 +167,26 @@ def main():
         pix_fmt_in="rgb24",pix_fmt_out="yuv420p",ffmpeg_log_level="error")
     writer.send(None)
     first=None
-    for v in xyz:
+    gif_frames=[]
+    for index,v in enumerate(xyz):
         fr=frame(v)
         if first is None:
             first=fr.copy()
         writer.send(fr.tobytes())
+        if index % 5 == 0:
+            gif_frames.append(
+                Image.fromarray(fr).resize((W//2,H//2),Image.Resampling.LANCZOS)
+            )
     writer.close()
     Image.fromarray(first).save(sys.argv[3])
+    gif_frames[0].save(
+        sys.argv[4],
+        save_all=True,
+        append_images=gif_frames[1:],
+        duration=100,
+        loop=0,
+        optimize=True
+    )
 
 if __name__ == "__main__":
     main()
