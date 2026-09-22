@@ -16,14 +16,14 @@ The retained record is four bytes:
 
 | Bytes | Meaning |
 | --- | --- |
-| 3 | Two signed Q0.11 coordinates in the standard octahedral chart of `S²`, packed as adjacent 12-bit two's-complement integers |
+| 3 | Two signed Q0.11 coordinates in the folded octahedral parameterization of `S²`, packed as adjacent 12-bit two's-complement integers |
 | 1 | Unsigned residual-magnitude code `m` |
 
 The magnitude meaning is exactly
 
 `ρ = m/(4√3) m/s²`.
 
-The direction chart uses a dyadic lattice. It does not divide byte values by `127` or `255`, and it does not contain a hidden `/256` physical scale. Decoding unfolds the octahedron and normalizes the resulting three coordinates onto `S²`.
+The direction parameterization uses a dyadic lattice. It is not one ordinary global manifold chart on `S²`. It does not divide byte values by `127` or `255`, and it does not contain a hidden `/256` physical scale. Decoding unfolds the octahedron and normalizes the resulting three coordinates onto `S²`.
 
 The three-byte direction codec is now factored as `geometry/compact_unit_direction.h`. That module owns only the reusable `S²` / unit-pure-quaternion direction representation. The balanced-gravity reference, residual magnitude byte, physical units, saturation policy, and four-byte retained accelerometer record remain accelerometer semantics.
 

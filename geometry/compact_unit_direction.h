@@ -2,8 +2,56 @@
 #define COMPACT_UNIT_DIRECTION_H
 
 #include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
 
+/* An arbitrary three-dimensional vector; no normalization is implied. */
+struct compact_unit_direction_vector3 {
+    float x;
+    float y;
+    float z;
+};
+
+/* A result constructed on {x ∈ ℝ³ : ‖x‖₁ = 1}. */
+struct compact_unit_direction_point_on_unit_l1_octahedron {
+    float x;
+    float y;
+    float z;
+};
+
+/*
+ * Coordinates in the folded octahedral square [-1, 1]^2.
+ *
+ * This parameterization has folds and seams.  It is not one ordinary global
+ * manifold chart on S².
+ */
+struct compact_unit_direction_octahedral_square_coordinates {
+    float first;
+    float second;
+};
+
+/*
+ * Two signed 12-bit Q0.11 codes, held in int32_t for C arithmetic.
+ * The C record cannot enforce the range; the quantizer constructs values in
+ * [-2048, 2047], and the packer is specified for values in that range.
+ */
+struct compact_unit_direction_q0_11_coordinates {
+    int32_t first;
+    int32_t second;
+};
+
+/* A result constructed on S², up to Float32 rounding. */
+struct compact_unit_direction_point_on_unit_sphere {
+    float x;
+    float y;
+    float z;
+};
+
+/*
+ * Compatibility carrier for the API extracted before the mathematical stage
+ * types were named.  Unlike point_on_unit_sphere, this type alone does not
+ * assert unit length.
+ */
 struct direction3 {
     float x;
     float y;
@@ -17,9 +65,22 @@ struct direction3 {
  *
  *     0 + x i + y j + z k.
  *
- * The representation stores two signed Q0.11 coordinates in the standard
- * octahedral chart of S^2 as adjacent 12-bit two's-complement integers.
- * It does not store a general unit quaternion in S^3 and carries no magnitude.
+ * This is only the S² subset of pure unit quaternions.  It is not the S³ of
+ * general unit quaternions and does not represent a complete SO(3) device
+ * orientation.
+ *
+ * The mathematical encoding stages are
+ *
+ *     ℝ³ \ {0}
+ *       → {x ∈ ℝ³ : ‖x‖₁ = 1}
+ *       → folded octahedral square coordinates
+ *       → two signed Q0.11 integer coordinates
+ *       → 24 packed bits.
+ *
+ * Decode follows the reverse stages and finally normalizes onto S².  Packing
+ * and unpacking are exact for signed 12-bit codes.  Quantization and Float32
+ * arithmetic make the complete encode/decode path approximate rather than an
+ * exact numerical inverse.
  */
 struct compact_unit_direction {
     uint8_t low;
@@ -44,126 +105,296 @@ enum {
     COMPACT_UNIT_DIRECTION_MINIMUM_CODE = -COMPACT_UNIT_DIRECTION_SCALE
 };
 
+static inline float compact_unit_direction_sign_with_zero_positive(float value)
+{
+    /* The octahedral seam uses the positive branch for both +0 and -0. */
+    return value < 0.0F ? -1.0F : 1.0F;
+}
+
+static inline bool compact_unit_direction_vector3_is_finite(
+    struct compact_unit_direction_vector3 vector)
+{
+    return isfinite(vector.x) && isfinite(vector.y) && isfinite(vector.z);
+}
+
+static inline bool compact_unit_direction_vector3_is_zero(
+    struct compact_unit_direction_vector3 vector)
+{
+    return vector.x == 0.0F && vector.y == 0.0F && vector.z == 0.0F;
+}
+
+static inline float compact_unit_direction_l_infinity_norm_of_vector3(
+    struct compact_unit_direction_vector3 vector)
+{
+    return fmaxf(fabsf(vector.x), fmaxf(fabsf(vector.y), fabsf(vector.z)));
+}
+
+static inline struct compact_unit_direction_point_on_unit_l1_octahedron
+compact_unit_direction_project_nonzero_vector_onto_unit_l1_octahedron(
+    struct compact_unit_direction_vector3 nonzero_vector)
+{
+    /*
+     * Dividing first by the L-infinity norm prevents |x| + |y| + |z| from
+     * overflowing.  It does not change the represented direction:
+     *
+     *     (v / ‖v‖∞) / ‖v / ‖v‖∞‖₁ = v / ‖v‖₁.
+     */
+    float l_infinity_norm =
+        compact_unit_direction_l_infinity_norm_of_vector3(nonzero_vector);
+    struct compact_unit_direction_vector3 safely_prescaled_vector = {
+        nonzero_vector.x / l_infinity_norm,
+        nonzero_vector.y / l_infinity_norm,
+        nonzero_vector.z / l_infinity_norm};
+    float l1_norm_of_safely_prescaled_vector =
+        fabsf(safely_prescaled_vector.x) +
+        fabsf(safely_prescaled_vector.y) +
+        fabsf(safely_prescaled_vector.z);
+
+    return (struct compact_unit_direction_point_on_unit_l1_octahedron){
+        safely_prescaled_vector.x / l1_norm_of_safely_prescaled_vector,
+        safely_prescaled_vector.y / l1_norm_of_safely_prescaled_vector,
+        safely_prescaled_vector.z / l1_norm_of_safely_prescaled_vector};
+}
+
+static inline struct compact_unit_direction_octahedral_square_coordinates
+compact_unit_direction_fold_unit_l1_octahedron_into_square_coordinates(
+    struct compact_unit_direction_point_on_unit_l1_octahedron octahedron_point)
+{
+    if (octahedron_point.z >= 0.0F) {
+        return (struct compact_unit_direction_octahedral_square_coordinates){
+            octahedron_point.x,
+            octahedron_point.y};
+    }
+
+    return (struct compact_unit_direction_octahedral_square_coordinates){
+        (1.0F - fabsf(octahedron_point.y)) *
+            compact_unit_direction_sign_with_zero_positive(octahedron_point.x),
+        (1.0F - fabsf(octahedron_point.x)) *
+            compact_unit_direction_sign_with_zero_positive(octahedron_point.y)};
+}
+
+static inline int32_t compact_unit_direction_quantize_one_q0_11_coordinate(
+    float octahedral_coordinate)
+{
+    float scaled_coordinate =
+        octahedral_coordinate * (float)COMPACT_UNIT_DIRECTION_SCALE;
+    int32_t nearest_integer_code = (int32_t)roundf(scaled_coordinate);
+
+    if (nearest_integer_code < COMPACT_UNIT_DIRECTION_MINIMUM_CODE) {
+        return COMPACT_UNIT_DIRECTION_MINIMUM_CODE;
+    }
+    if (nearest_integer_code > COMPACT_UNIT_DIRECTION_MAXIMUM_CODE) {
+        return COMPACT_UNIT_DIRECTION_MAXIMUM_CODE;
+    }
+    return nearest_integer_code;
+}
+
+static inline struct compact_unit_direction_q0_11_coordinates
+compact_unit_direction_quantize_square_coordinates_as_q0_11(
+    struct compact_unit_direction_octahedral_square_coordinates coordinates)
+{
+    return (struct compact_unit_direction_q0_11_coordinates){
+        compact_unit_direction_quantize_one_q0_11_coordinate(coordinates.first),
+        compact_unit_direction_quantize_one_q0_11_coordinate(coordinates.second)};
+}
+
+static inline uint32_t compact_unit_direction_signed_12_bit_twos_complement_bits(
+    int32_t signed_code)
+{
+    return (uint32_t)signed_code & 0x0fffU;
+}
+
+static inline struct compact_unit_direction
+compact_unit_direction_pack_two_signed_12_bit_coordinates(
+    struct compact_unit_direction_q0_11_coordinates quantized_coordinates)
+{
+    uint32_t packed_24_bits =
+        compact_unit_direction_signed_12_bit_twos_complement_bits(
+            quantized_coordinates.first) |
+        (compact_unit_direction_signed_12_bit_twos_complement_bits(
+            quantized_coordinates.second) << 12U);
+
+    return (struct compact_unit_direction){
+        (uint8_t)(packed_24_bits & 0xffU),
+        (uint8_t)((packed_24_bits >> 8U) & 0xffU),
+        (uint8_t)((packed_24_bits >> 16U) & 0xffU)};
+}
+
+static inline int32_t compact_unit_direction_sign_extend_signed_12_bit_code(
+    uint32_t bits)
+{
+    uint32_t low_12_bits = bits & 0x0fffU;
+    return (low_12_bits & 0x0800U) != 0U
+        ? (int32_t)low_12_bits - 0x1000
+        : (int32_t)low_12_bits;
+}
+
+static inline struct compact_unit_direction_q0_11_coordinates
+compact_unit_direction_unpack_two_signed_12_bit_coordinates(
+    struct compact_unit_direction encoded)
+{
+    uint32_t packed_24_bits =
+        (uint32_t)encoded.low |
+        ((uint32_t)encoded.middle << 8U) |
+        ((uint32_t)encoded.high << 16U);
+
+    return (struct compact_unit_direction_q0_11_coordinates){
+        compact_unit_direction_sign_extend_signed_12_bit_code(packed_24_bits),
+        compact_unit_direction_sign_extend_signed_12_bit_code(
+            packed_24_bits >> 12U)};
+}
+
+static inline struct compact_unit_direction_octahedral_square_coordinates
+compact_unit_direction_dequantize_q0_11_square_coordinates(
+    struct compact_unit_direction_q0_11_coordinates quantized_coordinates)
+{
+    return (struct compact_unit_direction_octahedral_square_coordinates){
+        (float)quantized_coordinates.first /
+            (float)COMPACT_UNIT_DIRECTION_SCALE,
+        (float)quantized_coordinates.second /
+            (float)COMPACT_UNIT_DIRECTION_SCALE};
+}
+
+static inline struct compact_unit_direction_point_on_unit_l1_octahedron
+compact_unit_direction_unfold_square_coordinates_onto_unit_l1_octahedron(
+    struct compact_unit_direction_octahedral_square_coordinates coordinates)
+{
+    float octahedron_z =
+        1.0F - fabsf(coordinates.first) - fabsf(coordinates.second);
+
+    if (octahedron_z >= 0.0F) {
+        return (struct compact_unit_direction_point_on_unit_l1_octahedron){
+            coordinates.first,
+            coordinates.second,
+            octahedron_z};
+    }
+
+    return (struct compact_unit_direction_point_on_unit_l1_octahedron){
+        (1.0F - fabsf(coordinates.second)) *
+            compact_unit_direction_sign_with_zero_positive(coordinates.first),
+        (1.0F - fabsf(coordinates.first)) *
+            compact_unit_direction_sign_with_zero_positive(coordinates.second),
+        octahedron_z};
+}
+
+static inline struct compact_unit_direction_point_on_unit_sphere
+compact_unit_direction_euclidean_normalize_octahedron_point_onto_unit_sphere(
+    struct compact_unit_direction_point_on_unit_l1_octahedron octahedron_point)
+{
+    float euclidean_norm = sqrtf(
+        octahedron_point.x * octahedron_point.x +
+        octahedron_point.y * octahedron_point.y +
+        octahedron_point.z * octahedron_point.z);
+
+    return (struct compact_unit_direction_point_on_unit_sphere){
+        octahedron_point.x / euclidean_norm,
+        octahedron_point.y / euclidean_norm,
+        octahedron_point.z / euclidean_norm};
+}
+
+static inline struct compact_unit_direction
+compact_unit_direction_encode_nonzero_finite_vector(
+    struct compact_unit_direction_vector3 nonzero_finite_vector)
+{
+    struct compact_unit_direction_point_on_unit_l1_octahedron octahedron_point =
+        compact_unit_direction_project_nonzero_vector_onto_unit_l1_octahedron(
+            nonzero_finite_vector);
+    struct compact_unit_direction_octahedral_square_coordinates coordinates =
+        compact_unit_direction_fold_unit_l1_octahedron_into_square_coordinates(
+            octahedron_point);
+    struct compact_unit_direction_q0_11_coordinates quantized_coordinates =
+        compact_unit_direction_quantize_square_coordinates_as_q0_11(coordinates);
+
+    return compact_unit_direction_pack_two_signed_12_bit_coordinates(
+        quantized_coordinates);
+}
+
+static inline enum compact_unit_direction_encode_status
+compact_unit_direction_encode_vector(
+    struct compact_unit_direction_vector3 vector,
+    struct compact_unit_direction *encoded)
+{
+    if (!compact_unit_direction_vector3_is_finite(vector)) {
+        return COMPACT_UNIT_DIRECTION_ENCODE_NONFINITE;
+    }
+    if (compact_unit_direction_vector3_is_zero(vector)) {
+        return COMPACT_UNIT_DIRECTION_ENCODE_ZERO;
+    }
+
+    struct compact_unit_direction complete_encoding =
+        compact_unit_direction_encode_nonzero_finite_vector(vector);
+    *encoded = complete_encoding;
+    return COMPACT_UNIT_DIRECTION_ENCODE_OK;
+}
+
+static inline struct compact_unit_direction_point_on_unit_sphere
+compact_unit_direction_decode_to_unit_sphere(
+    const struct compact_unit_direction *encoded)
+{
+    struct compact_unit_direction_q0_11_coordinates quantized_coordinates =
+        compact_unit_direction_unpack_two_signed_12_bit_coordinates(*encoded);
+    struct compact_unit_direction_octahedral_square_coordinates coordinates =
+        compact_unit_direction_dequantize_q0_11_square_coordinates(
+            quantized_coordinates);
+    struct compact_unit_direction_point_on_unit_l1_octahedron octahedron_point =
+        compact_unit_direction_unfold_square_coordinates_onto_unit_l1_octahedron(
+            coordinates);
+
+    return compact_unit_direction_euclidean_normalize_octahedron_point_onto_unit_sphere(
+        octahedron_point);
+}
+
+/* Compatibility wrappers for the names already consumed by accelerometer code. */
 static inline float compact_unit_direction_sign_not_zero(float value)
 {
-    return value < 0.0F ? -1.0F : 1.0F;
+    return compact_unit_direction_sign_with_zero_positive(value);
 }
 
 static inline int32_t compact_unit_direction_quantize_coordinate(float coordinate)
 {
-    float scaled = coordinate * (float)COMPACT_UNIT_DIRECTION_SCALE;
-    int32_t code = (int32_t)roundf(scaled);
-    if (code < COMPACT_UNIT_DIRECTION_MINIMUM_CODE) {
-        return COMPACT_UNIT_DIRECTION_MINIMUM_CODE;
-    }
-    if (code > COMPACT_UNIT_DIRECTION_MAXIMUM_CODE) {
-        return COMPACT_UNIT_DIRECTION_MAXIMUM_CODE;
-    }
-    return code;
+    return compact_unit_direction_quantize_one_q0_11_coordinate(coordinate);
 }
 
 static inline uint32_t compact_unit_direction_twos_complement_12(int32_t code)
 {
-    return (uint32_t)code & 0x0fffU;
+    return compact_unit_direction_signed_12_bit_twos_complement_bits(code);
 }
 
 static inline int32_t compact_unit_direction_sign_extend_12(uint32_t bits)
 {
-    bits &= 0x0fffU;
-    return (bits & 0x0800U) != 0U ? (int32_t)bits - 0x1000 : (int32_t)bits;
+    return compact_unit_direction_sign_extend_signed_12_bit_code(bits);
 }
 
 static inline void compact_unit_direction_encode_nonzero_finite(
     struct direction3 direction,
     struct compact_unit_direction *encoded)
 {
-    float scale = fmaxf(
-        fabsf(direction.x),
-        fmaxf(fabsf(direction.y), fabsf(direction.z)));
-    float scaled_x = direction.x / scale;
-    float scaled_y = direction.y / scale;
-    float scaled_z = direction.z / scale;
-    float l1_norm = fabsf(scaled_x) + fabsf(scaled_y) + fabsf(scaled_z);
-    float chart_x = scaled_x / l1_norm;
-    float chart_y = scaled_y / l1_norm;
-    float chart_z = scaled_z / l1_norm;
-
-    if (chart_z < 0.0F) {
-        float unfolded_x = chart_x;
-        float unfolded_y = chart_y;
-        chart_x =
-            (1.0F - fabsf(unfolded_y)) *
-            compact_unit_direction_sign_not_zero(unfolded_x);
-        chart_y =
-            (1.0F - fabsf(unfolded_x)) *
-            compact_unit_direction_sign_not_zero(unfolded_y);
-    }
-
-    int32_t first_code = compact_unit_direction_quantize_coordinate(chart_x);
-    int32_t second_code = compact_unit_direction_quantize_coordinate(chart_y);
-    uint32_t packed =
-        compact_unit_direction_twos_complement_12(first_code) |
-        (compact_unit_direction_twos_complement_12(second_code) << 12U);
-
-    encoded->low = (uint8_t)(packed & 0xffU);
-    encoded->middle = (uint8_t)((packed >> 8U) & 0xffU);
-    encoded->high = (uint8_t)((packed >> 16U) & 0xffU);
+    *encoded = compact_unit_direction_encode_nonzero_finite_vector(
+        (struct compact_unit_direction_vector3){
+            direction.x,
+            direction.y,
+            direction.z});
 }
 
 static inline enum compact_unit_direction_encode_status compact_unit_direction_encode(
     struct direction3 direction,
     struct compact_unit_direction *encoded)
 {
-    if (!isfinite(direction.x) ||
-        !isfinite(direction.y) ||
-        !isfinite(direction.z)) {
-        return COMPACT_UNIT_DIRECTION_ENCODE_NONFINITE;
-    }
-
-    float scale = fmaxf(
-        fabsf(direction.x),
-        fmaxf(fabsf(direction.y), fabsf(direction.z)));
-    if (scale == 0.0F) {
-        return COMPACT_UNIT_DIRECTION_ENCODE_ZERO;
-    }
-
-    compact_unit_direction_encode_nonzero_finite(direction, encoded);
-    return COMPACT_UNIT_DIRECTION_ENCODE_OK;
+    return compact_unit_direction_encode_vector(
+        (struct compact_unit_direction_vector3){
+            direction.x,
+            direction.y,
+            direction.z},
+        encoded);
 }
 
 static inline void compact_unit_direction_decode(
     const struct compact_unit_direction *encoded,
     struct direction3 *unit_direction)
 {
-    uint32_t packed =
-        (uint32_t)encoded->low |
-        ((uint32_t)encoded->middle << 8U) |
-        ((uint32_t)encoded->high << 16U);
-    int32_t first_code = compact_unit_direction_sign_extend_12(packed);
-    int32_t second_code = compact_unit_direction_sign_extend_12(packed >> 12U);
-
-    float chart_x =
-        (float)first_code / (float)COMPACT_UNIT_DIRECTION_SCALE;
-    float chart_y =
-        (float)second_code / (float)COMPACT_UNIT_DIRECTION_SCALE;
-    float chart_z = 1.0F - fabsf(chart_x) - fabsf(chart_y);
-
-    if (chart_z < 0.0F) {
-        float folded_x = chart_x;
-        float folded_y = chart_y;
-        chart_x =
-            (1.0F - fabsf(folded_y)) *
-            compact_unit_direction_sign_not_zero(folded_x);
-        chart_y =
-            (1.0F - fabsf(folded_x)) *
-            compact_unit_direction_sign_not_zero(folded_y);
-    }
-
-    float norm =
-        sqrtf(chart_x * chart_x + chart_y * chart_y + chart_z * chart_z);
-    unit_direction->x = chart_x / norm;
-    unit_direction->y = chart_y / norm;
-    unit_direction->z = chart_z / norm;
+    struct compact_unit_direction_point_on_unit_sphere decoded =
+        compact_unit_direction_decode_to_unit_sphere(encoded);
+    *unit_direction = (struct direction3){decoded.x, decoded.y, decoded.z};
 }
 
 #endif

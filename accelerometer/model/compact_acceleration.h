@@ -14,9 +14,10 @@ struct physical_acceleration {
 };
 
 /*
- * The residual direction is an octahedral chart of S^2.  Each chart
- * coordinate is signed Q0.11, packed as two adjacent 12-bit two's-complement
- * integers.  The fourth byte is exactly the magnitude code m, with
+ * The residual direction uses the folded octahedral parameterization of S^2.
+ * Each square coordinate is signed Q0.11, packed as two adjacent 12-bit
+ * two's-complement integers.  The fourth byte is exactly the magnitude code m,
+ * with
  *
  *     residual magnitude = m / (4 sqrt(3)) m/s^2.
  *
@@ -130,10 +131,9 @@ static inline void compact_acceleration_encode_direction(
     float unit_z,
     struct compact_acceleration *encoded)
 {
-    struct compact_unit_direction compact_direction;
-    compact_unit_direction_encode_nonzero_finite(
-        (struct direction3){unit_x, unit_y, unit_z},
-        &compact_direction);
+    struct compact_unit_direction compact_direction =
+        compact_unit_direction_encode_nonzero_finite_vector(
+            (struct compact_unit_direction_vector3){unit_x, unit_y, unit_z});
     encoded->direction_low = compact_direction.low;
     encoded->direction_middle = compact_direction.middle;
     encoded->direction_high = compact_direction.high;
@@ -147,8 +147,8 @@ static inline void compact_acceleration_decode_direction(
         encoded->direction_low,
         encoded->direction_middle,
         encoded->direction_high};
-    struct direction3 decoded;
-    compact_unit_direction_decode(&compact_direction, &decoded);
+    struct compact_unit_direction_point_on_unit_sphere decoded =
+        compact_unit_direction_decode_to_unit_sphere(&compact_direction);
     unit_direction->x = decoded.x;
     unit_direction->y = decoded.y;
     unit_direction->z = decoded.z;
