@@ -406,10 +406,11 @@ static void draw_screen(struct accelerometer_state *state)
     }
     int32_t superscript_scale = unit_scale > 2 ? unit_scale - 1 : unit_scale;
 
-    int32_t title_line_height = 12 * title_scale;
+    int32_t springs_scale = title_scale + 1;
+    int32_t title_line_height = 15 * title_scale;
     int32_t title_block_height = 4 * title_line_height;
-    int32_t title_gap = 12 * scale;
-    int32_t reading_stride = 14 * text_scale;
+    int32_t title_gap = 14 * scale;
+    int32_t reading_stride = 17 * text_scale;
     int32_t bar_height = 6 * scale;
     int32_t last_bar_bottom =
         title_block_height + title_gap + 2 * reading_stride + 9 * text_scale + bar_height;
@@ -421,10 +422,10 @@ static void draw_screen(struct accelerometer_state *state)
     draw_text_centered(&buffer, "there are", top, title_scale, secondary);
     draw_text_centered(
         &buffer,
-        "springs",
+        "SPRINGS",
         top + title_line_height,
-        title_scale,
-        secondary);
+        springs_scale,
+        foreground);
     draw_text_centered(
         &buffer,
         "inside",
