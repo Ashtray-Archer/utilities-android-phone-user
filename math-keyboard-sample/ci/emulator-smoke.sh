@@ -65,11 +65,20 @@ set -- $content_bounds
 keyboard_top=$4
 test "$keyboard_top" -lt "$keyboard_bottom"
 
-# The input view has five equal rows. Lambda is the first key in row three.
-x=$((screen_width / 10))
-y=$((keyboard_top + (keyboard_bottom - keyboard_top) / 2))
+# Confirm that the complete declared key vocabulary is present in the input view.
+for symbol in ℕ ℤ ℚ ℝ ℂ = ≠ ≟ ∧ ← → λ π ∂ ∫ ∞ ⁿ ᵢ ² − –; do
+    grep -Fq "text=\"$symbol\"" /tmp/math-sample-nodes.xml
+done
+
+# The input view has five equal rows. Left arrow is the fifth of six keys in
+# row two; lambda is the first of five keys in row three.
+left_arrow_x=$((screen_width * 3 / 4))
+left_arrow_y=$((keyboard_top + (keyboard_bottom - keyboard_top) * 3 / 10))
+lambda_x=$((screen_width / 10))
+lambda_y=$((keyboard_top + (keyboard_bottom - keyboard_top) / 2))
 adb exec-out screencap -p > /tmp/math-keyboard-sample.png
-adb shell input tap "$x" "$y"
+adb shell input tap "$left_arrow_x" "$left_arrow_y"
+adb shell input tap "$lambda_x" "$lambda_y"
 sleep 1
 
 dump_nodes /sdcard/math-sample-after.xml /tmp/math-sample-after.xml
@@ -78,7 +87,7 @@ if dismiss_system_ui_anr; then
     dump_nodes /sdcard/math-sample-after.xml /tmp/math-sample-after.xml
 fi
 grep -F 'class="android.widget.EditText"' /tmp/math-sample-nodes.xml |
-    grep -F 'text="λ"' |
+    grep -F 'text="←λ"' |
     grep -Fq 'content-desc="sample_target"'
 
-printf '%s\n' 'PASS keyboard occupied the input area and its λ key typed λ'
+printf '%s\n' 'PASS all 21 character keys were visible and ← then λ typed ←λ'
