@@ -1,6 +1,8 @@
 #ifndef COMPACT_ACCELERATION_H
 #define COMPACT_ACCELERATION_H
 
+#include "../../geometry/compact_unit_direction.h"
+
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -12,9 +14,10 @@ struct physical_acceleration {
 };
 
 /*
- * The residual direction is an octahedral chart of S^2.  Each chart
- * coordinate is signed Q0.11, packed as two adjacent 12-bit two's-complement
- * integers.  The fourth byte is exactly the magnitude code m, with
+ * The residual direction uses the folded octahedral parameterization of S^2.
+ * Each square coordinate is signed Q0.11, packed as two adjacent 12-bit
+ * two's-complement integers.  The fourth byte is exactly the magnitude code m,
+ * with
  *
  *     residual magnitude = m / (4 sqrt(3)) m/s^2.
  *
@@ -48,10 +51,10 @@ enum compact_acceleration_decode_status {
 };
 
 enum {
-    COMPACT_DIRECTION_FRACTION_BITS = 11,
-    COMPACT_DIRECTION_SCALE = 1 << COMPACT_DIRECTION_FRACTION_BITS,
-    COMPACT_DIRECTION_MAXIMUM_CODE = COMPACT_DIRECTION_SCALE - 1,
-    COMPACT_DIRECTION_MINIMUM_CODE = -COMPACT_DIRECTION_SCALE
+    COMPACT_DIRECTION_FRACTION_BITS = COMPACT_UNIT_DIRECTION_FRACTION_BITS,
+    COMPACT_DIRECTION_SCALE = COMPACT_UNIT_DIRECTION_SCALE,
+    COMPACT_DIRECTION_MAXIMUM_CODE = COMPACT_UNIT_DIRECTION_MAXIMUM_CODE,
+    COMPACT_DIRECTION_MINIMUM_CODE = COMPACT_UNIT_DIRECTION_MINIMUM_CODE
 };
 
 static inline float compact_acceleration_root_three(void)
@@ -104,31 +107,22 @@ static inline struct compact_acceleration compact_acceleration_canonical_zero(vo
 
 static inline float compact_acceleration_sign_not_zero(float value)
 {
-    return value < 0.0F ? -1.0F : 1.0F;
+    return compact_unit_direction_sign_not_zero(value);
 }
 
 static inline int32_t compact_acceleration_quantize_direction_coordinate(float coordinate)
 {
-    float scaled = coordinate * (float)COMPACT_DIRECTION_SCALE;
-    int32_t code = (int32_t)roundf(scaled);
-    if (code < COMPACT_DIRECTION_MINIMUM_CODE) {
-        return COMPACT_DIRECTION_MINIMUM_CODE;
-    }
-    if (code > COMPACT_DIRECTION_MAXIMUM_CODE) {
-        return COMPACT_DIRECTION_MAXIMUM_CODE;
-    }
-    return code;
+    return compact_unit_direction_quantize_coordinate(coordinate);
 }
 
 static inline uint32_t compact_acceleration_twos_complement_12(int32_t code)
 {
-    return (uint32_t)code & 0x0fffU;
+    return compact_unit_direction_twos_complement_12(code);
 }
 
 static inline int32_t compact_acceleration_sign_extend_12(uint32_t bits)
 {
-    bits &= 0x0fffU;
-    return (bits & 0x0800U) != 0U ? (int32_t)bits - 0x1000 : (int32_t)bits;
+    return compact_unit_direction_sign_extend_12(bits);
 }
 
 static inline void compact_acceleration_encode_direction(
@@ -137,55 +131,27 @@ static inline void compact_acceleration_encode_direction(
     float unit_z,
     struct compact_acceleration *encoded)
 {
-    float l1_norm = fabsf(unit_x) + fabsf(unit_y) + fabsf(unit_z);
-    float chart_x = unit_x / l1_norm;
-    float chart_y = unit_y / l1_norm;
-    float chart_z = unit_z / l1_norm;
-
-    if (chart_z < 0.0F) {
-        float unfolded_x = chart_x;
-        float unfolded_y = chart_y;
-        chart_x =
-            (1.0F - fabsf(unfolded_y)) * compact_acceleration_sign_not_zero(unfolded_x);
-        chart_y =
-            (1.0F - fabsf(unfolded_x)) * compact_acceleration_sign_not_zero(unfolded_y);
-    }
-
-    int32_t first_code = compact_acceleration_quantize_direction_coordinate(chart_x);
-    int32_t second_code = compact_acceleration_quantize_direction_coordinate(chart_y);
-    uint32_t packed = compact_acceleration_twos_complement_12(first_code) |
-        (compact_acceleration_twos_complement_12(second_code) << 12U);
-    encoded->direction_low = (uint8_t)(packed & 0xffU);
-    encoded->direction_middle = (uint8_t)((packed >> 8U) & 0xffU);
-    encoded->direction_high = (uint8_t)((packed >> 16U) & 0xffU);
+    struct compact_unit_direction compact_direction =
+        compact_unit_direction_encode_nonzero_finite_vector(
+            (struct compact_unit_direction_vector3){unit_x, unit_y, unit_z});
+    encoded->direction_low = compact_direction.low;
+    encoded->direction_middle = compact_direction.middle;
+    encoded->direction_high = compact_direction.high;
 }
 
 static inline void compact_acceleration_decode_direction(
     const struct compact_acceleration *encoded,
     struct physical_acceleration *unit_direction)
 {
-    uint32_t packed = (uint32_t)encoded->direction_low |
-        ((uint32_t)encoded->direction_middle << 8U) |
-        ((uint32_t)encoded->direction_high << 16U);
-    int32_t first_code = compact_acceleration_sign_extend_12(packed);
-    int32_t second_code = compact_acceleration_sign_extend_12(packed >> 12U);
-    float chart_x = (float)first_code / (float)COMPACT_DIRECTION_SCALE;
-    float chart_y = (float)second_code / (float)COMPACT_DIRECTION_SCALE;
-    float chart_z = 1.0F - fabsf(chart_x) - fabsf(chart_y);
-
-    if (chart_z < 0.0F) {
-        float folded_x = chart_x;
-        float folded_y = chart_y;
-        chart_x =
-            (1.0F - fabsf(folded_y)) * compact_acceleration_sign_not_zero(folded_x);
-        chart_y =
-            (1.0F - fabsf(folded_x)) * compact_acceleration_sign_not_zero(folded_y);
-    }
-
-    float norm = sqrtf(chart_x * chart_x + chart_y * chart_y + chart_z * chart_z);
-    unit_direction->x = chart_x / norm;
-    unit_direction->y = chart_y / norm;
-    unit_direction->z = chart_z / norm;
+    struct compact_unit_direction compact_direction = {
+        encoded->direction_low,
+        encoded->direction_middle,
+        encoded->direction_high};
+    struct compact_unit_direction_point_on_unit_sphere decoded =
+        compact_unit_direction_decode_to_unit_sphere(&compact_direction);
+    unit_direction->x = decoded.x;
+    unit_direction->y = decoded.y;
+    unit_direction->z = decoded.z;
 }
 
 static inline enum compact_acceleration_encode_status compact_acceleration_encode(

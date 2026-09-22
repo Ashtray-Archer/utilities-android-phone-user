@@ -5,10 +5,12 @@ on:
     branches: [accelerometer/native-apk]
     paths:
       - 'accelerometer/**'
+      - 'geometry/**'
       - '.github/workflows/accelerometer-apk.yml'
   pull_request:
     paths:
       - 'accelerometer/**'
+      - 'geometry/**'
       - '.github/workflows/accelerometer-apk.yml'
 
 jobs:
@@ -28,6 +30,11 @@ jobs:
         run: |
           set -eu
           mkdir -p "$RUNNER_TEMP/accelerometer-tests"
+          cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
+            -Igeometry \
+            geometry/tests/compact_unit_direction_test.c \
+            -lm \
+            -o "$RUNNER_TEMP/accelerometer-tests/compact-unit-direction-test"
           cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
             -Iaccelerometer/model \
             accelerometer/tests/compact_acceleration_test.c \
@@ -49,6 +56,7 @@ jobs:
             accelerometer/tests/inspection_fixture.c \
             -lm \
             -o "$RUNNER_TEMP/accelerometer-tests/inspection-fixture"
+          "$RUNNER_TEMP/accelerometer-tests/compact-unit-direction-test"
           "$RUNNER_TEMP/accelerometer-tests/compact-acceleration-test"
           "$RUNNER_TEMP/accelerometer-tests/error-study"
           "$RUNNER_TEMP/accelerometer-tests/accelerometer-snapshot-test"
