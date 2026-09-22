@@ -24,6 +24,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test compact geometric state
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/accelerometer-tests"
+          cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
+            -Iaccelerometer/app/src/main/c \
+            accelerometer/tests/compact_acceleration_test.c \
+            -lm \
+            -o "$RUNNER_TEMP/accelerometer-tests/compact-acceleration-test"
+          cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
+            -Iaccelerometer/app/src/main/c \
+            accelerometer/tests/error_study.c \
+            -lm \
+            -o "$RUNNER_TEMP/accelerometer-tests/error-study"
+          "$RUNNER_TEMP/accelerometer-tests/compact-acceleration-test"
+          "$RUNNER_TEMP/accelerometer-tests/error-study"
+
       - name: Check out stable public test signer
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:

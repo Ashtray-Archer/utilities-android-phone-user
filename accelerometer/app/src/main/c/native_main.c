@@ -4,6 +4,9 @@
 #include <android/sensor.h>
 #include <android_native_app_glue.h>
 
+#include "accelerometer_model.h"
+#include "sevenths_display.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -13,8 +16,6 @@
 
 #define LOG_TAG "Accelerometer"
 #define SENSOR_PERIOD_US 20000
-
-_Static_assert(sizeof(_Float16) == 2U, "_Float16 must use two-byte storage");
 
 struct glyph {
     char character;
@@ -79,11 +80,8 @@ struct accelerometer_state {
     ASensorManager *sensor_manager;
     const ASensor *accelerometer;
     ASensorEventQueue *sensor_queue;
-    _Float16 x;
-    _Float16 y;
-    _Float16 z;
+    struct accelerometer_model model;
     bool sensor_enabled;
-    bool have_sample;
     unsigned int log_counter;
 };
 
@@ -389,6 +387,58 @@ static void draw_text_centered(
     draw_text(buffer, text, left, top, scale, value);
 }
 
+static void draw_sevenths_value(
+    ANativeWindow_Buffer *buffer,
+    const struct sevenths_display_value *display,
+    int32_t left,
+    int32_t top,
+    int32_t scale,
+    uint32_t value)
+{
+    int32_t cursor = left;
+    draw_glyph(buffer, display->negative ? '-' : '+', cursor, top, scale, value);
+    cursor += 6 * scale;
+
+    if (display->whole != 0U || display->numerator == 0U) {
+        char whole[4];
+        (void)snprintf(whole, sizeof(whole), "%u", (unsigned int)display->whole);
+        draw_text(buffer, whole, cursor, top, scale, value);
+        cursor += (int32_t)strlen(whole) * 6 * scale;
+    }
+
+    if (display->numerator != 0U) {
+        int32_t fraction_scale = scale / 2;
+        if (fraction_scale < 3) {
+            fraction_scale = 3;
+        }
+        if (display->whole != 0U) {
+            cursor += fraction_scale;
+        }
+
+        draw_glyph(
+            buffer,
+            (char)('0' + display->numerator),
+            cursor,
+            top,
+            fraction_scale,
+            value);
+        draw_glyph(
+            buffer,
+            '/',
+            cursor + 4 * fraction_scale,
+            top + fraction_scale,
+            fraction_scale,
+            value);
+        draw_glyph(
+            buffer,
+            '7',
+            cursor + 8 * fraction_scale,
+            top + 3 * fraction_scale,
+            fraction_scale,
+            value);
+    }
+}
+
 static void clear_buffer(ANativeWindow_Buffer *buffer, uint32_t value)
 {
     uint32_t *pixels = (uint32_t *)buffer->bits;
@@ -524,10 +574,17 @@ static void draw_screen(struct accelerometer_state *state)
         return;
     }
 
-    char values[3][16];
-    (void)snprintf(values[0], sizeof(values[0]), "%+.1f", (double)state->x);
-    (void)snprintf(values[1], sizeof(values[1]), "%+.1f", (double)state->y);
-    (void)snprintf(values[2], sizeof(values[2]), "%+.1f", (double)state->z);
+    struct physical_acceleration reconstructed;
+    if (!accelerometer_model_reconstruct(&state->model, &reconstructed)) {
+        reconstructed = (struct physical_acceleration){0.0F, 0.0F, 0.0F};
+    }
+    float accelerations[3] = {reconstructed.x, reconstructed.y, reconstructed.z};
+    struct sevenths_display_value values[3];
+    for (int32_t axis = 0; axis < 3; ++axis) {
+        if (!sevenths_display_quantize(accelerations[axis], &values[axis])) {
+            values[axis] = (struct sevenths_display_value){false, 0U, 0U};
+        }
+    }
 
     /*
      * Treat the three reading fields like tab stops rather than one text run.
@@ -543,7 +600,6 @@ static void draw_screen(struct accelerometer_state *state)
     int32_t half_width = (buffer.width - 2 * bar_margin) / 2;
     int32_t track_height = 2 * scale;
     int32_t track_width = buffer.width - 2 * bar_margin;
-    float accelerations[3] = {state->x, state->y, state->z};
 
     for (int32_t axis = 0; axis < 3; ++axis) {
         int32_t text_y = readings_top + axis * reading_stride;
@@ -554,9 +610,9 @@ static void draw_screen(struct accelerometer_state *state)
             text_y,
             text_scale,
             foreground);
-        draw_text(
+        draw_sevenths_value(
             &buffer,
-            values[axis],
+            &values[axis],
             value_left,
             text_y,
             text_scale,
@@ -650,20 +706,45 @@ static void consume_sensor_events(struct accelerometer_state *state)
             continue;
         }
 
-        state->x = (_Float16)event.acceleration.x;
-        state->y = (_Float16)event.acceleration.y;
-        state->z = (_Float16)event.acceleration.z;
-        state->have_sample = true;
+        struct physical_acceleration measured = {
+            event.acceleration.x,
+            event.acceleration.y,
+            event.acceleration.z};
+        enum compact_acceleration_encode_status encode_status =
+            accelerometer_model_accept(&state->model, measured);
+        if (encode_status == COMPACT_ACCELERATION_ENCODE_NONFINITE) {
+            __android_log_print(
+                ANDROID_LOG_WARN,
+                LOG_TAG,
+                "ignored nonfinite Android accelerometer sample");
+            continue;
+        }
+        if (encode_status == COMPACT_ACCELERATION_ENCODE_SATURATED) {
+            __android_log_print(
+                ANDROID_LOG_WARN,
+                LOG_TAG,
+                "residual magnitude exceeded compact range and was saturated");
+        }
 
         state->log_counter += 1U;
         if (state->log_counter >= 25U) {
+            struct physical_acceleration reconstructed = {0.0F, 0.0F, 0.0F};
+            bool decoded = accelerometer_model_reconstruct(&state->model, &reconstructed);
             __android_log_print(
                 ANDROID_LOG_INFO,
                 LOG_TAG,
-                "x=%.2f y=%.2f z=%.2f m/s2",
-                (double)state->x,
-                (double)state->y,
-                (double)state->z);
+                "raw=(%.4f,%.4f,%.4f) decoded=(%.4f,%.4f,%.4f) compact=%02x%02x%02x:%u decode=%s",
+                (double)measured.x,
+                (double)measured.y,
+                (double)measured.z,
+                (double)reconstructed.x,
+                (double)reconstructed.y,
+                (double)reconstructed.z,
+                (unsigned int)state->model.retained.direction_high,
+                (unsigned int)state->model.retained.direction_middle,
+                (unsigned int)state->model.retained.direction_low,
+                (unsigned int)state->model.retained.magnitude,
+                decoded ? "ok" : "malformed");
             state->log_counter = 0U;
         }
     }
@@ -675,6 +756,7 @@ void android_main(struct android_app *app)
 {
     struct accelerometer_state state;
     (void)memset(&state, 0, sizeof(state));
+    accelerometer_model_initialize(&state.model);
     state.app = app;
     app->userData = &state;
     app->onAppCmd = handle_app_command;
