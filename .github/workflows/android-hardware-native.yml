@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "hardware/**"
+      - "accelerometer/android/**"
       - ".github/workflows/android-hardware-native.yml"
   push:
     branches:
@@ -11,6 +12,7 @@ on:
       - hardware-sensor-namespace
     paths:
       - "hardware/**"
+      - "accelerometer/android/**"
       - ".github/workflows/android-hardware-native.yml"
 
 jobs:
