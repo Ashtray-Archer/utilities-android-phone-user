@@ -34,6 +34,25 @@ The replacement gate should separately establish:
 4. the APK links the generated object;
 5. emulator/build evidence and physical-phone sensor evidence remain distinct.
 
+## Packaging
+
+The same source produces two distribution shapes.
+
+For direct downloads, build ABI-specific APKs so a device does not have to download native libraries for other processor families:
+
+| APK | Intended device |
+| --- | --- |
+| `accelerometer-armeabi-v7a.apk` | 32-bit ARM / ARMv7, including the MIRO A1 |
+| `accelerometer-arm64-v8a.apk` | 64-bit ARM |
+| `accelerometer-x86_64.apk` | x86-64 emulator or device |
+| `accelerometer-universal.apk` | fallback containing all three ABIs |
+
+On Android, `getprop ro.product.cpu.abi` reports the primary ABI and therefore identifies the direct-download APK. The ABI-specific distribution libraries are stripped of build-time debug sections; the existing universal debug APK remains unstripped for diagnosis and exact-head acceptance.
+
+For an app store, the build also produces `accelerometer.aab`. The bundle contains all supported native ABIs so a store that supports Android App Bundles can generate and deliver the device-appropriate APK rather than requiring the person installing the application to choose an ABI.
+
+CI signs these artifacts with the repository's public test signer. That proves packaging and replacement behavior; an actual store publication must use the store/upload signing configuration rather than treating the test signer as a production credential.
+
 ## Build
 
 With Android SDK platform 36, build-tools 36.0.0, and NDK 27.2.12479018 installed:
@@ -42,6 +61,28 @@ With Android SDK platform 36, build-tools 36.0.0, and NDK 27.2.12479018 installe
 ./accelerometer/build-apk.sh
 ```
 
-The output is `accelerometer/app/build/outputs/apk/debug/app-debug.apk`.
+The APK outputs are:
+
+```text
+accelerometer/app/build/outputs/apk/debug/app-debug.apk
+accelerometer/app/build/outputs/apk/distribution/accelerometer-armeabi-v7a.apk
+accelerometer/app/build/outputs/apk/distribution/accelerometer-arm64-v8a.apk
+accelerometer/app/build/outputs/apk/distribution/accelerometer-x86_64.apk
+accelerometer/app/build/outputs/apk/distribution/accelerometer-universal.apk
+```
+
+The app-bundle build is separate because command-line bundle creation needs the protobuf-capable AAPT2 artifact from Google's Maven repository and `bundletool`:
+
+```sh
+BUNDLE_AAPT2=/path/to/maven-aapt2/aapt2 \
+BUNDLETOOL_JAR=/path/to/bundletool-all.jar \
+sh accelerometer/build-bundle.sh
+```
+
+That produces:
+
+```text
+accelerometer/app/build/outputs/bundle/distribution/accelerometer.aab
+```
 
 No special Android permission is required for the ordinary accelerometer.
