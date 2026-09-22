@@ -1,6 +1,7 @@
 #include "android_accelerometer.h"
 
 #include <string.h>
+#include <sys/types.h>
 
 static ASensorManager *sensor_manager_for(const char *package_name)
 {
