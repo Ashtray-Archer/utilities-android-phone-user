@@ -1,0 +1,34 @@
+name: Add replay to accelerometer 0.2.0 release notes
+
+on:
+  push:
+    branches:
+      - release/accelerometer-native-v0.2.0
+    paths:
+      - '.github/workflows/add-accelerometer-v0.2.0-replay-notes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  notes:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: accelerometer-native-v0.2.0
+    steps:
+      - name: Add replay links and inline GIF
+        run: |
+          set -eu
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > /tmp/notes.md
+          cat >> /tmp/notes.md <<'EOF'
+
+          ## Recorded sensor replay
+
+          [![Recorded accelerometer replay](https://github.com/Ashtray-Archer/utilities-android-phone-user/releases/download/accelerometer-native-v0.2.0/accelerometer-native-v0.2.0-replay.gif)](https://github.com/Ashtray-Archer/utilities-android-phone-user/releases/download/accelerometer-native-v0.2.0/accelerometer-native-v0.2.0-replay.mp4)
+
+          [Watch the MP4 replay](https://github.com/Ashtray-Archer/utilities-android-phone-user/releases/download/accelerometer-native-v0.2.0/accelerometer-native-v0.2.0-replay.mp4)
+
+          This is a visualization reconstructed from a recorded retained-Float16 X/Y/Z sample sequence, not a screen recording.
+          EOF
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file /tmp/notes.md
