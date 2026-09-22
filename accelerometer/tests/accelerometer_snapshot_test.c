@@ -88,9 +88,15 @@ static void test_complete_snapshot(void)
             sevenths_display_quantize(direct_reconstruction.z, &expected_z),
         "direct reconstruction quantizes for the screen");
     check(
-        memcmp(&snapshot.screen_x, &expected_x, sizeof(expected_x)) == 0 &&
-            memcmp(&snapshot.screen_y, &expected_y, sizeof(expected_y)) == 0 &&
-            memcmp(&snapshot.screen_z, &expected_z, sizeof(expected_z)) == 0,
+        snapshot.screen_x.negative == expected_x.negative &&
+            snapshot.screen_x.whole == expected_x.whole &&
+            snapshot.screen_x.numerator == expected_x.numerator &&
+            snapshot.screen_y.negative == expected_y.negative &&
+            snapshot.screen_y.whole == expected_y.whole &&
+            snapshot.screen_y.numerator == expected_y.numerator &&
+            snapshot.screen_z.negative == expected_z.negative &&
+            snapshot.screen_z.whole == expected_z.whole &&
+            snapshot.screen_z.numerator == expected_z.numerator,
         "snapshot exposes exactly what the screen quantizer sees");
 }
 
