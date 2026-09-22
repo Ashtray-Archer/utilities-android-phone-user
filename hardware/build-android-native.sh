@@ -16,6 +16,7 @@ hardware_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repository_dir=$(CDPATH= cd -- "$hardware_dir/.." && pwd)
 source_file="$hardware_dir/android-native/hardware_sensor.c"
 accelerometer_dir="$repository_dir/accelerometer/android"
+accelerometer_model_dir="$repository_dir/accelerometer/model"
 accelerometer_source="$accelerometer_dir/android_accelerometer.c"
 
 mkdir -p "$out_dir"
@@ -39,9 +40,11 @@ build_one() {
         -fPIE \
         -pie \
         -I"$accelerometer_dir" \
+        -I"$accelerometer_model_dir" \
         "$source_file" \
         "$accelerometer_source" \
         -landroid \
+        -lm \
         -o "$out_dir/hardware-android-native-$name"
 }
 
