@@ -2,7 +2,7 @@
 
 Show the phone's live accelerometer reading as an ordinary Android application.
 
-The first screen continuously displays the raw x, y, and z acceleration components in m/s². Android's accelerometer includes gravity, so a stationary phone should normally show a vector whose magnitude is close to 9.8 m/s² rather than three zeros.
+The first screen continuously displays reconstructed x, y, and z acceleration components in m/s². Android's binary32 sensor sample is encoded into the compact geometric state, decoded, and only then rounded to the nearest seventh for the screen. Android's accelerometer includes gravity, so a stationary phone should normally show a vector whose magnitude is close to 9.8 m/s² rather than three zeros.
 
 ## First Android slice
 
@@ -12,12 +12,15 @@ This first implementation is deliberately small and native:
 - `android.app.NativeActivity`;
 - no `classes.dex`, Java, Kotlin, Gradle, or Compose;
 - Android NDK `ASENSOR_TYPE_ACCELEROMETER` input;
-- direct native-window rendering of the changing numeric values, shown to one decimal place;
-- the retained x/y/z sample state uses two-byte `_Float16` values after Android's float-valued sensor event crosses the platform boundary;
+- direct native-window rendering of the changing numeric values as mixed/vulgar-style sevenths;
+- a four-byte retained geometric state after Android's float-valued sensor event crosses the platform boundary;
+- no retained binary32 or `_Float16` x/y/z shadow state: the screen reconstructs from the compact bytes;
 - ARMv7 (`armeabi-v7a`), AArch64, and x86_64 builds from the same source;
 - the ARMv7 library is compiled explicitly as Thumb code.
 
 The C implementation is a platform oracle, not the intended permanent owner of the application semantics. The useful boundary is a stream of samples containing timestamp, x, y, and z. A terminal presentation, this native screen, and a later Android Material 3 shell should consume that same logical stream rather than each reimplementing sensor access.
+
+[`COMPACT-STATE.md`](COMPACT-STATE.md) defines the balanced reference, residual codec, explicit overflow and malformed-state behavior, rejected three-byte design, and deterministic reconstruction-error study. Raw Android values remain available transiently for comparison logging; they are not retained application state and do not feed the renderer.
 
 ## ARM/Thumb handoff
 
