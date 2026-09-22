@@ -408,16 +408,15 @@ static void draw_screen(struct accelerometer_state *state)
 
     int32_t springs_scale = title_scale + 1;
     int32_t title_line_height = 15 * title_scale;
-    int32_t title_block_height = 4 * title_line_height;
-    int32_t title_gap = 14 * scale;
-    int32_t reading_stride = 17 * text_scale;
+    int32_t reading_stride = buffer.height / 5;
     int32_t bar_height = 6 * scale;
-    int32_t last_bar_bottom =
-        title_block_height + title_gap + 2 * reading_stride + 9 * text_scale + bar_height;
-    int32_t top = (buffer.height - last_bar_bottom) / 2;
-    if (top < 8 * scale) {
-        top = 8 * scale;
-    }
+
+    /*
+     * Place the major vertical regions as proportions of screen height.
+     * This keeps the composition balanced instead of accumulating small
+     * scale-unit offsets that leave excess space at the bottom.
+     */
+    int32_t top = (9 * buffer.height) / 100;
 
     draw_text_centered(&buffer, "there are", top, title_scale, secondary);
     draw_text_centered(
@@ -439,7 +438,7 @@ static void draw_screen(struct accelerometer_state *state)
         title_scale,
         secondary);
 
-    int32_t readings_top = top + title_block_height + title_gap;
+    int32_t readings_top = (2 * buffer.height) / 5;
 
     if (state->accelerometer == NULL) {
         draw_text_centered(
