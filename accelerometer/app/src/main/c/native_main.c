@@ -90,6 +90,7 @@ struct accelerometer_state {
     unsigned int log_counter;
     FILE *capture_file;
     int64_t capture_start_ns;
+    bool capture_started;
     bool capture_finished;
     char capture_name[80];
 };
@@ -889,6 +890,11 @@ static void consume_sensor_events(struct accelerometer_state *state)
         float stored_y = (float)state->y;
         float stored_z = (float)state->z;
 
+        if (!state->capture_started) {
+            state->capture_started = true;
+            start_capture(state);
+        }
+
         if (state->capture_file != NULL && !state->capture_finished) {
             if (state->capture_start_ns == 0) {
                 state->capture_start_ns = event.timestamp;
@@ -961,8 +967,6 @@ void android_main(struct android_app *app)
             NULL,
             NULL);
     }
-
-    start_capture(&state);
 
     for (;;) {
         int events = 0;
