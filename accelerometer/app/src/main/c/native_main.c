@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define LOG_TAG "Accelerometer"
@@ -147,39 +148,159 @@ static bool glyph_cell_on(const uint8_t *rows, int32_t row, int32_t column)
     return (rows[row] & mask) != 0U;
 }
 
-/*
- * Keep the 5x7 bitmap as the glyph definition, but use the physical pixels
- * inside each scaled cell to soften exposed corners. A 4x4 subpixel coverage
- * grid gives grayscale antialiasing without assuming an RGB subpixel order.
- */
-static uint8_t rounded_corner_coverage(int32_t x, int32_t y, int32_t scale)
+#define GLYPH_SUPERSAMPLE 4
+#define GLYPH_CACHE_CAPACITY 96
+
+struct glyph_mask_cache_entry {
+    char character;
+    int32_t scale;
+    uint8_t *coverage;
+};
+
+static struct glyph_mask_cache_entry glyph_mask_cache[GLYPH_CACHE_CAPACITY];
+static size_t glyph_cache_replacement = 0U;
+
+static int32_t floor_divide(int32_t numerator, int32_t denominator)
 {
-    if (scale < 3) {
-        return 255U;
+    if (numerator >= 0) {
+        return numerator / denominator;
+    }
+    return -((-numerator + denominator - 1) / denominator);
+}
+
+/*
+ * Reconstruct one continuous glyph from the 5x7 samples, then sample that
+ * shape on a 4x4 grid inside each framebuffer pixel. The interpolation
+ * threshold is exactly 2/5: low enough to bridge diagonal bitmap samples
+ * such as X without turning the one-cell strokes into solid blocks.
+ */
+static bool glyph_subsample_on(
+    const uint8_t *rows,
+    int32_t pixel_x,
+    int32_t pixel_y,
+    int32_t sub_x,
+    int32_t sub_y,
+    int32_t scale)
+{
+    int32_t denominator = 8 * scale;
+    int32_t x_numerator =
+        8 * pixel_x + 2 * sub_x + 1 - 4 * scale;
+    int32_t y_numerator =
+        8 * pixel_y + 2 * sub_y + 1 - 4 * scale;
+
+    int32_t column = floor_divide(x_numerator, denominator);
+    int32_t row = floor_divide(y_numerator, denominator);
+    int32_t x_remainder = x_numerator - column * denominator;
+    int32_t y_remainder = y_numerator - row * denominator;
+
+    int32_t x0_weight = denominator - x_remainder;
+    int32_t x1_weight = x_remainder;
+    int32_t y0_weight = denominator - y_remainder;
+    int32_t y1_weight = y_remainder;
+
+    int32_t weighted = 0;
+    if (glyph_cell_on(rows, row, column)) {
+        weighted += x0_weight * y0_weight;
+    }
+    if (glyph_cell_on(rows, row, column + 1)) {
+        weighted += x1_weight * y0_weight;
+    }
+    if (glyph_cell_on(rows, row + 1, column)) {
+        weighted += x0_weight * y1_weight;
+    }
+    if (glyph_cell_on(rows, row + 1, column + 1)) {
+        weighted += x1_weight * y1_weight;
     }
 
-    int32_t radius = scale / 2;
-    if (radius < 1 || x >= radius || y >= radius) {
-        return 255U;
-    }
+    int32_t full_weight = denominator * denominator;
+    return 5 * weighted >= 2 * full_weight;
+}
 
-    int32_t radius_eighths = radius * 8;
-    int32_t radius_squared = radius_eighths * radius_eighths;
+static uint8_t glyph_pixel_coverage(
+    const uint8_t *rows,
+    int32_t pixel_x,
+    int32_t pixel_y,
+    int32_t scale)
+{
     int32_t covered = 0;
-
-    for (int32_t sample_y = 1; sample_y < 8; sample_y += 2) {
-        for (int32_t sample_x = 1; sample_x < 8; sample_x += 2) {
-            int32_t x_eighths = x * 8 + sample_x;
-            int32_t y_eighths = y * 8 + sample_y;
-            int32_t dx = radius_eighths - x_eighths;
-            int32_t dy = radius_eighths - y_eighths;
-            if (dx * dx + dy * dy <= radius_squared) {
+    for (int32_t sub_y = 0; sub_y < GLYPH_SUPERSAMPLE; ++sub_y) {
+        for (int32_t sub_x = 0; sub_x < GLYPH_SUPERSAMPLE; ++sub_x) {
+            if (glyph_subsample_on(
+                    rows,
+                    pixel_x,
+                    pixel_y,
+                    sub_x,
+                    sub_y,
+                    scale)) {
                 covered += 1;
             }
         }
     }
-
     return (uint8_t)((covered * 255 + 8) / 16);
+}
+
+static uint8_t *build_glyph_mask(char character, int32_t scale)
+{
+    int32_t width = 5 * scale;
+    int32_t height = 7 * scale;
+    size_t size = (size_t)width * (size_t)height;
+    uint8_t *coverage = (uint8_t *)malloc(size);
+    if (coverage == NULL) {
+        return NULL;
+    }
+
+    const uint8_t *rows = glyph_rows(character);
+    for (int32_t y = 0; y < height; ++y) {
+        for (int32_t x = 0; x < width; ++x) {
+            coverage[(size_t)y * (size_t)width + (size_t)x] =
+                glyph_pixel_coverage(rows, x, y, scale);
+        }
+    }
+    return coverage;
+}
+
+static const uint8_t *cached_glyph_mask(char character, int32_t scale)
+{
+    size_t empty = GLYPH_CACHE_CAPACITY;
+    for (size_t index = 0U; index < GLYPH_CACHE_CAPACITY; ++index) {
+        if (glyph_mask_cache[index].coverage == NULL) {
+            if (empty == GLYPH_CACHE_CAPACITY) {
+                empty = index;
+            }
+            continue;
+        }
+        if (glyph_mask_cache[index].character == character &&
+            glyph_mask_cache[index].scale == scale) {
+            return glyph_mask_cache[index].coverage;
+        }
+    }
+
+    size_t slot = empty;
+    if (slot == GLYPH_CACHE_CAPACITY) {
+        slot = glyph_cache_replacement;
+        glyph_cache_replacement =
+            (glyph_cache_replacement + 1U) % GLYPH_CACHE_CAPACITY;
+        free(glyph_mask_cache[slot].coverage);
+        glyph_mask_cache[slot].coverage = NULL;
+    }
+
+    uint8_t *coverage = build_glyph_mask(character, scale);
+    if (coverage == NULL) {
+        return NULL;
+    }
+
+    glyph_mask_cache[slot].character = character;
+    glyph_mask_cache[slot].scale = scale;
+    glyph_mask_cache[slot].coverage = coverage;
+    return coverage;
+}
+
+static void clear_glyph_mask_cache(void)
+{
+    for (size_t index = 0U; index < GLYPH_CACHE_CAPACITY; ++index) {
+        free(glyph_mask_cache[index].coverage);
+        glyph_mask_cache[index].coverage = NULL;
+    }
 }
 
 static void fill_rect(
@@ -205,78 +326,30 @@ static void draw_glyph(
     int32_t scale,
     uint32_t value)
 {
+    if (character == ' ') {
+        return;
+    }
+
+    int32_t width = 5 * scale;
+    int32_t height = 7 * scale;
+    const uint8_t *coverage = cached_glyph_mask(character, scale);
     const uint8_t *rows = glyph_rows(character);
-    for (int32_t row = 0; row < 7; ++row) {
-        for (int32_t column = 0; column < 5; ++column) {
-            if (!glyph_cell_on(rows, row, column)) {
+
+    for (int32_t y = 0; y < height; ++y) {
+        for (int32_t x = 0; x < width; ++x) {
+            uint8_t pixel_coverage =
+                coverage != NULL
+                    ? coverage[(size_t)y * (size_t)width + (size_t)x]
+                    : glyph_pixel_coverage(rows, x, y, scale);
+            if (pixel_coverage == 0U) {
                 continue;
             }
-
-            bool north = glyph_cell_on(rows, row - 1, column);
-            bool south = glyph_cell_on(rows, row + 1, column);
-            bool west = glyph_cell_on(rows, row, column - 1);
-            bool east = glyph_cell_on(rows, row, column + 1);
-
-            /*
-             * Preserve a square corner when a diagonal cell touches it. The
-             * original 5x7 font uses those diagonal contacts as real strokes.
-             */
-            bool round_top_left =
-                !north && !west && !glyph_cell_on(rows, row - 1, column - 1);
-            bool round_top_right =
-                !north && !east && !glyph_cell_on(rows, row - 1, column + 1);
-            bool round_bottom_left =
-                !south && !west && !glyph_cell_on(rows, row + 1, column - 1);
-            bool round_bottom_right =
-                !south && !east && !glyph_cell_on(rows, row + 1, column + 1);
-
-            for (int32_t pixel_y = 0; pixel_y < scale; ++pixel_y) {
-                for (int32_t pixel_x = 0; pixel_x < scale; ++pixel_x) {
-                    uint8_t coverage = 255U;
-
-                    if (round_top_left) {
-                        uint8_t corner =
-                            rounded_corner_coverage(pixel_x, pixel_y, scale);
-                        if (corner < coverage) {
-                            coverage = corner;
-                        }
-                    }
-                    if (round_top_right) {
-                        uint8_t corner = rounded_corner_coverage(
-                            scale - 1 - pixel_x,
-                            pixel_y,
-                            scale);
-                        if (corner < coverage) {
-                            coverage = corner;
-                        }
-                    }
-                    if (round_bottom_left) {
-                        uint8_t corner = rounded_corner_coverage(
-                            pixel_x,
-                            scale - 1 - pixel_y,
-                            scale);
-                        if (corner < coverage) {
-                            coverage = corner;
-                        }
-                    }
-                    if (round_bottom_right) {
-                        uint8_t corner = rounded_corner_coverage(
-                            scale - 1 - pixel_x,
-                            scale - 1 - pixel_y,
-                            scale);
-                        if (corner < coverage) {
-                            coverage = corner;
-                        }
-                    }
-
-                    blend_pixel(
-                        buffer,
-                        left + column * scale + pixel_x,
-                        top + row * scale + pixel_y,
-                        value,
-                        coverage);
-                }
-            }
+            blend_pixel(
+                buffer,
+                left + x,
+                top + y,
+                value,
+                pixel_coverage);
         }
     }
 }
@@ -644,4 +717,5 @@ void android_main(struct android_app *app)
     if (state.sensor_manager != NULL && state.sensor_queue != NULL) {
         (void)ASensorManager_destroyEventQueue(state.sensor_manager, state.sensor_queue);
     }
+    clear_glyph_mask_cache();
 }
