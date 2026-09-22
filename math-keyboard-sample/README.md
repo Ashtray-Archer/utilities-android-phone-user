@@ -23,7 +23,7 @@ permissions other than the system-bound input-method service permission.
 The pull-request workflow compiles the exact twenty-one-key contract, builds and signs the
 APK with the repository's persistent public test signer, installs the same APK
 twice without uninstalling, enables the keyboard in an emulator, confirms all
-twenty keys are visible, taps `λ`, and verifies that `λ` reaches an editable text
+twenty-one keys are visible, types `←` and `λ`, and verifies that `←λ` reaches an editable text
 field. Those checks do not claim physical-phone execution.
 
 After installing the APK, open **Compact Math Keyboard**, tap **Enable
