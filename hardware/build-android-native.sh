@@ -12,7 +12,11 @@ fi
 
 host_tag=${ANDROID_NDK_HOST_TAG:-linux-x86_64}
 toolchain="$ndk_root/toolchains/llvm/prebuilt/$host_tag/bin"
-source_file=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/android-native/hardware_sensor.c
+hardware_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repository_dir=$(CDPATH= cd -- "$hardware_dir/.." && pwd)
+source_file="$hardware_dir/android-native/hardware_sensor.c"
+accelerometer_dir="$repository_dir/accelerometer/android"
+accelerometer_source="$accelerometer_dir/android_accelerometer.c"
 
 mkdir -p "$out_dir"
 
@@ -34,7 +38,9 @@ build_one() {
         -Wno-deprecated-declarations \
         -fPIE \
         -pie \
+        -I"$accelerometer_dir" \
         "$source_file" \
+        "$accelerometer_source" \
         -landroid \
         -o "$out_dir/hardware-android-native-$name"
 }
