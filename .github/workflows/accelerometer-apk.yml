@@ -38,8 +38,14 @@ jobs:
             accelerometer/tests/error_study.c \
             -lm \
             -o "$RUNNER_TEMP/accelerometer-tests/error-study"
+          cc -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
+            -Iaccelerometer/model \
+            accelerometer/tests/accelerometer_snapshot_test.c \
+            -lm \
+            -o "$RUNNER_TEMP/accelerometer-tests/accelerometer-snapshot-test"
           "$RUNNER_TEMP/accelerometer-tests/compact-acceleration-test"
           "$RUNNER_TEMP/accelerometer-tests/error-study"
+          "$RUNNER_TEMP/accelerometer-tests/accelerometer-snapshot-test"
 
       - name: Check out stable public test signer
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
