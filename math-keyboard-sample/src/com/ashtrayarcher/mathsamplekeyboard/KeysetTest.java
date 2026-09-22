@@ -23,15 +23,15 @@ public final class KeysetTest {
         }
 
         String[][] missingLeftArrow = {
-                    {"ℕ", "ℤ", "ℚ", "ℝ", "ℂ"},
-                    {"=", "≠", "≟", "∧", "→", "→"},
-                    {"λ", "π", "∂", "∫", "∞"},
-                    {"ⁿ", "ᵢ", "²", "−", "–"}
-                };
-                if (Keyset.isExact(missingLeftArrow)) {
-                    throw new AssertionError("right arrow was accepted in place of left arrow");
-                }
-        
-                System.out.println("PASS exact compact key set with left/right arrows and distinct minus/en dash");
+            {"ℕ", "ℤ", "ℚ", "ℝ", "ℂ"},
+            {"=", "≠", "≟", "∧", "→", "→"},
+            {"λ", "π", "∂", "∫", "∞"},
+            {"ⁿ", "ᵢ", "²", "−", "–"}
+        };
+        if (Keyset.isExact(missingLeftArrow)) {
+            throw new AssertionError("right arrow was accepted in place of left arrow");
+        }
+
+        System.out.println("PASS exact compact key set with left/right arrows and distinct minus/en dash");
     }
 }
