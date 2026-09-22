@@ -5,6 +5,7 @@ on:
     paths:
       - "hardware/**"
       - "accelerometer/android/**"
+      - "accelerometer/model/**"
       - ".github/workflows/android-hardware-native.yml"
   push:
     branches:
@@ -13,6 +14,7 @@ on:
     paths:
       - "hardware/**"
       - "accelerometer/android/**"
+      - "accelerometer/model/**"
       - ".github/workflows/android-hardware-native.yml"
 
 jobs:
