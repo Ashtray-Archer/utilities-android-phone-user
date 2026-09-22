@@ -25,6 +25,8 @@ The magnitude meaning is exactly
 
 The direction chart uses a dyadic lattice. It does not divide byte values by `127` or `255`, and it does not contain a hidden `/256` physical scale. Decoding unfolds the octahedron and normalizes the resulting three coordinates onto `S²`.
 
+The three-byte direction codec is now factored as `geometry/compact_unit_direction.h`. That module owns only the reusable `S²` / unit-pure-quaternion direction representation. The balanced-gravity reference, residual magnitude byte, physical units, saturation policy, and four-byte retained accelerometer record remain accelerometer semantics.
+
 Magnitude zero has one canonical encoding: all four bytes zero. A zero magnitude with nonzero direction bytes is rejected as noncanonical, and the decoder leaves its output untouched. Every direction bit pattern is otherwise defined.
 
 Finite residuals beyond `255/(4√3) m/s²` return an explicit saturation result and produce magnitude code `255`; they never wrap. Nonfinite Android input is rejected and leaves the previously retained state untouched.
