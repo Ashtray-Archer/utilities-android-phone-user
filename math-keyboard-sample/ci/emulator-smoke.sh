@@ -65,13 +65,13 @@ set -- $content_bounds
 keyboard_top=$4
 test "$keyboard_top" -lt "$keyboard_bottom"
 
-# Confirm that the complete declared key vocabulary is present in the input view.
-for symbol in ℕ ℤ ℚ ℝ ℂ = ≠ ≟ ∧ ← → λ π ∂ ∫ ∞ ⁿ ᵢ ² − –; do
-    grep -Fq "text=\"$symbol\"" /tmp/math-sample-nodes.xml
-done
-
-# The input view has five equal rows. Left arrow is the fifth of six keys in
-# row two; lambda is the first of five keys in row three.
+# UIAutomator dumps the application window but not the separate IME window on
+# this API-29 runner. The build job already proves the complete exact Keyset
+# vocabulary. Here exercise the installed IME itself by geometry and verify the
+# committed text arrives through the real InputConnection.
+#
+# The input view has five equal symbol rows. Left arrow is the fifth of six keys
+# in row two; lambda is the first of five keys in row three.
 left_arrow_x=$((screen_width * 3 / 4))
 left_arrow_y=$((keyboard_top + (keyboard_bottom - keyboard_top) * 3 / 10))
 lambda_x=$((screen_width / 10))
@@ -90,4 +90,4 @@ grep -F 'class="android.widget.EditText"' /tmp/math-sample-nodes.xml |
     grep -F 'text="←λ"' |
     grep -Fq 'content-desc="sample_target"'
 
-printf '%s\n' 'PASS all 21 character keys were visible and ← then λ typed ←λ'
+printf '%s\n' 'PASS installed IME typed ← then λ as ←λ'
