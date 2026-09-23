@@ -43,7 +43,7 @@ public final class MainActivity extends Activity {
         TextView explanation = new TextView(this);
         explanation.setText(
             "ℕ ℤ ℚ ℝ ℂ\n" +
-            "= ≠ ≟ ∧ →\n" +
+            "= ≠ ≟ ∧ ← →\n" +
             "λ π ∂ ∫ ∞\n" +
             "ⁿ ᵢ ² − –\n\n" +
             "Enable this keyboard, choose it, then type in the field below."
