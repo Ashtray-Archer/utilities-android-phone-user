@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: dlang-community/setup-dlang@v2
         with:
           compiler: ldc-1.43.0
@@ -27,3 +29,8 @@ jobs:
         run: dub build --root=mbox --build=release --compiler=ldc2
       - name: Run command
         run: mbox/mbox-index --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mbox-index-linux-x86_64-${{ github.event.pull_request.head.sha || github.sha }}
+          path: mbox/mbox-index
+          retention-days: 14
