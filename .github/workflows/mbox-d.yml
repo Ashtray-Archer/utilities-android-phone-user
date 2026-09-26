@@ -1,0 +1,29 @@
+name: mbox D host
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mbox/**'
+      - '.github/workflows/mbox-d.yml'
+  pull_request:
+    paths:
+      - 'mbox/**'
+      - '.github/workflows/mbox-d.yml'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dlang-community/setup-dlang@v2
+        with:
+          compiler: ldc-1.43.0
+      - name: Compile host checks
+        run: ldc2 -I. -unittest -O2 -of=/tmp/mbox-tests mbox/scanner.d mbox/scanner_tests.d
+      - name: Run host checks
+        run: /tmp/mbox-tests
+      - name: Build command
+        run: dub build --root=mbox --build=release --compiler=ldc2
+      - name: Run command
+        run: mbox/mbox-index --help
