@@ -372,6 +372,105 @@ some merchandising, loyalty, checkout, or order-management capabilities for
 its own applications or Partner APIs; Green Grocer should not depend on them
 unless we have both a clear user need and explicit supported access.
 
+## Adjacent Kroger capabilities worth keeping on the map
+
+The first draft should remain narrow, but we should record adjacent Kroger
+surfaces now so later work can make a deliberate decision instead of
+rediscovering them.
+
+### Confirmed in the self-service Public APIs
+
+| Capability | Evidence | First-draft use |
+|---|---|---|
+| Promotional price | Product responses expose both `price.regular` and `price.promo`. | Display as factual price data when present; do not build a specials feed yet. |
+| Favorite flag | Product responses expose `favorite : boolean`. | Record/inspect; do not yet assume we can write favorites or reproduce Kroger's favorite-item UI. |
+| Add to authenticated cart | `POST /v1/cart/add`. | Yes; this is the useful handoff. |
+| Product/store/fulfillment facts | Public Products + Locations APIs. | Yes. |
+
+The presence of `promo` and `favorite` in a product representation is
+important: some of what looks like "corporate app" machinery leaks into useful
+product data without requiring us to reproduce the merchandising interface.
+
+### Confirmed in the Partner APIs, not self-service
+
+Partner access requires Kroger's additional security review and contractual
+agreement.
+
+Documented Partner surfaces include:
+
+```text
+GET  /identity/profile
+GET  /identity/profile/loyalty
+
+GET    /carts
+POST   /carts
+GET    /carts/{id}
+PUT    /carts/{id}
+POST   /carts/{id}/items
+PUT    /carts/{id}/items/{upc}
+DELETE /carts/{id}/items/{upc}
+
+GET  /courier/deliveries
+GET  /courier/deliveries/non-delivered
+POST /courier/deliveries/{delivery_id}
+```
+
+So Kroger does have a substantially richer authenticated cart model than the
+public one. Partner cart items include fields such as:
+
+```text
+quantity
+upc
+allowSubstitutes
+specialInstructions
+modality
+description
+createdDate
+```
+
+This is worth retaining as a possible later direction even though v1 should not
+depend on Partner status.
+
+### Not found in Kroger's currently published Public or Partner collections
+
+In the Kroger materials checked on 2026-09-26, no documented endpoints were
+found for:
+
+```text
+digital-coupon enumeration or clipping
+personalized recommendation / "you may also like" feeds
+sponsored-product placement
+campaign/specials feeds distinct from product promo price
+checkout/payment submission
+pickup-slot reservation
+consumer order placement
+```
+
+This is an **absence from the currently published collections we found**, not a
+claim that Kroger has no such internal APIs. Kroger's own Postman profile says
+it has public, partner, and experimental APIs, and its production apps plainly
+may use private/internal services not offered to outside developers.
+
+Do not reverse-engineer those services merely to imitate Kroger's app. If a
+later Green Grocer feature actually needs one, first re-check Kroger's published
+Public, Partner, and Experimental surfaces.
+
+### Design consequence
+
+Treat these as three concentric rings, not one product roadmap:
+
+```text
+v1 core
+    factual catalog + our own recurrence model + explicit add-to-Kroger-cart
+
+available later if useful
+    promo/favorite observations + richer Partner cart/loyalty data
+
+corporate merchandising
+    coupons/recommendations/sponsored placements/campaign feeds
+    -> optional research only, no dependency
+```
+
 ## First implementation slice
 
 Keep the first executable slice narrow:
