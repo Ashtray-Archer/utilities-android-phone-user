@@ -1,5 +1,12 @@
 # Green Grocer references
 
+## Live retailer APIs
+
+- [Kroger public API notes](./kroger-api.md)
+  - Self-service store/product lookup plus authenticated add-to-cart.
+  - Records the public/Partner boundary, OAuth work still to verify, rate limits,
+    and the first physical acceptance test against a real Kroger cart.
+
 ## POS and inventory integration
 
 - [Epicor Eagle inventory integration research](./epicor-eagle-inventory.md)
