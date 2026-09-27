@@ -315,6 +315,63 @@ Therefore the first Green Grocer Kroger integration should not pretend it owns
 or can fully synchronize the Kroger cart. It can maintain its own local cart,
 then append selected lines into the shopper's Kroger cart.
 
+## Product boundary: catalog/cart pipe, not Kroger merchandising
+
+Green Grocer should not attempt to reproduce the full Kroger shopping
+experience merely because some related data or behavior may exist.
+
+The default Kroger adapter is intentionally narrow:
+
+```text
+use Kroger for:
+    store identity
+    product identity
+    factual product data
+    store-specific price
+    availability
+    aisle/shelf location
+    fulfillment facts needed to add the chosen item
+    adding an explicitly chosen item to the customer's Kroger cart
+```
+
+Do **not** make the following part of the core integration:
+
+```text
+sponsored placements
+advertising
+recommendation carousels
+cross-sells / upsells
+"you may also like"
+campaign-driven specials feeds
+automatic coupon promotion
+loyalty-program nudges
+cart-abandonment prompts
+checkout/payment
+pickup-slot selection
+order submission
+Kroger-style engagement notifications
+```
+
+Some distinctions matter:
+
+- If Kroger returns a sale or loyalty price as a factual property of the product
+  the user is already looking at, Green Grocer may display it. That is different
+  from building a "Specials" destination whose purpose is merchandising.
+- A coupon can be useful to the shopper, but coupon discovery/application is a
+  separate optional feature. Do not make it a dependency of ordinary product
+  search or cart use.
+- A user-defined recurring-item system belongs to Green Grocer. Do not confuse
+  it with Kroger recommendations, sponsored reorder prompts, or retailer
+  engagement campaigns.
+- The Kroger cart is an external handoff target. Until we deliberately decide
+  otherwise and have a supported API, Green Grocer does not need to mirror,
+  police, optimize, or check out that cart.
+
+This is both a product choice and an integration boundary. Kroger may reserve
+some merchandising, loyalty, checkout, or order-management capabilities for
+its own applications or Partner APIs; Green Grocer should not depend on them
+unless we have both a clear user need and explicit supported access.
+
 ## First implementation slice
 
 Keep the first executable slice narrow:
