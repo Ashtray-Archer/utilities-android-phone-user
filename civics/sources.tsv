@@ -1,0 +1,11 @@
+source_id	jurisdiction	level	kind	format	url
+michigan_legislature_bills	Michigan	state	bills	html	https://www.legislature.mi.gov/Bills/
+michigan_legislature_committee_meetings	Michigan	state	committee_meetings	html	https://www.legislature.mi.gov/Committees/Meetings
+washtenaw_board	Washtenaw County, Michigan	county	agendas_minutes	html	https://www.washtenaw.org/agendas-minutes
+ann_arbor_legislative	Ann Arbor, Michigan	city	meetings_legislation	html	https://a2gov.legistar.com/Calendar.aspx
+monroe_indiana_commissioners	Monroe County, Indiana	county	commissioners	html	https://www.co.monroe.in.us/commissioners/
+monroe_indiana_council	Monroe County, Indiana	county	county_council	html	https://www.co.monroe.in.us/council/
+bloomington_city_council	Bloomington, Indiana	city	city_council_meeting_files	html	https://bloomington.in.gov/onboard/meetingFiles?committee_id=1
+detroit_city_council	Detroit, Michigan	city	city_council_agendas_documents	html	https://detroitmi.gov/government/city-clerk/city-council-agendas-documents
+chicago_elms_meetings	Chicago, Illinois	city	city_council_meetings	json	https://api.chicityclerkelms.chicago.gov/meeting
+chicago_elms_matters	Chicago, Illinois	city	legislative_matters	json	https://api.chicityclerkelms.chicago.gov/matter
