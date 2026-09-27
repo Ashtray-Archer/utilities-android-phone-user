@@ -1,0 +1,229 @@
+#!/usr/bin/env ithon
+
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
+from urllib.request import Request, urlopen
+import hashlib
+import html
+import json
+import re
+import sys
+
+
+SOURCE_FILE ← Path(__file__).with_name("sources.tsv")
+DEFAULT_DATA ← Path(__file__).with_name("data")
+USER_AGENT ← "utilities-android-phone-user civics/0.1 (+https://github.com/Ashtray-Archer/utilities-android-phone-user)"
+
+
+def read_sources(path ∈ Path) → dict[str, dict[str, str]]:
+    rows ∈ dict[str, dict[str, str]] ← {}
+    lines ∈ list[str] ← path.read_text(encoding="utf-8").splitlines()
+
+    if len(lines) == 0:
+        return rows
+
+    header ∈ list[str] ← lines[0].split("\t")
+
+    for line in lines[1:]:
+        if line.strip() == "":
+            continue
+
+        fields ∈ list[str] ← line.split("\t")
+        if len(fields) != len(header):
+            raise ValueError("bad sources.tsv row: " + line)
+
+        record ∈ dict[str, str] ← {}
+        for index in range(len(header)):
+            record[header[index]] ← fields[index]
+
+        rows[record["source_id"]] ← record
+
+    return rows
+
+
+def utc_stamp() → str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def safe_source_id(source_id ∈ str) → str:
+    cleaned ∈ str ← re.sub(r"[^a-z0-9_-]+", "_", source_id.casefold())
+    if cleaned == "":
+        raise ValueError("empty source id")
+    return cleaned
+
+
+def fetch_bytes(url ∈ str) → bytes:
+    request ∈ Request ← Request(url, headers={"User-Agent": USER_AGENT})
+    body ∈ bytes ← urlopen(request, timeout=45).read()
+    return body
+
+
+def visible_text(body ∈ bytes) → str:
+    decoded ∈ str ← body.decode("utf-8", errors="replace")
+    decoded ← re.sub(r"(?is)<script\b.*?</script\s*>", " ", decoded)
+    decoded ← re.sub(r"(?is)<style\b.*?</style\s*>", " ", decoded)
+    decoded ← re.sub(r"(?s)<[^>]+>", " ", decoded)
+    decoded ← html.unescape(decoded)
+    return re.sub(r"\s+", " ", decoded).strip()
+
+
+def interesting_link(url ∈ str) → bool:
+    lowered ∈ str ← url.casefold()
+    path ∈ str ← urlparse(url).path.casefold()
+
+    if path.endswith(".pdf"):
+        return True
+
+    for word in ["agenda", "minute", "packet", "meeting", "bill", "ordinance", "resolution", "legislation"]:
+        if word in lowered:
+            return True
+
+    return False
+
+
+def discover_links(base_url ∈ str, body ∈ bytes) → list[str]:
+    decoded ∈ str ← body.decode("utf-8", errors="replace")
+    hrefs ∈ list[str] ← re.findall(r"""(?i)\bhref\s*=\s*["']([^"'#]+)["']""", decoded)
+    found ∈ set[str] ← set()
+
+    for href in hrefs:
+        absolute ∈ str ← urljoin(base_url, html.unescape(href).strip())
+        if interesting_link(absolute):
+            found.add(absolute)
+
+    return sorted(found)
+
+
+def write_snapshot(source ∈ dict[str, str], output_root ∈ Path) → dict[str, str]:
+    source_id ∈ str ← safe_source_id(source["source_id"])
+    stamp ∈ str ← utc_stamp()
+    body ∈ bytes ← fetch_bytes(source["url"])
+    text ∈ str ← visible_text(body)
+    links ∈ list[str] ← discover_links(source["url"], body)
+
+    source_dir ∈ Path ← output_root / source_id
+    source_dir.mkdir(parents=True, exist_ok=True)
+
+    stem ∈ Path ← source_dir / stamp
+    body_path ∈ Path ← Path(str(stem) + ".body")
+    text_path ∈ Path ← Path(str(stem) + ".text.txt")
+    links_path ∈ Path ← Path(str(stem) + ".links.txt")
+    meta_path ∈ Path ← Path(str(stem) + ".meta.json")
+
+    body_path.write_bytes(body)
+    text_path.write_text(text + "\n", encoding="utf-8")
+    links_path.write_text("\n".join(links) + ("\n" if len(links) > 0 else ""), encoding="utf-8")
+
+    metadata ∈ dict[str, str] ← {
+        "source_id": source_id,
+        "jurisdiction": source["jurisdiction"],
+        "level": source["level"],
+        "kind": source["kind"],
+        "format": source["format"],
+        "url": source["url"],
+        "retrieved_at": stamp,
+        "sha256": hashlib.sha256(body).hexdigest(),
+        "bytes": str(len(body)),
+        "body_path": str(body_path),
+        "text_path": str(text_path),
+        "links_path": str(links_path),
+    }
+
+    meta_path.write_text(json.dumps(metadata, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    return metadata
+
+
+def newest_text(output_root ∈ Path, source_id ∈ str) → Path:
+    source_dir ∈ Path ← output_root / safe_source_id(source_id)
+    candidates ∈ list[Path] ← sorted(source_dir.glob("*.text.txt"))
+
+    if len(candidates) == 0:
+        raise FileNotFoundError("no snapshots for " + source_id)
+
+    return candidates[-1]
+
+
+def count_terms(path ∈ Path, terms ∈ list[str]) → None:
+    text ∈ str ← path.read_text(encoding="utf-8").casefold()
+
+    for term in terms:
+        needle ∈ str ← term.casefold()
+        print(term + "\t" + str(text.count(needle)))
+
+
+def print_sources(sources ∈ dict[str, dict[str, str]]) → None:
+    for source_id in sorted(sources):
+        source ∈ dict[str, str] ← sources[source_id]
+        print(source_id + "\t" + source["jurisdiction"] + "\t" + source["kind"] + "\t" + source["url"])
+
+
+def usage() → int:
+    print("usage:", file=sys.stderr)
+    print("  ithon scrape.pi list", file=sys.stderr)
+    print("  ithon scrape.pi fetch SOURCE_ID [OUTPUT_ROOT]", file=sys.stderr)
+    print("  ithon scrape.pi fetch-all [OUTPUT_ROOT]", file=sys.stderr)
+    print("  ithon scrape.pi words SOURCE_ID TERM [TERM ...] [--data OUTPUT_ROOT]", file=sys.stderr)
+    return 2
+
+
+def main(argv ∈ list[str]) → int:
+    sources ∈ dict[str, dict[str, str]] ← read_sources(SOURCE_FILE)
+
+    if len(argv) < 2:
+        return usage()
+
+    command ∈ str ← argv[1]
+
+    if command == "list":
+        print_sources(sources)
+        return 0
+
+    if command == "fetch":
+        if len(argv) < 3 or len(argv) > 4:
+            return usage()
+
+        source_id ∈ str ← argv[2]
+        if source_id not in sources:
+            raise KeyError("unknown source: " + source_id)
+
+        output_root ∈ Path ← DEFAULT_DATA if len(argv) == 3 else Path(argv[3])
+        metadata ∈ dict[str, str] ← write_snapshot(sources[source_id], output_root)
+        print(json.dumps(metadata, sort_keys=True))
+        return 0
+
+    if command == "fetch-all":
+        if len(argv) > 3:
+            return usage()
+
+        output_root ∈ Path ← DEFAULT_DATA if len(argv) == 2 else Path(argv[2])
+        for source_id in sorted(sources):
+            metadata ∈ dict[str, str] ← write_snapshot(sources[source_id], output_root)
+            print(json.dumps(metadata, sort_keys=True))
+        return 0
+
+    if command == "words":
+        if len(argv) < 4:
+            return usage()
+
+        source_id ∈ str ← argv[2]
+        output_root ∈ Path ← DEFAULT_DATA
+        terms ∈ list[str] ← argv[3:]
+
+        if "--data" in terms:
+            marker ∈ int ← terms.index("--data")
+            if marker + 1 >= len(terms):
+                return usage()
+            output_root ← Path(terms[marker + 1])
+            terms ← terms[:marker]
+
+        if len(terms) == 0:
+            return usage()
+
+        count_terms(newest_text(output_root, source_id), terms)
+        return 0
+
+    return usage()
+
+
+raise SystemExit(main(sys.argv))
