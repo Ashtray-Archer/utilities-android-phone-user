@@ -70,14 +70,17 @@ test "$keyboard_top" -lt "$keyboard_bottom"
 # vocabulary. Here exercise the installed IME itself by geometry and verify the
 # committed text arrives through the real InputConnection.
 #
-# The input view has five equal symbol rows. Left arrow is the fifth of six keys
-# in row two; lambda is the first of five keys in row three.
-left_arrow_x=$((screen_width * 3 / 4))
+# The symbol area has four rows above the controls. Left arrow is the fifth of
+# seven keys in row two; fat arrow is the seventh; lambda is the first of five
+# keys in row three.
+left_arrow_x=$((screen_width * 9 / 14))
+fat_arrow_x=$((screen_width * 13 / 14))
 left_arrow_y=$((keyboard_top + (keyboard_bottom - keyboard_top) * 3 / 10))
 lambda_x=$((screen_width / 10))
 lambda_y=$((keyboard_top + (keyboard_bottom - keyboard_top) / 2))
 adb exec-out screencap -p > /tmp/math-keyboard-sample.png
 adb shell input tap "$left_arrow_x" "$left_arrow_y"
+adb shell input tap "$fat_arrow_x" "$left_arrow_y"
 adb shell input tap "$lambda_x" "$lambda_y"
 sleep 1
 
@@ -87,7 +90,7 @@ if dismiss_system_ui_anr; then
     dump_nodes /sdcard/math-sample-after.xml /tmp/math-sample-after.xml
 fi
 grep -F 'class="android.widget.EditText"' /tmp/math-sample-nodes.xml |
-    grep -F 'text="←λ"' |
+    grep -F 'text="←⇒λ"' |
     grep -Fq 'content-desc="sample_target"'
 
-printf '%s\n' 'PASS installed IME typed ← then λ as ←λ'
+printf '%s\n' 'PASS installed IME typed ← then ⇒ then λ as ←⇒λ'
