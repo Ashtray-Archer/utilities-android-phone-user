@@ -4,17 +4,17 @@ public final class KeysetTest {
     public static void main(String[] arguments) {
         String[][] expected = {
             {"ℕ", "ℤ", "ℚ", "ℝ", "ℂ"},
-            {"=", "≠", "≟", "∧", "←", "→"},
+            {"=", "≠", "≟", "∧", "←", "→", "⇒"},
             {"λ", "π", "∂", "∫", "∞"},
             {"ⁿ", "ᵢ", "²", "−", "–"}
         };
         if (!Keyset.isExact(expected)) {
-            throw new AssertionError("exact twenty-one-key sample was rejected");
+            throw new AssertionError("exact twenty-two-key sample was rejected");
         }
 
         String[][] wrongDash = {
             {"ℕ", "ℤ", "ℚ", "ℝ", "ℂ"},
-            {"=", "≠", "≟", "∧", "←", "→"},
+            {"=", "≠", "≟", "∧", "←", "→", "⇒"},
             {"λ", "π", "∂", "∫", "∞"},
             {"ⁿ", "ᵢ", "²", "−", "−"}
         };
@@ -24,7 +24,7 @@ public final class KeysetTest {
 
         String[][] missingLeftArrow = {
             {"ℕ", "ℤ", "ℚ", "ℝ", "ℂ"},
-            {"=", "≠", "≟", "∧", "→", "→"},
+            {"=", "≠", "≟", "∧", "→", "→", "⇒"},
             {"λ", "π", "∂", "∫", "∞"},
             {"ⁿ", "ᵢ", "²", "−", "–"}
         };
@@ -32,6 +32,16 @@ public final class KeysetTest {
             throw new AssertionError("right arrow was accepted in place of left arrow");
         }
 
-        System.out.println("PASS exact compact key set with left/right arrows and distinct minus/en dash");
+        String[][] missingFatArrow = {
+            {"ℕ", "ℤ", "ℚ", "ℝ", "ℂ"},
+            {"=", "≠", "≟", "∧", "←", "→", "→"},
+            {"λ", "π", "∂", "∫", "∞"},
+            {"ⁿ", "ᵢ", "²", "−", "–"}
+        };
+        if (Keyset.isExact(missingFatArrow)) {
+            throw new AssertionError("right arrow was accepted in place of fat arrow");
+        }
+
+        System.out.println("PASS exact compact key set with left/right/fat arrows and distinct minus/en dash");
     }
 }

@@ -82,6 +82,7 @@ static void test_layout_contract(void) {
     assert(key_labeled("Programming", "≝\nDEFINE") != NULL);
     assert(key_labeled("Programming", "⟵\nASSIGN") != NULL);
     assert(key_labeled("Math", "−\nSUBTRACT") != NULL);
+    assert(key_labeled("Math", "⇒") != NULL);
     assert(key_labeled("Punctuation", "–\nEN DASH") != NULL);
     assert(key_labeled("Punctuation", "—\nEM DASH") != NULL);
     assert(key_labeled("Punctuation", "\"\nQUOTE") != NULL);
