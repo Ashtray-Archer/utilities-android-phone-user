@@ -1,0 +1,131 @@
+name: spirit-level native slice
+
+on:
+  pull_request:
+    paths:
+      - 'spirit-level/**'
+      - 'accelerometer/**'
+      - '.github/workflows/spirit-level-apk.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'spirit-level/**'
+      - 'accelerometer/**'
+      - '.github/workflows/spirit-level-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
+      ANDROID_KEYSTORE_PASSWORD: wegert-debug
+      ANDROID_KEY_PASSWORD: wegert-debug
+      ANDROID_KEY_ALIAS: wegert-debug
+      ANDROID_EXPECTED_CERT_SHA256: DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Test retained-state geometry and production pixels
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          mkdir -p receipts
+          printf 'source.revision=%s\n' "$CANDIDATE_SHA" > receipts/source.txt
+          sh spirit-level/tests/run.sh | tee receipts/host-tests.txt
+          CC=clang CFLAGS='-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer' \
+            sh spirit-level/tests/run.sh | tee receipts/sanitizers.txt
+
+      - name: Check out stable public test signer
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphismes/wegert
+          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
+          path: .test-signing
+          sparse-checkout: _/build/app/wegert-debug.keystore
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android build inputs
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018'
+
+      - name: Build signed native APKs
+        run: |
+          ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.2.12479018" \
+            sh spirit-level/build-apk.sh | tee receipts/build.txt
+
+      - name: Verify identity, single-ABI contents and stripped native code
+        run: |
+          set -eu
+          distribution=spirit-level/app/build/outputs/apk/distribution
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            apk="$distribution/spirit-level-$abi.apk"
+            test -f "$apk"
+            test "$(unzip -Z1 "$apk" | grep -Ec '^lib/[^/]+/libspirit_level[.]so$')" -eq 1
+            unzip -Z1 "$apk" | grep -Fx "lib/$abi/libspirit_level.so"
+            if unzip -Z1 "$apk" | grep -q 'classes.dex'; then
+              echo 'FAIL: unexpected application DEX' >&2
+              exit 1
+            fi
+            "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$apk" |
+              grep -F "package: name='com.ashtrayarcher.spiritlevel' versionCode='1'"
+            unzip -p "$apk" "lib/$abi/libspirit_level.so" > "$RUNNER_TEMP/spirit-level-$abi.so"
+            if readelf -S "$RUNNER_TEMP/spirit-level-$abi.so" | grep -q '[.]debug_'; then
+              echo 'FAIL: debug sections survived stripping' >&2
+              exit 1
+            fi
+            readelf --wide --dyn-syms "$RUNNER_TEMP/spirit-level-$abi.so" | grep 'ANativeActivity_onCreate'
+            sha256sum "$apk" >> receipts/apk-sha256.txt
+            stat -c '%n %s bytes' "$apk" >> receipts/apk-sizes.txt
+          done
+          readelf -A "$RUNNER_TEMP/spirit-level-armeabi-v7a.so" | tee receipts/arm-attributes.txt
+          grep -q 'Tag_THUMB_ISA_use: Thumb-2' receipts/arm-attributes.txt
+          printf '%s\n' 'PASS package checks; physical-device acceptance remains PENDING' > receipts/package.txt
+
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Replace-install, launch and draw on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: sh spirit-level/tests/emulator-smoke.sh
+
+      - name: Retain single-ABI delivery APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: spirit-level-apks-${{ env.CANDIDATE_SHA }}
+          path: spirit-level/app/build/outputs/apk/distribution/spirit-level-*.apk
+          if-no-files-found: error
+
+      - name: Retain exact-head evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spirit-level-evidence-${{ env.CANDIDATE_SHA }}
+          path: receipts/
+          if-no-files-found: error
