@@ -88,3 +88,8 @@ accelerometer/app/build/outputs/bundle/distribution/accelerometer.aab
 ```
 
 No special Android permission is required for the ordinary accelerometer.
+
+
+## Cross-project Android boundary
+
+The reusable NDK ASensorManager adapter now has its canonical generic copy in [isomorphisms/android-NDK](https://github.com/isomorphisms/android-NDK/tree/ndk-dex-jni-migration/native/sensors/accelerometer). This repository remains canonical for its compact model, CLI, NativeActivity screen, and device evidence.
