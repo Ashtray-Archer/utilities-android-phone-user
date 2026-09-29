@@ -1,0 +1,7 @@
+name "mbox-index"
+description "Read-only byte-offset mailbox index"
+targetType "executable"
+mainSourceFile "mbox_index.d"
+sourceFiles "scanner.d"
+excludedSourceFiles "scanner_tests.d"
+importPaths ".."
