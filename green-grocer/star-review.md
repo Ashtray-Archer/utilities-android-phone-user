@@ -243,7 +243,7 @@ execution claims must remain separate.
 
 | Dependency | Reuse now; boundary |
 | --- | --- |
-| ICK / Android NDK | Follow the shared build policy per compile/link stage. Prefer qualified ICK; otherwise pin the evaluated ICK revision and a specific gap before using NDK. Do not start compiler repairs here. |
+| ICK + Android NDK | ICK compiles the cart core and bundled catalog to target objects; NDK compiles the Android/test boundary and links those objects against the target runtime. Record these as separate stages. Qualify the exact core on both A1 and C67; if ICK fails or lacks a required capability, report the exact source, pin, command and diagnostic to the user. Do not silently substitute NDK compilation for the core or start compiler repairs here. |
 | Cat Food | Authoritative A1/C67 target profiles and established artifact delivery/identity. Not a runtime dependency of cart operations. |
 | Flexible Pipes | Reuse the paired-build orchestration when its current callable path is verified. Never assume a checked-in job prompt proves dispatch/build support. A missing path is an orchestration gap, not a reason to build only C67. |
 | `android-NDK` / nearby utilities | Reuse the canonical NativeActivity/APK boundary, stable signer policy, and narrow useful rendering/input precedents. Do not copy unrelated sensor, clipboard, Shizuku, or keyboard behavior. |
@@ -278,8 +278,8 @@ recurrence design; IDK readiness; a general generator's interface.
 
 **Unknowns that block particular acceptance stages, not the model decision:**
 
-- The exact current ICK/NDK stage selection and qualified native harness pins
-  must be established before G3 builds. Repository-level precedent is not
+- The selected ICK-core + NDK-boundary/link path needs exact compiler, NDK and
+  qualified native harness pins before G3 builds. Repository-level precedent is not
   Green Grocer compiler or package acceptance.
 - The callable Cat Food/Flexible Pipes paired-build/delivery path must be
   resolved before claiming shared-workflow completion. If absent, record the
@@ -341,8 +341,9 @@ core and bundled eight-product fixture.
 **Exact boundary:** `green-grocer/model/`, fixture data/assets, and focused
 semantic verification/build wiring. Expose add/set/remove and read-only
 observations; import no Android or rendering headers. Compile/link through the
-declared ICK/NDK policy. If a host execution lane cannot satisfy that policy,
-report it or use a qualified target runner; do not invoke an undeclared compiler.
+selected ICK-core + NDK-boundary/link policy. If a host execution lane cannot
+satisfy that policy, report it or use a qualified target runner; do not invoke
+an undeclared compiler.
 
 **Acceptance:** verify empty cart; add twice; set positive; set zero; remove
 present/absent; distinct identities with identical labels; catalog reordering;
@@ -371,7 +372,9 @@ or materially changed G2 prerequisite.
 and existing delivery wiring. Keep the eight-product fixture, core operations,
 and prices unchanged. Use the shared A1/C67 policy, prioritizing A1; resolve
 package identity and persistent signer once. Render on change/input, with no
-idle animation loop. Record exact ICK qualification or specific NDK gap.
+idle animation loop. Record exact ICK core compilation and NDK boundary/link
+stages. An ICK failure blocks the affected stage and must be reported to the
+user with its reproducer; changing the compiler path requires a new decision.
 
 **Acceptance:** produce both ABI artifacts from the same source; inspect ABI,
 signer, package identity, and version code. Exercise add/change/remove, exact

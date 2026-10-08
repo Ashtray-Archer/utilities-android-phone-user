@@ -20,6 +20,29 @@ Inspected dependency checkouts:
 | Cat Food | `609a9628d5a52860f956bf62e0914a0cd03292ae` | A1 ARMv7 / C67 ARM64 paired target policy and build-host ownership; this checkout is not an installed workbench. |
 | Flexible Pipes | `c8cb7ac069a798eaf6cc228de9a2c23b2b351587` | Existing Android producer validation adapter; not a registered paired Green Grocer build. |
 | ai-ci | `8bf8be153f792c4def251287ed85543d1fe24f07` | Current toolchain, shell, producer and evidence requirements. |
+| ICK | `64fab64ff47acc627ce1154c3118f0232390cad5` | GCC-derived C compiler; focused four-ABI C object/NDK-link precedent. Not Green Grocer source/runtime qualification. |
+
+## Build-path clarification
+
+The user's later instruction selects **ICK + NDK**, superseding the review's
+earlier conditional compiler selection. ICK compiles the semantic core and
+catalog; NDK compiles the platform/test boundary and links the resulting
+objects. Keep the stages and their pins separate. Current ICK is the
+GCC-derived C compiler, separate from the D/IDK compiler experiments; the cart
+remains C.
+
+At the inspected ICK head, `README.md`, `docs/android-release-gate.md` and
+`docs/consumers/indras-pearls.md` establish the C-object + NDK-link path. The
+Android gate expressly leaves broad headers/sysroot coverage and Android
+runtime execution outside its focused object/link qualification. That is a
+qualification boundary, not a reproduced ICK defect in Green Grocer.
+
+No ICK failure has been reproduced here: no built ICK compiler is installed on
+the execution host, so the cart has not been submitted to it. Report any future
+specific ICK failure to the user, preserving the exact compiler head, target,
+source, command and diagnostic. A missing executable must be labeled as such,
+not as a language or code-generation defect. Do not silently replace ICK core
+compilation with NDK compilation.
 
 ## G1 — BLOCKED at compiler availability
 
@@ -53,7 +76,7 @@ atomic errors and catalog-ordered projections. The verification source includes:
 The observed Ubuntu 24.04 x86-64 execution container has neither an installed
 Cat Food workbench nor a built Idriç/Grease runtime or Android NDK. A generic
 GCC executable is present, but using it would violate the required declared
-ICK/NDK consumer build boundary. It was not used. No authored shell fallback,
+ICK + NDK consumer build boundary. It was not used. No authored shell fallback,
 new acquisition/bootstrap system or local cross-project orchestrator was added.
 The existing dependency checkouts alone do not establish a qualified runtime.
 
@@ -61,12 +84,14 @@ Compile/link, execution and shared build-toolchain gate wiring are **BLOCKED**,
 not PASS. There is no workflow claiming otherwise. The source has been checked
 for patch whitespace errors; that is solely a source hygiene result.
 
-Resume G2 on a qualified build host: declare the exact ICK stage if its required
-C17/standard-library target surface is qualified; otherwise declare the NDK
-stage with the exact evaluated ICK revision, specific gap and durable evidence.
-Wire the canonical `build-toolchain-v0` gate there and execute these semantic
-cases with the named target runner. The source work does not require a new
-application architecture decision. Preserve any first failing test before
+Resume G2 on a qualified build host: compile the core and catalog with the
+pinned ICK C compiler for A1 and C67, compile the verification runner with the
+pinned NDK, then link with NDK against the target runtime. Wire the canonical
+`build-toolchain-v0` gate with distinct stage records. Record the specific ICK
+platform-link/driver qualification gap for the NDK-owned stages; do not treat
+the broader ICK gate as qualification of these application sources. Execute
+the semantic cases with the named target runner. The source work does not
+require a new application architecture decision. Preserve any first failing test before
 repairing it. Do not count mere compilation as semantic execution.
 
 ## G3 — BLOCKED on G2 verification and shared producer availability
