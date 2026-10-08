@@ -1,0 +1,1 @@
+Error: dex rejected source ABI for `GreenGrocerCart.total_cents`: unsupported source type. The checked executable boundary currently admits explicit Int32 and Text parameters/results only.

@@ -1,0 +1,5 @@
+source	abe5bd2d6b54dcccf4f2badb84457dca63e35973
+ndk	29.0.14206865
+target	a1
+compile_link	PASS
+physical_execution	NOT_RUN

@@ -1,0 +1,6 @@
+source	abe5bd2d6b54dcccf4f2badb84457dca63e35973
+ick	64fab64ff47acc627ce1154c3118f0232390cad5
+ndk	29.0.14206865
+target	a1
+shared_policy	PASS	8bf8be153f792c4def251287ed85543d1fe24f07
+semantic_execution	NOT_RUN	Android-runtime-required

@@ -1,0 +1,36 @@
+/workspace/scratch/8de32f2624f7/green-grocer-verified/green-grocer/android/main.c: OK
+/workspace/scratch/8de32f2624f7/green-grocer-verified/green-grocer/android/canvas.c: OK
+/workspace/scratch/8de32f2624f7/green-grocer-verified/green-grocer/android/canvas.h: OK
+/workspace/scratch/8de32f2624f7/android-ndk-r29/sources/android/native_app_glue/android_native_app_glue.c: OK
+/workspace/scratch/8de32f2624f7/verified-g2-a1/cart.o: OK
+/workspace/scratch/8de32f2624f7/verified-g2-a1/catalog.o: OK
+/workspace/scratch/8de32f2624f7/verified-g3-a1/main.o: OK
+/workspace/scratch/8de32f2624f7/verified-g3-a1/canvas.o: OK
+/workspace/scratch/8de32f2624f7/verified-g3-a1/glue.o: OK
+/workspace/scratch/8de32f2624f7/verified-g3-a1/libgreen_grocer.so: OK
+[36mACTION[0m canonical signed NativeActivity packaging: a1
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=Wegert Debug, OU=Development, O=isomorphisms, L=Ypsilanti, ST=Michigan, C=US
+Signer #1 certificate SHA-256 digest: de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9
+Signer #1 certificate SHA-1 digest: ba8cac29485d7d82957982ba29b3e13b0891bd5d
+Signer #1 certificate MD5 digest: 249eb5c998d731ab83a43c418e5531c6
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 2048
+Signer #1 public key SHA-256 digest: 74af0416e6d3f1916f9fe474d9ed9f082f6c548132287cebc95fa52f219f6f91
+Signer #1 public key SHA-1 digest: 2e2b97586b0f22226040918ca5f04bf2c7c32c9e
+Signer #1 public key MD5 digest: 525e65f986a33312db1880007dbe10a4
+ANDROID_NDK_APK	PASS
+PACKAGE	org.isomorphisms.greengrocer
+VERSION_CODE	1
+ABI	armeabi-v7a
+APK_SHA256	0e606d472d86c50f7b705ee29938adf7a78f2103d968f77a758ffd0e23050c8a
+SIGNER_SHA256	de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9
+RECEIPT	/workspace/scratch/8de32f2624f7/verified-g3-a1/green-grocer-a1.receipt.tsv
+[32mPASS[0m a1 package checks; producer approval and device execution remain separate

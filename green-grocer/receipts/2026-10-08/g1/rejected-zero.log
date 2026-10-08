@@ -1,0 +1,15 @@
+1/1: Building RejectedZero (RejectedZero.idric)
+Error: While processing right hand side of zero_entry. When unifying:
+    0 = 0
+and:
+    amount (one_more_than 0) = 0
+Mismatch between: 0 and 1.
+
+RejectedZero:11:14--11:18
+ 07 | amount : positive_amount → Number
+ 08 | amount (one_more_than additional_units) = S additional_units
+ 09 |
+ 10 | zero_entry : amount (one_more_than 0) = 0
+ 11 | zero_entry = Refl
+                   ^^^^
+

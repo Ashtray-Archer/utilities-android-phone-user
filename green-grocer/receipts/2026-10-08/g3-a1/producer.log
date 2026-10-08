@@ -1,0 +1,31 @@
+{"kind":"assertion","status":"pass","code":"BUILD-TOOLCHAIN-MANIFEST","operation":"nonempty","detail":"ci/build-toolchain.tsv"}
+{"kind":"assertion","status":"pass","code":"BUILD-TOOLCHAIN-HEADER","operation":"tsv_header","detail":"ci/build-toolchain.tsv header=build_id,target,toolchain,ick_revision,ick_status,ick_evidence"}
+{"kind":"assertion","status":"pass","code":"BUILD-TOOLCHAIN-CHOICE","operation":"build_toolchains_allowed","detail":"ci/build-toolchain.tsv uses only ick or ndk"}
+{"kind":"assertion","status":"pass","code":"BUILD-TOOLCHAIN-ICK-REVISION","operation":"build_toolchains_revision","detail":"ci/build-toolchain.tsv pins exact ICK revisions"}
+{"kind":"assertion","status":"pass","code":"BUILD-TOOLCHAIN-ICK-EVIDENCE","operation":"build_toolchains_evidence","detail":"ci/build-toolchain.tsv records ICK qualification evidence"}
+{"kind":"ick-gap","build":"green-grocer-test-host","target":"linux-x86_64","ickRevision":"64fab64ff47acc627ce1154c3118f0232390cad5","gap":"ICK qualification here covers the freestanding cart and catalog, not the hosted stdio verification runner/runtime link","evidence":"receipt:green-grocer/execution.md#toolchain-boundaries"}
+{"kind":"ick-gap","build":"green-grocer-test-a1","target":"armeabi-v7a","ickRevision":"64fab64ff47acc627ce1154c3118f0232390cad5","gap":"Complete Android libc headers, driver and runtime link remain outside the focused ICK object boundary","evidence":"doc:https://github.com/dilapidated-shed/ick/blob/64fab64ff47acc627ce1154c3118f0232390cad5/docs/android-release-gate.md"}
+{"kind":"ick-gap","build":"green-grocer-test-c67","target":"arm64-v8a","ickRevision":"64fab64ff47acc627ce1154c3118f0232390cad5","gap":"Complete Android libc headers, driver and runtime link remain outside the focused ICK object boundary","evidence":"doc:https://github.com/dilapidated-shed/ick/blob/64fab64ff47acc627ce1154c3118f0232390cad5/docs/android-release-gate.md"}
+{"kind":"ick-gap","build":"green-grocer-policy-verifier","target":"linux-x86_64","ickRevision":"64fab64ff47acc627ce1154c3118f0232390cad5","gap":"ICK qualification here does not cover ai-ci hosted stdio/filesystem implementation and runtime linking","evidence":"receipt:green-grocer/execution.md#toolchain-boundaries"}
+{"kind":"ick-gap","build":"green-grocer-android-a1","target":"armeabi-v7a","ickRevision":"64fab64ff47acc627ce1154c3118f0232390cad5","gap":"Arbitrary Android/JNI headers and platform/runtime linking are outside the focused ICK object qualification","evidence":"doc:https://github.com/dilapidated-shed/ick/blob/64fab64ff47acc627ce1154c3118f0232390cad5/docs/android-release-gate.md"}
+{"kind":"ick-gap","build":"green-grocer-android-c67","target":"arm64-v8a","ickRevision":"64fab64ff47acc627ce1154c3118f0232390cad5","gap":"Arbitrary Android/JNI headers and platform/runtime linking are outside the focused ICK object qualification","evidence":"doc:https://github.com/dilapidated-shed/ick/blob/64fab64ff47acc627ce1154c3118f0232390cad5/docs/android-release-gate.md"}
+{"kind":"assertion","status":"pass","code":"BUILD-TOOLCHAIN-ICK-GAP","operation":"build_toolchains_ndk_gap","detail":"ci/build-toolchain.tsv explains every NDK fallback"}
+{"kind":"summary","status":"pass","assertions":6,"failures":0}
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=Wegert Debug, OU=Development, O=isomorphisms, L=Ypsilanti, ST=Michigan, C=US
+Signer #1 certificate SHA-256 digest: de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9
+Signer #1 certificate SHA-1 digest: ba8cac29485d7d82957982ba29b3e13b0891bd5d
+Signer #1 certificate MD5 digest: 249eb5c998d731ab83a43c418e5531c6
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 2048
+Signer #1 public key SHA-256 digest: 74af0416e6d3f1916f9fe474d9ed9f082f6c548132287cebc95fa52f219f6f91
+Signer #1 public key SHA-1 digest: 2e2b97586b0f22226040918ca5f04bf2c7c32c9e
+Signer #1 public key MD5 digest: 525e65f986a33312db1880007dbe10a4
+UNREGISTERED_PACKAGE_LANE package=org.isomorphisms.greengrocer lane=test

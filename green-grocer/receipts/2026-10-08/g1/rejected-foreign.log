@@ -1,0 +1,15 @@
+1/1: Building RejectedForeignProduct (RejectedForeignProduct.idric)
+Error: While processing right hand side of foreign_product. When unifying:
+    Nat
+and:
+    product_identity
+Mismatch between: Nat and product_identity.
+
+RejectedForeignProduct:15:35--15:48
+ 11 | accept_product apple_bags = 499
+ 12 | accept_product cereal = 379
+ 13 |
+ 14 | foreign_product : Number
+ 15 | foreign_product = accept_product (the Number 42)
+                                        ^^^^^^^^^^^^^
+

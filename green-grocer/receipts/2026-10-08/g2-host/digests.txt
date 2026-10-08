@@ -1,0 +1,13 @@
+423968151c1ae04b9d70d7f632bf1d0f788feddaab2510c2f74ff7f200f4cef2  /workspace/scratch/8de32f2624f7/ick-stage-host/bin/x86_64-linux-gnu-gcc
+3f5de619a8075fb3e11e0a9f6370581fda227a651d4f84b610b7eda0874a521f  /workspace/scratch/8de32f2624f7/ick-stage-host/libexec/gcc/x86_64-linux-gnu/17.0.0/cc1
+d326ed4fc4f71e5315b9ce388fc23ec792f81652ca7b29e66294de6ed2520844  /workspace/scratch/8de32f2624f7/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
+9f7df260a1a6cd02e3274c1d57ff22b2745791b85fb38a958051ebcd31e42900  /workspace/scratch/8de32f2624f7/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld
+0c000e14304fd58c57df74aecbf3508000921e003e897215b6c563442cc38948  /workspace/scratch/8de32f2624f7/green-grocer-verified/green-grocer/model/cart.h
+eb408a5683fe065ec10e6cef18918a5828127357bbb94ecda4f6fe0fc5bbb3f2  /workspace/scratch/8de32f2624f7/green-grocer-verified/green-grocer/model/cart.c
+b2578d35bc1ea3d5eb0a2bb7a104c2d6bfc89584cd9a2858613b2ef21f7a292e  /workspace/scratch/8de32f2624f7/green-grocer-verified/green-grocer/fixtures/catalog.h
+5d3eacb7d78a50bafad2b7ac5e2e68b72ab8d465f8999549701b7e55fc22bad7  /workspace/scratch/8de32f2624f7/green-grocer-verified/green-grocer/fixtures/catalog.c
+f7b4f726209c238d2ba081133fd7c5d7ab8fa48cf8028312fb32d4746c3b64c0  /workspace/scratch/8de32f2624f7/green-grocer-verified/green-grocer/model/cart_test.c
+2b0a9fd321e128cb312af3a3f0b6454d251406261874e1b5e4edd18503844cf5  /workspace/scratch/8de32f2624f7/verified-g2-host/cart.o
+3b89cb92032d785ced14a9be207d7693cf2693222f4ef0a598f2e52b6c2d1701  /workspace/scratch/8de32f2624f7/verified-g2-host/catalog.o
+e9bc63f93454e7269cd2022f29e1881df10932e72f1da1860415e813bb20db0b  /workspace/scratch/8de32f2624f7/verified-g2-host/cart_test.o
+633a54aaa2e7894b976045eea47d3ef4aed0e1c2c9369acb9932e497726828f2  /workspace/scratch/8de32f2624f7/verified-g2-host/cart-test
