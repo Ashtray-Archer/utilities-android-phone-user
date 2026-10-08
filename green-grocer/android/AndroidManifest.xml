@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.isomorphisms.greengrocer">
+    <application android:allowBackup="false" android:hasCode="false"
+        android:extractNativeLibs="false" android:label="Green Grocer"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name="android.app.NativeActivity" android:exported="true"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|density|uiMode">
+            <meta-data android:name="android.app.lib_name" android:value="green_grocer" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

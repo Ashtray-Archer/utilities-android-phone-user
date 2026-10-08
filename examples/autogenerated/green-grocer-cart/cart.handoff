@@ -1,0 +1,60 @@
+EDRIC_ONE_STEP	1
+source_sha256	98a6956c08f677a409b50c66bb471fb7fc8275a75e84c79320a3355148605a16
+compiler_head	isomorphisms/Idric	ff4d852862a3942592f8ade9afde8d409d9803be
+core_typecheck	PASS
+representation	idris2-anf-show-0.8.0
+body_sha256	dff22564e8a180007f9b7b185ef1411df96a526e3e60a06aefae22b7c7979c9b
+definitions_begin
+{__mainExpression:0} = []: %let v0 = (<{{__mainExpression:0}:0} underapp 1>()) in (PrimIO.unsafePerformIO(v0))
+{{__mainExpression:0}:0} = [0]: GreenGrocerCart.main(v0)
+_builtin.NIL = Constructor tag Just 0 arity 0 newtype by Nothing
+_builtin.CONS = Constructor tag Just 1 arity 2 newtype by Nothing
+_builtin.NOTHING = Constructor tag Just 0 arity 0 newtype by Nothing
+_builtin.JUST = Constructor tag Just 1 arity 1 newtype by Nothing
+prim__sub_Integer = [0, 1]: %op -Integer(v0, v1)
+GreenGrocerCart.total_cents = [0]: %let v18 = (%let v11 = (%let v4 = (%let v1 = (0) in (GreenGrocerCart.price_cents(v1))) in (%let v5 = (%let v3 = (%let v2 = (0) in (v0 @ (v2))) in (GreenGrocerCart.amount(v3))) in (%op *Integer(v4, v5)))) in (%let v12 = (%let v9 = (%let v6 = (1) in (GreenGrocerCart.price_cents(v6))) in (%let v10 = (%let v8 = (%let v7 = (1) in (v0 @ (v7))) in (GreenGrocerCart.amount(v8))) in (%op *Integer(v9, v10)))) in (%op +Integer(v11, v12)))) in (%let v19 = (%let v16 = (%let v13 = (2) in (GreenGrocerCart.price_cents(v13))) in (%let v17 = (%let v15 = (%let v14 = (2) in (v0 @ (v14))) in (GreenGrocerCart.amount(v15))) in (%op *Integer(v16, v17)))) in (%op +Integer(v18, v19)))
+GreenGrocerCart.set_amount = [0, 1, 2, 3]: %let v4 = (GreenGrocerCart.same_product(v0, v3)) in (%case v4 of { %constalt(1) => GreenGrocerCart.coordinate_for(v1)| %constalt(0) => v2 @ (v3) Nothing })
+GreenGrocerCart.sample_cart = [0]: %let v1 = (2) in (%let v2 = (3) in (%let v3 = (<GreenGrocerCart.{sample_cart:2} underapp 1>()) in (GreenGrocerCart.set_amount(v1, v2, v3, v0))))
+GreenGrocerCart.{sample_cart:2} = [0]: %let v1 = (1) in (%let v2 = (2) in (%let v3 = (<GreenGrocerCart.{sample_cart:1} underapp 1>()) in (GreenGrocerCart.set_amount(v1, v2, v3, v0))))
+GreenGrocerCart.{sample_cart:1} = [0]: %let v1 = (0) in (%let v2 = (<GreenGrocerCart.{sample_cart:0} underapp 1>()) in (GreenGrocerCart.add(v1, v2, v0)))
+GreenGrocerCart.{sample_cart:0} = [0]: GreenGrocerCart.empty_cart(v0)
+GreenGrocerCart.same_product = [0, 1]: %case v0 of { %constalt(0) => %case v1 of { %constalt(0) => 1 Just 0 }| %constalt(1) => %case v1 of { %constalt(1) => 1 Just 0 }| %constalt(2) => %case v1 of { %constalt(2) => 1 Just 0 } Just 0 }
+GreenGrocerCart.price_cents = [0]: %case v0 of { %constalt(0) => 129| %constalt(1) => 499| %constalt(2) => 379 Nothing }
+GreenGrocerCart.main = [0]: %let v5 = (%let v3 = (%let v2 = (%let v1 = (<GreenGrocerCart.{main:0} underapp 1>()) in (GreenGrocerCart.total_cents(v1))) in (Prelude.Show.show(v2))) in (%let v4 = ("\n") in (%op ++(v3, v4)))) in (Prelude.IO.prim__putStr(v5, v0))
+GreenGrocerCart.{main:0} = [0]: GreenGrocerCart.sample_cart(v0)
+GreenGrocerCart.empty_cart = [0]: %con _builtin.NOTHING()
+GreenGrocerCart.coordinate_for = [0]: %case v0 of { %constalt(0) => %con _builtin.NOTHING() Just %let v1 = (%let v2 = (1) in (%op -Integer(v0, v2))) in (%con _builtin.JUST(v1)) }
+GreenGrocerCart.amount = [0]: %case v0 of { %conalt _builtin.NOTHING() => 0| %conalt _builtin.JUST(v1) => %let v2 = (1) in (%op +Integer(v1, v2)) Nothing }
+GreenGrocerCart.add = [0, 1, 2]: %let v6 = (%let v4 = (%let v3 = (v1 @ (v0)) in (GreenGrocerCart.amount(v3))) in (%let v5 = (1) in (%op +Integer(v4, v5)))) in (GreenGrocerCart.set_amount(v0, v6, v1, v2))
+Prelude.Types.prim__integerToNat = [0]: %let v2 = (%let v1 = (0) in (%op <=Integer(v1, v0))) in (%case v2 of { %constalt(0) => 0 Just v0 })
+Prelude.EqOrd.compare = [0, 1]: %let v3 = (Prelude.EqOrd.<(v0, v1)) in (%case v3 of { %constalt(1) => 0| %constalt(0) => %let v2 = (Prelude.EqOrd.==(v0, v1)) in (%case v2 of { %constalt(1) => 1| %constalt(0) => 2 Nothing }) Nothing })
+Prelude.EqOrd.== = [0, 1]: %case v0 of { %constalt(0) => %case v1 of { %constalt(0) => 1 Just 0 }| %constalt(1) => %case v1 of { %constalt(1) => 1 Just 0 }| %constalt(2) => %case v1 of { %constalt(2) => 1 Just 0 } Just 0 }
+Prelude.EqOrd.== = [0, 1]: %let v2 = (%op ==Integer(v0, v1)) in (%case v2 of { %constalt(0) => 0 Just 1 })
+Prelude.EqOrd.== = [0, 1]: %let v2 = (%op ==Char(v0, v1)) in (%case v2 of { %constalt(0) => 0 Just 1 })
+Prelude.EqOrd.< = [0, 1]: %let v2 = (%op <Integer(v0, v1)) in (%case v2 of { %constalt(0) => 0 Just 1 })
+Prelude.EqOrd./= = [0, 1]: %let v2 = (Prelude.EqOrd.==(v0, v1)) in (%case v2 of { %constalt(1) => 0| %constalt(0) => 1 Nothing })
+Prelude.EqOrd.compareInteger = [0, 1]: Prelude.EqOrd.compare(v0, v1)
+Prelude.Show.show = [0]: Prelude.Show.show(v0)
+Prelude.Show.show = [0]: %let v1 = (%con Prelude.Show.Open()) in (Prelude.Show.showPrec(v1, v0))
+Prelude.Show.showPrec = [0, 1]: %let v2 = (<Prelude.Show.{showPrec_Show_Integer:0} underapp 1>()) in (Prelude.Show.primNumShow(v2, v0, v1))
+Prelude.Show.{showPrec_Show_Integer:0} = [0]: %op cast-Integer-String(v0)
+Prelude.Show.compare = [0, 1]: %case v0 of { %conalt Prelude.Show.User(v2) => %case v1 of { %conalt Prelude.Show.User(v3) => Prelude.EqOrd.compare(v2, v3) Just %let v4 = (Prelude.Show.precCon(v0)) in (%let v5 = (Prelude.Show.precCon(v1)) in (Prelude.EqOrd.compare(v4, v5))) } Just %let v6 = (Prelude.Show.precCon(v0)) in (%let v7 = (Prelude.Show.precCon(v1)) in (Prelude.EqOrd.compare(v6, v7))) }
+Prelude.Show.>= = [0, 1]: %let v2 = (Prelude.Show.compare(v0, v1)) in (%let v3 = (0) in (Prelude.EqOrd./=(v2, v3)))
+Prelude.Show.showParens = [0, 1]: %case v0 of { %constalt(0) => v1| %constalt(1) => %let v3 = ("(") in (%let v4 = (%let v2 = (")") in (%op ++(v1, v2))) in (%op ++(v3, v4))) Nothing }
+Prelude.Show.primNumShow = [0, 1, 2]: %let v3 = (v0 @ (v2)) in (%let v7 = (%let v6 = (%let v4 = (%con Prelude.Show.PrefixMinus()) in (Prelude.Show.>=(v1, v4))) in (%case v6 of { %constalt(1) => %let v5 = (<Prelude.Show.{primNumShow:0} underapp 1>()) in (Prelude.Show.firstCharIs(v5, v3))| %constalt(0) => 0 Nothing })) in (Prelude.Show.showParens(v7, v3)))
+Prelude.Show.{primNumShow:0} = [0]: %let v1 = ('-') in (Prelude.EqOrd.==(v0, v1))
+Prelude.Show.precCon = [0]: %case v0 of { %conalt Prelude.Show.Open() => 0| %conalt Prelude.Show.Equal() => 1| %conalt Prelude.Show.Dollar() => 2| %conalt Prelude.Show.Backtick() => 3| %conalt Prelude.Show.User(v1) => 4| %conalt Prelude.Show.PrefixMinus() => 5| %conalt Prelude.Show.App() => 6 Nothing }
+Prelude.Show.firstCharIs = [0, 1]: %case v1 of { %constalt("") => 0 Just %let v2 = (%op op_strhead(v1)) in (v0 @ (v2)) }
+Prelude.Show.User = Constructor tag Just 4 arity 1 newtype by Nothing
+Prelude.Show.PrefixMinus = Constructor tag Just 5 arity 0 newtype by Nothing
+Prelude.Show.Open = Constructor tag Just 0 arity 0 newtype by Nothing
+Prelude.Show.Equal = Constructor tag Just 1 arity 0 newtype by Nothing
+Prelude.Show.Dollar = Constructor tag Just 2 arity 0 newtype by Nothing
+Prelude.Show.Backtick = Constructor tag Just 3 arity 0 newtype by Nothing
+Prelude.Show.App = Constructor tag Just 6 arity 0 newtype by Nothing
+Prelude.IO.prim__putStr = Foreign call ["C:idris2_putStr, libidris2_support, idris_support.h", "node:lambda:x=>process.stdout.write(x)", "browser:lambda:x=>console.log(x)"] [String, %World] -> IORes Unit
+PrimIO.unsafePerformIO = [0]: %let v1 = (<PrimIO.{unsafePerformIO:0} underapp 1>(v0)) in (PrimIO.unsafeCreateWorld(v1))
+PrimIO.{unsafePerformIO:0} = [0, 1]: v0 @ (v1)
+PrimIO.unsafeCreateWorld = [0]: %let v1 = (%MkWorld) in (v0 @ (v1))
+definitions_end
+end

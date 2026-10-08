@@ -12,4 +12,4 @@ accept_product apple_bags = 499
 accept_product cereal = 379
 
 foreign_product : Number
-foreign_product = accept_product 42
+foreign_product = accept_product (the Number 42)

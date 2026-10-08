@@ -1,5 +1,8 @@
 module GreenGrocerCart
 
+%unbound_implicits off
+%default total
+
 choice product_identity one_of
   bananas
   apple_bags
@@ -49,6 +52,7 @@ price_cents bananas = 129
 price_cents apple_bags = 499
 price_cents cereal = 379
 
+%export "dex:total_cents"
 total_cents : cart → Number
 total_cents current =
   price_cents bananas * amount (current bananas) +
@@ -85,6 +89,12 @@ swap cereal = cereal
 
 rename_cart : (product_identity → product_identity) → cart → cart
 rename_cart inverse current position = current (inverse position)
+
+renamed_sample_total :
+  price_cents (swap bananas) * amount (rename_cart swap sample_cart bananas) +
+  price_cents (swap apple_bags) * amount (rename_cart swap sample_cart apple_bags) +
+  price_cents (swap cereal) * amount (rename_cart swap sample_cart cereal) = 2264
+renamed_sample_total = Refl
 
 rename_add_commutes_at : (identity : product_identity) →
   (position : product_identity) → (current : cart) →

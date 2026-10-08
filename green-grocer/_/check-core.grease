@@ -1,0 +1,103 @@
+#!/usr/bin/env grease
+# Consumer verification only; acquire compilers through their maintained recipes.
+if (len(ARGV) !== 7) {
+    write -- 'usage: grease check-core.grease ABS_REPO ABS_ICK_CHECKOUT ABS_ICK_PREFIX ABS_NDK ABS_OUTPUT ABS_AICI host|a1|c67'
+    exit 2
+}
+var repo = ARGV[0]
+var source = ARGV[1]
+var prefix = ARGV[2]
+var ndk = ARGV[3]
+var output = ARGV[4]
+var aici = ARGV[5]
+var target = ARGV[6]
+for path in ([repo, source, prefix, ndk, output, aici]) {
+    if (path[0] !== '/') { write -- 'FAIL all paths must be absolute'; exit 2 }
+}
+setvar repo = $(realpath "$repo")
+setvar source = $(realpath "$source")
+setvar prefix = $(realpath "$prefix")
+setvar ndk = $(realpath "$ndk")
+git -C "$repo" diff --quiet HEAD -- green-grocer/model green-grocer/fixtures
+var expected_ick = '64fab64ff47acc627ce1154c3118f0232390cad5'
+var observed_ick = $(git -C "$source" rev-parse HEAD)
+if (observed_ick !== expected_ick) { write -- 'FAIL wrong ICK source head'; exit 1 }
+git -C "$source" diff --quiet
+git -C "$source" diff --cached --quiet
+var ndk_version = $(sed -n 's/^Pkg.Revision = //p' "$ndk/source.properties")
+if (ndk_version !== '29.0.14206865') { write -- 'FAIL wrong NDK revision'; exit 1 }
+var triple = 'x86_64-linux-gnu'
+var flags = ['-std=c17', '-O2', '-fPIC', '-ffreestanding', '-Wall', '-Wextra', '-Werror', '-Wpedantic', '-Wshadow']
+var driver = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+var linker = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld"
+var runner_flags = ['--target=x86_64-linux-gnu', '--gcc-toolchain=/usr']
+if (target === 'a1') {
+    setvar triple = 'arm-linux-gnueabi'
+    setvar flags = flags ++ ['-march=armv7-a', '-mthumb', '-mfpu=neon', '-mfloat-abi=softfp']
+    setvar driver = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang"
+    setvar runner_flags = []
+} elif (target === 'c67') {
+    setvar triple = 'aarch64-linux-gnu'
+    setvar flags = flags ++ ['-ffixed-x18']
+    setvar driver = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+    setvar runner_flags = []
+} elif (target !== 'host') {
+    write -- 'FAIL unsupported target'
+    exit 2
+}
+var compiler = "$prefix/bin/$triple-gcc"
+test -x "$compiler"
+test -x "$driver"
+test -x "$linker"
+var installed_source = $(cat "$prefix/source-revision")
+if (installed_source !== expected_ick) { write -- 'FAIL wrong installed ICK source stamp'; exit 1 }
+var cc1 = $("$compiler" -print-prog-name=cc1)
+test -x "$cc1"
+setvar cc1 = $(realpath "$cc1")
+var relative_cc1 = ${cc1#"$prefix/"}
+if (relative_cc1 === cc1) { write -- 'FAIL cc1 escaped ICK installation'; exit 1 }
+var observed_triple = $("$compiler" -dumpmachine)
+if (observed_triple !== triple) { write -- 'FAIL wrong ICK compiler target'; exit 1 }
+mkdir -p "$output"
+var aici_head = $(git -C "$aici" rev-parse HEAD)
+if (aici_head !== '8bf8be153f792c4def251287ed85543d1fe24f07') {
+    write -- 'FAIL wrong shared build policy head'; exit 1
+}
+git -C "$aici" diff --quiet HEAD
+printf '\033[36mACTION\033[0m NDK shared policy verifier; required build-toolchain-v0 gate\n'
+"$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" \
+    --target=x86_64-linux-gnu --gcc-toolchain=/usr --ld-path="$linker" \
+    -std=c17 -O2 -Wall -Wextra -Werror "$aici/src/aici.c" -o "$output/aici"
+"$output/aici" verify "$aici/contracts/build-toolchain-v0.contract.tsv" "$repo" > "$output/policy-result.txt"
+cat "$output/policy-result.txt"
+printf '\033[36mACTION\033[0m ICK cart/catalog compilation: %s\n' "$target"
+"$compiler" @flags -c "$repo/green-grocer/model/cart.c" -o "$output/cart.o"
+"$compiler" @flags -c "$repo/green-grocer/fixtures/catalog.c" -o "$output/catalog.o"
+printf '\033[36mACTION\033[0m NDK runner compilation and link: %s\n' "$target"
+"$driver" @runner_flags -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow \
+    -c "$repo/green-grocer/model/cart_test.c" -o "$output/cart_test.o"
+"$driver" @runner_flags --ld-path="$linker" "$output/cart.o" "$output/catalog.o" "$output/cart_test.o" -o "$output/cart-test"
+var head = $(git -C "$repo" rev-parse HEAD)
+printf 'source\t%s\nick\t%s\nndk\t%s\ntarget\t%s\nshared_policy\tPASS\t%s\n' \
+    "$head" "$expected_ick" "$ndk_version" "$target" "$aici_head" > "$output/identity.tsv"
+sha256sum "$compiler" "$cc1" "$driver" "$linker" "$repo/green-grocer/model/cart.h" \
+    "$repo/green-grocer/model/cart.c" "$repo/green-grocer/fixtures/catalog.h" \
+    "$repo/green-grocer/fixtures/catalog.c" "$repo/green-grocer/model/cart_test.c" \
+    "$output/cart.o" "$output/catalog.o" "$output/cart_test.o" "$output/cart-test" > "$output/digests.txt"
+"$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readobj" --elf-output-style=GNU \
+    --file-headers "$output/cart-test" > "$output/elf.txt"
+var elf_class = 'ELF64'
+var elf_machine = 'Advanced Micro Devices X86-64'
+if (target === 'a1') { setvar elf_class = 'ELF32'; setvar elf_machine = 'ARM' }
+if (target === 'c67') { setvar elf_machine = 'AArch64' }
+rg -q "Class:.*$elf_class" "$output/elf.txt"
+rg -q "Machine:.*$elf_machine" "$output/elf.txt"
+if (target === 'host') {
+    "$output/cart-test" > "$output/semantic-result.txt"
+    cat "$output/semantic-result.txt"
+    printf 'semantic_execution\tPASS\thost-linux-x86_64\n' >> "$output/identity.tsv"
+    printf '\033[32mPASS\033[0m host cart semantic cases\n'
+} else {
+    printf 'semantic_execution\tNOT_RUN\tAndroid-runtime-required\n' >> "$output/identity.tsv"
+    printf '\033[32mPASS\033[0m %s compile/link; Android execution NOT_RUN\n' "$target"
+}

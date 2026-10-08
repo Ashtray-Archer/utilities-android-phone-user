@@ -1,0 +1,46 @@
+#!/usr/bin/env grease
+# Use the maintained packager. This neither approves delivery nor installs an APK.
+if (len(ARGV) !== 7) {
+    write -- 'usage: grease package-native.grease ABS_REPO ABS_ANDROID_NDK_CHECKOUT ABS_SDK ABS_PUBLIC_TEST_KEY ABS_NATIVE_BUILD ABS_APK a1|c67'
+    exit 2
+}
+var repo = ARGV[0]
+var packager = ARGV[1]
+var sdk = ARGV[2]
+var key = ARGV[3]
+var native = ARGV[4]
+var apk = ARGV[5]
+var target = ARGV[6]
+for path in ([repo, packager, sdk, key, native, apk]) {
+    if (path[0] !== '/') { write -- 'FAIL paths must be absolute'; exit 2 }
+}
+var packager_head = $(git -C "$packager" rev-parse HEAD)
+if (packager_head !== '7c61ee43e75f7c2dab9288edb0e10055898b36e6') {
+    write -- 'FAIL wrong canonical packager revision'; exit 1
+}
+git -C "$packager" diff --quiet HEAD -- apk
+git -C "$repo" diff --quiet HEAD -- green-grocer/android
+var head = $(git -C "$repo" rev-parse HEAD)
+var native_head = $(awk -F '\t' '$1 == "source" {print $2}' "$native/identity.tsv")
+var native_target = $(awk -F '\t' '$1 == "target" {print $2}' "$native/identity.tsv")
+if (native_head !== head or native_target !== target) {
+    write -- 'FAIL native receipt has wrong source or target'; exit 1
+}
+sha256sum --check "$native/digests.txt"
+var abi = 'armeabi-v7a'
+if (target === 'c67') { setvar abi = 'arm64-v8a' } elif (target !== 'a1') {
+    write -- 'FAIL target must be a1 or c67'; exit 2
+}
+printf '\033[36mACTION\033[0m canonical signed NativeActivity packaging: %s\n' "$target"
+# The canonical external packager fixes Bash at this boundary. No authored Bash.
+env ANDROID_HOME="$sdk" ANDROID_BUILD_TOOLS="$sdk/build-tools/36.0.0" \
+    ANDROID_PACKAGE_ID=org.isomorphisms.greengrocer ANDROID_VERSION_CODE=1 \
+    ANDROID_VERSION_NAME=0.1 ANDROID_MIN_SDK=26 ANDROID_TARGET_SDK=36 \
+    ANDROID_KEYSTORE="$key" ANDROID_KEYSTORE_TYPE=PKCS12 \
+    ANDROID_KEY_ALIAS=wegert-debug ANDROID_STORE_PASSWORD=wegert-debug \
+    ANDROID_KEY_PASSWORD=wegert-debug \
+    ANDROID_EXPECTED_CERT_SHA256=de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9 \
+    ANDROID_SOURCE_COMMIT="$head" ANDROID_REQUIRE_NO_DEX=1 \
+    bash "$packager/apk/build-nativeactivity-apk.sh" \
+    "$repo/green-grocer/android/AndroidManifest.xml" "$native/libgreen_grocer.so" "$abi" "$apk"
+printf '\033[32mPASS\033[0m %s package checks; producer approval and device execution remain separate\n' "$target"

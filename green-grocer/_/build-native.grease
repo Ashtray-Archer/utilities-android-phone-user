@@ -1,0 +1,58 @@
+#!/usr/bin/env grease
+# Compilation/link only. Packaging, delivery and device acceptance are separate.
+if (len(ARGV) !== 5) {
+    write -- 'usage: grease build-native.grease ABS_REPO ABS_NDK ABS_CHECKED_CORE ABS_OUTPUT a1|c67'
+    exit 2
+}
+var repo = ARGV[0]
+var ndk = ARGV[1]
+var core = ARGV[2]
+var output = ARGV[3]
+var target = ARGV[4]
+for path in ([repo, ndk, core, output]) {
+    if (path[0] !== '/') { write -- 'FAIL paths must be absolute'; exit 2 }
+}
+var head = $(git -C "$repo" rev-parse HEAD)
+var core_head = $(awk -F '\t' '$1 == "source" {print $2}' "$core/identity.tsv")
+var core_target = $(awk -F '\t' '$1 == "target" {print $2}' "$core/identity.tsv")
+if (core_head !== head or core_target !== target) {
+    write -- 'FAIL core receipt does not match this source and target'
+    exit 1
+}
+git -C "$repo" diff --quiet HEAD -- green-grocer/android green-grocer/model green-grocer/fixtures
+sha256sum --check "$core/digests.txt"
+var revision = $(sed -n 's/^Pkg.Revision = //p' "$ndk/source.properties")
+if (revision !== '29.0.14206865') { write -- 'FAIL wrong NDK revision'; exit 1 }
+var driver = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang"
+var machine = 'ARM'
+var elf_class = 'ELF32'
+if (target === 'c67') {
+    setvar driver = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+    setvar machine = 'AArch64'
+    setvar elf_class = 'ELF64'
+} elif (target !== 'a1') { write -- 'FAIL target must be a1 or c67'; exit 2 }
+var glue = "$ndk/sources/android/native_app_glue"
+var flags = ['-std=c17', '-O2', '-fPIC', '-Wall', '-Wextra', '-Werror', '-Wpedantic', '-Wshadow']
+mkdir -p "$output"
+printf '\033[36mACTION\033[0m NDK Android boundary: %s\n' "$target"
+"$driver" @flags -isystem "$glue" -c "$repo/green-grocer/android/main.c" -o "$output/main.o"
+"$driver" @flags -c "$repo/green-grocer/android/canvas.c" -o "$output/canvas.o"
+# This legacy NDK source/header contains app_dummy(), without a prototype.
+"$driver" -std=c17 -O2 -fPIC -Wno-strict-prototypes -c "$glue/android_native_app_glue.c" -o "$output/glue.o"
+"$driver" --ld-path="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld" \
+    -shared "$core/cart.o" "$core/catalog.o" "$output/main.o" "$output/canvas.o" "$output/glue.o" \
+    -Wl,-z,defs,-z,max-page-size=16384,-z,common-page-size=4096,--build-id=sha1 \
+    -Wl,-u,ANativeActivity_onCreate -landroid -llog -o "$output/libgreen_grocer.so"
+"$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readobj" --elf-output-style=GNU \
+    --file-headers --program-headers "$output/libgreen_grocer.so" > "$output/elf.txt"
+rg -q "Class:.*$elf_class" "$output/elf.txt"
+rg -q "Machine:.*$machine" "$output/elf.txt"
+"$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -D --defined-only "$output/libgreen_grocer.so" > "$output/exports.txt"
+rg -q ' T ANativeActivity_onCreate$' "$output/exports.txt"
+printf 'source\t%s\nndk\t%s\ntarget\t%s\ncompile_link\tPASS\nphysical_execution\tNOT_RUN\n' \
+    "$head" "$revision" "$target" > "$output/identity.tsv"
+sha256sum "$repo/green-grocer/android/main.c" "$repo/green-grocer/android/canvas.c" \
+    "$repo/green-grocer/android/canvas.h" "$glue/android_native_app_glue.c" \
+    "$core/cart.o" "$core/catalog.o" "$output/main.o" "$output/canvas.o" \
+    "$output/glue.o" "$output/libgreen_grocer.so" > "$output/digests.txt"
+printf '\033[32mPASS\033[0m %s native compile/link; runtime NOT_RUN\n' "$target"
