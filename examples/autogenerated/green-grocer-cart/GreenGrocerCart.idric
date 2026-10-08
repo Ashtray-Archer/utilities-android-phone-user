@@ -1,0 +1,105 @@
+module GreenGrocerCart
+
+choice product_identity one_of
+  bananas
+  apple_bags
+  cereal
+
+choice positive_amount one_of
+  one_more_than Number
+
+choice cart_coordinate one_of
+  absent
+  present positive_amount
+
+cart : Type
+cart = product_identity → cart_coordinate
+
+amount : cart_coordinate → Number
+amount absent = 0
+amount (present (one_more_than additional_units)) = S additional_units
+
+coordinate_for : Number → cart_coordinate
+coordinate_for 0 = absent
+coordinate_for (S additional_units) = present (one_more_than additional_units)
+
+same_product : product_identity → product_identity → Bool
+same_product bananas bananas = True
+same_product apple_bags apple_bags = True
+same_product cereal cereal = True
+same_product _ _ = False
+
+empty_cart : cart
+empty_cart _ = absent
+
+set_amount : product_identity → Number → cart → cart
+set_amount identity units current position =
+  if same_product identity position
+     then coordinate_for units
+     else current position
+
+add : product_identity → cart → cart
+add identity current = set_amount identity (S (amount (current identity))) current
+
+remove : product_identity → cart → cart
+remove identity = set_amount identity 0
+
+price_cents : product_identity → Number
+price_cents bananas = 129
+price_cents apple_bags = 499
+price_cents cereal = 379
+
+total_cents : cart → Number
+total_cents current =
+  price_cents bananas * amount (current bananas) +
+  price_cents apple_bags * amount (current apple_bags) +
+  price_cents cereal * amount (current cereal)
+
+sample_cart : cart
+sample_cart = set_amount cereal 3 (set_amount apple_bags 2 (add bananas empty_cart))
+
+sample_total : total_cents sample_cart = 2264
+sample_total = Refl
+
+empty_total : total_cents empty_cart = 0
+empty_total = Refl
+
+zero_is_absent : coordinate_for 0 = absent
+zero_is_absent = Refl
+
+remove_from_empty : (identity : product_identity) → remove identity empty_cart identity = absent
+remove_from_empty bananas = Refl
+remove_from_empty apple_bags = Refl
+remove_from_empty cereal = Refl
+
+positive_observation : (additional_units : Number) →
+  amount (present (one_more_than additional_units)) = S additional_units
+positive_observation additional_units = Refl
+
+-- An identity bijection which is its own inverse. Relabeling does not change
+-- which physical coordinate an add updates. Price relabeling is separate.
+swap : product_identity → product_identity
+swap bananas = apple_bags
+swap apple_bags = bananas
+swap cereal = cereal
+
+rename_cart : (product_identity → product_identity) → cart → cart
+rename_cart inverse current position = current (inverse position)
+
+rename_add_commutes_at : (identity : product_identity) →
+  (position : product_identity) → (current : cart) →
+  rename_cart swap (add identity current) position =
+  add (swap identity) (rename_cart swap current) position
+rename_add_commutes_at bananas bananas current = Refl
+rename_add_commutes_at bananas apple_bags current = Refl
+rename_add_commutes_at bananas cereal current = Refl
+rename_add_commutes_at apple_bags bananas current = Refl
+rename_add_commutes_at apple_bags apple_bags current = Refl
+rename_add_commutes_at apple_bags cereal current = Refl
+rename_add_commutes_at cereal bananas current = Refl
+rename_add_commutes_at cereal apple_bags current = Refl
+rename_add_commutes_at cereal cereal current = Refl
+
+-- Observable demonstration; host output is distinct from backend execution.
+main : IO ()
+main = putStrLn (show (total_cents sample_cart))

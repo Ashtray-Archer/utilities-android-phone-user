@@ -1,0 +1,11 @@
+module RejectedZero
+
+-- Standalone counterexample: a successor cannot be equal to zero.
+choice positive_amount one_of
+  one_more_than Number
+
+amount : positive_amount → Number
+amount (one_more_than additional_units) = S additional_units
+
+zero_entry : amount (one_more_than 0) = 0
+zero_entry = Refl

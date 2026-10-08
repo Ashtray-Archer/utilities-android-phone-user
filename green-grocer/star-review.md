@@ -249,7 +249,6 @@ execution claims must remain separate.
 | `android-NDK` / nearby utilities | Reuse the canonical NativeActivity/APK boundary, stable signer policy, and narrow useful rendering/input precedents. Do not copy unrelated sensor, clipboard, Shizuku, or keyboard behavior. |
 | Idriç | Independent G1 below; no production dependency for architecture A. No generated-C/RefC fallback presented as Idriç acceptance. |
 | IDK | No required feature of this cart calls for a second language/runtime. Its live repository was not resolved in this review; no readiness claim is made. |
-| Sokol | Defer. This screen has no shader, 3D, or cross-platform requirement that earns a graphics dependency. Reconsider for a demonstrated rendering need, not merely ecosystem consistency. |
 | ai-ci / Grease | Reuse applicable build/evidence contracts and Grease for newly authored orchestration. No generic enforcement fork in Green Grocer. |
 
 Current evidence behind these decisions:
@@ -384,7 +383,7 @@ replacement without uninstall separately for A1 and C67. If physical access or
 shared orchestration is unavailable, finish the authorized local work and name
 that boundary `NOT_RUN`/`BLOCKED`; do not report the executable slice accepted.
 
-**Exclusions:** Sokol/framework migration, inventory/Eagle/Kroger, accounts,
+**Exclusions:** framework migration, inventory/Eagle/Kroger, accounts,
 checkout, persistence, device-side compilation, compiler repair, and a new
 cross-project build orchestrator. Stop and return a concrete Sun question only
 if implementation disproves this selected boundary.

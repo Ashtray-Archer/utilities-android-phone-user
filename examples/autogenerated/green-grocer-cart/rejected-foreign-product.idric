@@ -1,0 +1,15 @@
+module RejectedForeignProduct
+
+-- Standalone counterexample: a raw numeric key is not a catalog identity.
+choice product_identity one_of
+  bananas
+  apple_bags
+  cereal
+
+accept_product : product_identity → Number
+accept_product bananas = 129
+accept_product apple_bags = 499
+accept_product cereal = 379
+
+foreign_product : Number
+foreign_product = accept_product 42
