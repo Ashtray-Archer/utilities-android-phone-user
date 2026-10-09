@@ -66,9 +66,9 @@ WARN = -Wall -Wextra -Werror -Wpedantic
 endif
 .PHONY: native check-owned-producer
 native: $(OUT)
-	"$(NDK_READELF)" -h -r "$(OUT)" > "$(OUT).elf"
-	! grep -Eq 'R_[A-Z0-9_]+_COPY' "$(OUT).elf"
-	cat "$(OUT).elf"
+	"$(NDK_READELF)" -h -r "$(OUT)" > "$(BUILD)/linked-output.elf"
+	! grep -Eq 'R_[A-Z0-9_]+_COPY' "$(BUILD)/linked-output.elf"
+	cat "$(BUILD)/linked-output.elf"
 	sha256sum "$(OUT)"
 
 check-owned-producer:
