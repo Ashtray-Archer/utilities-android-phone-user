@@ -5,7 +5,7 @@ AICI_ICK_ROOT ?= $(ROOT)/.ai-ci-ick
 ICK_STAGE_ROOT ?= $(ROOT)/build/ick
 ICK_STAGE ?= $(ICK_STAGE_ROOT)/$(ABI)
 BUILD ?= $(ROOT)/build/icky-$(PROFILE)/$(ABI)
-OUT ?= $(BUILD)/$(PROFILE)
+OUT ?= $(BUILD)/output/$(PROFILE)
 PROFILE_API_accelerometer = 26
 PROFILE_API_picker = 26
 PROFILE_API_hardware = 21
@@ -57,7 +57,7 @@ ifeq ($(PROFILE),accelerometer)
 LINK_FLAGS += -Wl,-u,ANativeActivity_onCreate
 endif
 ifeq ($(PROFILE),hardware)
-COMMON = -std=c17 -O2 -fPIE
+COMMON = -std=c17 -O2 -fPIC
 WARN = -Wall -Wextra -Wpedantic -Wno-deprecated-declarations
 LINK_FLAGS = -fPIE -pie
 endif
@@ -66,7 +66,9 @@ WARN = -Wall -Wextra -Werror -Wpedantic
 endif
 .PHONY: native check-owned-producer
 native: $(OUT)
-	"$(NDK_READELF)" -h "$(OUT)"
+	"$(NDK_READELF)" -h -r "$(OUT)" > "$(OUT).elf"
+	! grep -Eq 'R_[A-Z0-9_]+_COPY' "$(OUT).elf"
+	cat "$(OUT).elf"
 	sha256sum "$(OUT)"
 
 check-owned-producer:

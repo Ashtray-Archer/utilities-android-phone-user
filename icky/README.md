@@ -19,3 +19,15 @@ All twelve profile/ABI combinations compile and link successfully against actual
 All five compact/model tests, both ASan/UBSan picker tests and UTF conversion pass. JNI syntax is checked against OpenJDK 17.0.20+8's actual public JNI headers. A failed compact-vector encode now still records its existing assertion failure and skips decoding unwritten output; no assertion or error threshold was removed.
 
 These local proofs cover source compilation, platform linkage and host execution. Hosted exact-head package/emulator results and physical-device replacement acceptance are separate checks.
+# Hosted producer follow-up
+
+The required Idriç source metadata is declared in `.gitattributes`, allowing
+the shared source-producer gate to inspect the existing `.idric` files.
+The hardware executable compiles owned C with `-fPIC` and retains final `-pie`:
+GCC's `-fPIE` form produced an Android-incompatible COPY relocation against
+Bionic `__sF` on x86-64. Every produced ELF now rejects COPY relocations.
+All three hardware ABI builds pass with the original API21 floor; rebuilding
+the actual x86-64 source with the old `-fPIE` setting produces
+`R_X86_64_COPY` and the same gate rejects it. Shared-library profiles retain
+their existing PIC and hardening flags.
+
