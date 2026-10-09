@@ -40,19 +40,9 @@ staging="$work/staging"
 output="$root/build/clipboard-smoke-$abi.apk"
 mkdir -p "$objects" "$staging/lib/$abi" "$root/build"
 
-common_flags="-std=c17 -O2 -g -fPIC -ffunction-sections -fdata-sections"
-warnings="-Wall -Wextra -Werror -Wpedantic"
-
-"$compiler" $common_flags $warnings -I"$bridge_root" \
-    -c "$root/smoke.c" -o "$objects/smoke.o"
-"$compiler" $common_flags $warnings -I"$bridge_root" \
-    -c "$bridge_root/clipboard_jni.c" -o "$objects/clipboard_jni.o"
-"$compiler" $common_flags $warnings -I"$bridge_root" \
-    -c "$bridge_root/utf8.c" -o "$objects/utf8.o"
-
-"$compiler" -shared -Wl,--no-undefined -Wl,--gc-sections -Wl,-z,relro,-z,now \
-    "$objects/smoke.o" "$objects/clipboard_jni.o" "$objects/utf8.o" \
-    -landroid -llog -o "$staging/lib/$abi/libclipboard_smoke.so"
+make -f "$bridge_root/../icky/Android.mk" native \
+    PROFILE=clipboard ABI="$abi" API="$api" NDK="$ndk_root" \
+    BUILD="$objects" OUT="$staging/lib/$abi/libclipboard_smoke.so"
 
 base_apk="$work/base.apk"
 unsigned_apk="$work/unsigned.apk"
@@ -69,14 +59,15 @@ cp "$base_apk" "$unsigned_apk"
 )
 "$build_tools/zipalign" -f -P 16 4 "$unsigned_apk" "$aligned_apk"
 
-keystore="$work/debug.keystore"
-keytool -genkeypair -noprompt \
-    -keystore "$keystore" -storepass android -keypass android \
-    -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" \
-    -keyalg RSA -keysize 2048 -validity 10000 >/dev/null 2>&1
+keystore=${ANDROID_KEYSTORE:?ANDROID_KEYSTORE must name the persistent public test signer}
+keytool -exportcert -keystore "$keystore" -storetype PKCS12 \
+    -storepass wegert-debug -alias wegert-debug |
+    sha256sum |
+    grep -qi '^de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9 '
 "$build_tools/apksigner" sign \
-    --ks "$keystore" --ks-key-alias androiddebugkey \
-    --ks-pass pass:android --key-pass pass:android \
+    --ks "$keystore" --ks-key-alias wegert-debug \
+    --ks-pass pass:wegert-debug --key-pass pass:wegert-debug \
     --out "$output" "$aligned_apk"
+"$build_tools/apksigner" verify --verbose --print-certs "$output"
 
 printf '%s\n' "$output"

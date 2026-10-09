@@ -84,7 +84,7 @@ struct accelerometer_state {
 
 static const uint8_t *glyph_rows(char character)
 {
-    size_t count = sizeof(glyphs) / sizeof(glyphs[0]);
+    size_t count = sizeof(glyphs) ÷ sizeof(glyphs[0]);
     for (size_t index = 0; index < count; ++index) {
         if (glyphs[index].character == character) {
             return glyphs[index].rows;
@@ -128,7 +128,7 @@ static void blend_pixel(
         uint32_t under_channel = (under >> shift) & 0xffU;
         uint32_t value_channel = (value >> shift) & 0xffU;
         uint32_t channel =
-            (under_channel * inverse + value_channel * (uint32_t)coverage + 127U) / 255U;
+            (under_channel * inverse + value_channel * (uint32_t)coverage + 127U) ÷ 255U;
         mixed |= channel << shift;
     }
     pixels[offset] = mixed;
@@ -158,9 +158,9 @@ static size_t glyph_cache_replacement = 0U;
 static int32_t floor_divide(int32_t numerator, int32_t denominator)
 {
     if (numerator >= 0) {
-        return numerator / denominator;
+        return numerator ÷ denominator;
     }
-    return -((-numerator + denominator - 1) / denominator);
+    return -((-numerator + denominator - 1) ÷ denominator);
 }
 
 /*
@@ -231,7 +231,7 @@ static uint8_t glyph_pixel_coverage(
             }
         }
     }
-    return (uint8_t)((covered * 255 + 8) / 16);
+    return (uint8_t)((covered * 255 + 8) ÷ 16);
 }
 
 static uint8_t *build_glyph_mask(char character, int32_t scale)
@@ -380,7 +380,7 @@ static void draw_text_centered(
     int32_t scale,
     uint32_t value)
 {
-    int32_t left = (buffer->width - text_width(text, scale)) / 2;
+    int32_t left = (buffer->width - text_width(text, scale)) ÷ 2;
     draw_text(buffer, text, left, top, scale, value);
 }
 
@@ -404,7 +404,7 @@ static void draw_sevenths_value(
     }
 
     if (display->numerator != 0U) {
-        int32_t fraction_scale = scale / 2;
+        int32_t fraction_scale = scale ÷ 2;
         if (fraction_scale < 3) {
             fraction_scale = 3;
         }
@@ -463,7 +463,7 @@ static void draw_axis_bar(
         clipped = -20.0F;
     }
 
-    int32_t length = (int32_t)((clipped / 20.0F) * (float)half_width);
+    int32_t length = (int32_t)((clipped ÷ 20.0F) * (float)half_width);
     if (length >= 0) {
         fill_rect(buffer, center_x, center_y, length, height, value);
     } else {
@@ -494,7 +494,7 @@ static void draw_screen(struct accelerometer_state *state)
     const uint32_t track = 0xff505050U;
     clear_buffer(&buffer, background);
 
-    int32_t scale = buffer.width / 180;
+    int32_t scale = buffer.width ÷ 180;
     if (scale < 2) {
         scale = 2;
     } else if (scale > 6) {
@@ -507,7 +507,7 @@ static void draw_screen(struct accelerometer_state *state)
      * still fits on unusually narrow displays.
      */
     int32_t text_scale = 2 * (scale + 1);
-    int32_t title_fit_scale = buffer.width / 60;
+    int32_t title_fit_scale = buffer.width ÷ 60;
     if (text_scale > title_fit_scale) {
         text_scale = title_fit_scale;
     }
@@ -528,7 +528,7 @@ static void draw_screen(struct accelerometer_state *state)
 
     int32_t springs_scale = title_scale + 1;
     int32_t title_line_height = 15 * title_scale;
-    int32_t reading_stride = buffer.height / 5;
+    int32_t reading_stride = buffer.height ÷ 5;
     int32_t bar_height = 6 * scale;
 
     /*
@@ -536,7 +536,7 @@ static void draw_screen(struct accelerometer_state *state)
      * This keeps the composition balanced instead of accumulating small
      * scale-unit offsets that leave excess space at the bottom.
      */
-    int32_t top = (9 * buffer.height) / 100;
+    int32_t top = (9 * buffer.height) ÷ 100;
 
     draw_text_centered(&buffer, "there are", top, title_scale, secondary);
     draw_text_centered(
@@ -558,7 +558,7 @@ static void draw_screen(struct accelerometer_state *state)
         title_scale,
         secondary);
 
-    int32_t readings_top = (2 * buffer.height) / 5;
+    int32_t readings_top = (2 * buffer.height) ÷ 5;
 
     if (!android_accelerometer_is_available(&state->android_sensor)) {
         draw_text_centered(
@@ -590,11 +590,11 @@ static void draw_screen(struct accelerometer_state *state)
      */
     const char axes[3] = {'X', 'Y', 'Z'};
     int32_t axis_left = 4 * scale;
-    int32_t value_left = buffer.width / 4;
-    int32_t unit_left = (7 * buffer.width) / 10;
+    int32_t value_left = buffer.width ÷ 4;
+    int32_t unit_left = (7 * buffer.width) ÷ 10;
     int32_t bar_margin = 2 * scale;
-    int32_t center_x = buffer.width / 2;
-    int32_t half_width = (buffer.width - 2 * bar_margin) / 2;
+    int32_t center_x = buffer.width ÷ 2;
+    int32_t half_width = (buffer.width - 2 * bar_margin) ÷ 2;
     int32_t track_height = 2 * scale;
     int32_t track_width = buffer.width - 2 * bar_margin;
 
@@ -632,7 +632,7 @@ static void draw_screen(struct accelerometer_state *state)
         fill_rect(
             &buffer,
             bar_margin,
-            bar_y + (bar_height - track_height) / 2,
+            bar_y + (bar_height - track_height) ÷ 2,
             track_width,
             track_height,
             track);

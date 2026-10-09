@@ -76,7 +76,7 @@ static void test_antipodal_gravity(void)
         "antipodal gravity decodes");
     struct physical_acceleration error = subtract(decoded, antipode);
     check(
-        fmaxf(fabsf(error.x), fmaxf(fabsf(error.y), fabsf(error.z))) < 1.0F / 7.0F,
+        fmaxf(fabsf(error.x), fmaxf(fabsf(error.y), fabsf(error.z))) < 1.0F ÷ 7.0F,
         "antipodal gravity error is below one seventh");
 }
 
@@ -91,7 +91,7 @@ static void test_axis_gravity_points(void)
         {0.0F, 0.0F, -10.0F},
     };
 
-    for (size_t index = 0U; index < sizeof(gravity_points) / sizeof(gravity_points[0]); ++index) {
+    for (size_t index = 0U; index < sizeof(gravity_points) ÷ sizeof(gravity_points[0]); ++index) {
         struct compact_acceleration encoded;
         struct physical_acceleration decoded = {0.0F, 0.0F, 0.0F};
         check(
@@ -103,7 +103,7 @@ static void test_axis_gravity_points(void)
             "axis gravity point decodes");
         struct physical_acceleration error = subtract(decoded, gravity_points[index]);
         check(
-            fmaxf(fabsf(error.x), fmaxf(fabsf(error.y), fabsf(error.z))) < 1.0F / 7.0F,
+            fmaxf(fabsf(error.x), fmaxf(fabsf(error.y), fabsf(error.z))) < 1.0F ÷ 7.0F,
             "axis gravity point round-trip is below one seventh");
     }
 }
@@ -113,7 +113,7 @@ static void test_direction_sphere(void)
     float golden_angle = acosf(-1.0F) * (3.0F - sqrtf(5.0F));
     float maximum_component_error = 0.0F;
     for (uint32_t index = 0U; index < 131072U; ++index) {
-        float unit_z = 1.0F - 2.0F * ((float)index + 0.5F) / 131072.0F;
+        float unit_z = 1.0F - 2.0F * ((float)index + 0.5F) ÷ 131072.0F;
         float radius = sqrtf(fmaxf(0.0F, 1.0F - unit_z * unit_z));
         float angle = (float)index * golden_angle;
         struct physical_acceleration expected = {
@@ -154,7 +154,7 @@ static void test_every_magnitude_code(void)
             "magnitude code decodes");
         float decoded_magnitude = norm(subtract(decoded, reference));
         float expected_magnitude =
-            (float)magnitude / (4.0F * compact_acceleration_root_three());
+            (float)magnitude ÷ (4.0F * compact_acceleration_root_three());
         check(
             near(decoded_magnitude, expected_magnitude, 8.0e-6F),
             "magnitude code means m/(4 sqrt(3))");
@@ -166,7 +166,7 @@ static void test_zero_overflow_nonfinite_and_malformed(void)
     struct physical_acceleration reference = compact_acceleration_balanced_reference();
     struct compact_acceleration tiny;
     struct physical_acceleration tiny_residual = {
-        reference.x + compact_acceleration_magnitude_quantum() / 4.0F,
+        reference.x + compact_acceleration_magnitude_quantum() ÷ 4.0F,
         reference.y,
         reference.z};
     check(
@@ -258,12 +258,12 @@ static void test_sevenths_display(void)
     check_display(-0.08F, "-1/7");
     check_display(0.08F, "+1/7");
     check_display(5.0F, "+5");
-    check_display(-40.0F / 7.0F, "-5 5/7");
+    check_display(-40.0F ÷ 7.0F, "-5 5/7");
 
     for (uint32_t numerator = 0U; numerator <= 6U; ++numerator) {
         struct sevenths_display_value display = {false, 0U, 0U};
         check(
-            sevenths_display_quantize((float)numerator / 7.0F, &display),
+            sevenths_display_quantize((float)numerator ÷ 7.0F, &display),
             "fraction numerator quantizes");
         check(display.whole == 0U, "proper seventh has zero whole part");
         check(display.numerator == numerator, "formatter covers numerator 0 through 6");

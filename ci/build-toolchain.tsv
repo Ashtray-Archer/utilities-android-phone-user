@@ -1,0 +1,26 @@
+build_id	target	toolchain	ick_revision	ick_status	ick_evidence
+accelerometer-owned-c	armeabi-v7a-api26	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+accelerometer-ndk-boundary	armeabi-v7a-api26	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+accelerometer-owned-c	arm64-v8a-api26	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+accelerometer-ndk-boundary	arm64-v8a-api26	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+accelerometer-owned-c	x86_64-api26	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+accelerometer-ndk-boundary	x86_64-api26	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+picker-owned-c	armeabi-v7a-api26	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+picker-ndk-boundary	armeabi-v7a-api26	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+picker-owned-c	arm64-v8a-api26	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+picker-ndk-boundary	arm64-v8a-api26	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+picker-owned-c	x86_64-api26	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+picker-ndk-boundary	x86_64-api26	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+hardware-owned-c	armeabi-v7a-api21	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+hardware-ndk-boundary	armeabi-v7a-api21	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+hardware-owned-c	arm64-v8a-api21	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+hardware-ndk-boundary	arm64-v8a-api21	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+hardware-owned-c	x86_64-api21	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+hardware-ndk-boundary	x86_64-api21	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+clipboard-owned-c	armeabi-v7a-api24	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+clipboard-ndk-boundary	armeabi-v7a-api24	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+clipboard-owned-c	arm64-v8a-api24	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+clipboard-ndk-boundary	arm64-v8a-api24	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+clipboard-owned-c	x86_64-api24	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	icky/README.md; exact source compiled and linked locally with preserved API and warnings
+clipboard-ndk-boundary	x86_64-api24	ndk	c61e448251744a2f40ad743ebef1a027bdcd2f9d	gap:upstream-glue-assembler-and-platform-link	NDK r27c sysroot, unmodified NativeActivity glue where used, assembly and link remain platform tools
+utility-host-tests	x86_64-linux-gnu	ick	c61e448251744a2f40ad743ebef1a027bdcd2f9d	qualified	Existing model, sanitized picker, UTF conversion and JNI header contract tests pass through ICK

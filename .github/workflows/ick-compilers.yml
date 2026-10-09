@@ -1,0 +1,35 @@
+name: Qualified ICK Android compilers
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  compiler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [armeabi-v7a, arm64-v8a, x86_64]
+    steps:
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+      - name: Install the declared Android NDK
+        run: sdkmanager "ndk;27.2.12479018"
+      - name: Build and qualify the ICK frontend
+        uses: isomorphisms/ai-ci/ick-android@4ea071a96239f3a29ca6d98454feb59947d87cfe
+        with:
+          abi: ${{ matrix.abi }}
+          ndk: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+          fortify-source: '2'
+      - name: Retain the installed compiler and qualification receipt
+        run: tar -C "${{ runner.temp }}/ick-android-${{ matrix.abi }}-stage" -czf "${{ runner.temp }}/ick-${{ matrix.abi }}.tar.gz" .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ick-${{ matrix.abi }}
+          path: ${{ runner.temp }}/ick-${{ matrix.abi }}.tar.gz
+          if-no-files-found: error
