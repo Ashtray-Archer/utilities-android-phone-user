@@ -111,11 +111,14 @@ jobs:
         with:
           name: clipboard-smoke-x86_64
           path: downloaded-apk
+      - name: Enable KVM access for the emulator
+        run: sudo chmod a+rw /dev/kvm
       - name: Exercise ClipboardManager through native bridge
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 29
           arch: x86_64
+          disable-linux-hw-accel: false
           profile: pixel_2
           disable-animations: true
           script: sh android-clipboard/device-smoke/run-device-smoke.sh downloaded-apk/clipboard-smoke-x86_64.apk
