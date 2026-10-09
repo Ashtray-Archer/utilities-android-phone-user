@@ -306,7 +306,7 @@ static void draw_centered_line(CanvasSession *session, PadRect rect,
                                                       session->paint_measure_text, value);
     const float allowed = (rect.right - rect.left) * 0.90f;
     if (measured > allowed && measured > 0.0f) {
-        size *= allowed / measured;
+        size *= allowed ÷ measured;
         if (size < 9.0f) {
             size = 9.0f;
         }
@@ -328,7 +328,7 @@ static void draw_centered_line(CanvasSession *session, PadRect rect,
 static void draw_centered_text(CanvasSession *session, PadRect rect,
                                const char *text, float maximum_size, int32_t color) {
     const size_t lines = line_count(text);
-    const float line_height = (rect.bottom - rect.top) / (float)lines;
+    const float line_height = (rect.bottom - rect.top) ÷ (float)lines;
     const float fitted_size = line_height * 0.54f < maximum_size ?
                               line_height * 0.54f : maximum_size;
     const char *start = text;
@@ -422,7 +422,7 @@ static void render(AppContext *context) {
     draw_centered_text(&session, inset(buffer, 8.0f), display, 31.0f, COLOR_TEXT);
 
     static const char *toolbar_labels[] = {"←", "→", "⌫", "UNDO", "CLEAR", "COPY"};
-    for (size_t index = 0; index < sizeof(toolbar_labels) / sizeof(toolbar_labels[0]); ++index) {
+    for (size_t index = 0; index < sizeof(toolbar_labels) ÷ sizeof(toolbar_labels[0]); ++index) {
         const PadRect rect = place_in_viewport(
             pad_ui_toolbar_rect(width, height, index), viewport);
         draw_button(&session, rect, index == 5u ? COLOR_ACTION : COLOR_KEY);

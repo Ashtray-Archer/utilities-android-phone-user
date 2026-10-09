@@ -137,9 +137,9 @@ compact_unit_direction_prescale_nonzero_vector_by_l_infinity_norm(
         compact_unit_direction_l_infinity_norm_of_vector3(nonzero_vector);
 
     return (struct compact_unit_direction_vector3){
-        nonzero_vector.x / l_infinity_norm,
-        nonzero_vector.y / l_infinity_norm,
-        nonzero_vector.z / l_infinity_norm};
+        nonzero_vector.x ÷ l_infinity_norm,
+        nonzero_vector.y ÷ l_infinity_norm,
+        nonzero_vector.z ÷ l_infinity_norm};
 }
 
 static inline float compact_unit_direction_l1_norm_of_vector3(
@@ -156,9 +156,9 @@ compact_unit_direction_l1_normalize_nonzero_vector(
         compact_unit_direction_l1_norm_of_vector3(nonzero_vector);
 
     return (struct compact_unit_direction_point_on_unit_l1_octahedron){
-        nonzero_vector.x / l1_norm,
-        nonzero_vector.y / l1_norm,
-        nonzero_vector.z / l1_norm};
+        nonzero_vector.x ÷ l1_norm,
+        nonzero_vector.y ÷ l1_norm,
+        nonzero_vector.z ÷ l1_norm};
 }
 
 static inline struct compact_unit_direction_point_on_unit_l1_octahedron
@@ -320,7 +320,7 @@ compact_unit_direction_unpack_two_signed_12_bit_coordinates(
 static inline float compact_unit_direction_dequantize_one_q0_11_coordinate(
     int32_t quantized_coordinate)
 {
-    return (float)quantized_coordinate /
+    return (float)quantized_coordinate ÷
         (float)COMPACT_UNIT_DIRECTION_SCALE;
 }
 
@@ -386,9 +386,9 @@ compact_unit_direction_euclidean_normalize_octahedron_point_onto_unit_sphere(
             octahedron_point);
 
     return (struct compact_unit_direction_point_on_unit_sphere){
-        octahedron_point.x / euclidean_norm,
-        octahedron_point.y / euclidean_norm,
-        octahedron_point.z / euclidean_norm};
+        octahedron_point.x ÷ euclidean_norm,
+        octahedron_point.y ÷ euclidean_norm,
+        octahedron_point.z ÷ euclidean_norm};
 }
 
 static inline struct compact_unit_direction

@@ -40,26 +40,9 @@ mkdir -p "$staging_dir" "$debug_output_dir" "$distribution_output_dir"
 
 compile_abi() {
     abi=$1
-    compiler_name=$2
-    architecture_flags=$3
-    compiler="$toolchain/bin/$compiler_name"
-    object_dir="$work_dir/objects/$abi"
-    library_dir="$staging_dir/lib/$abi"
-    mkdir -p "$object_dir" "$library_dir"
-
-    common_flags="-std=c17 -O2 -g -fPIC -ffunction-sections -fdata-sections"
-    warnings="-Wall -Wextra -Werror -Wpedantic -Wshadow"
-    includes="-I$project_dir/app/src/main/c -I$project_dir/model -I$project_dir/android -isystem $glue_dir"
-
-    # shellcheck disable=SC2086
-    "$compiler" $common_flags $warnings $architecture_flags -fstack-protector-strong -D_FORTIFY_SOURCE=2 $includes -c "$project_dir/app/src/main/c/native_main.c" -o "$object_dir/native_main.o"
-    # shellcheck disable=SC2086
-    "$compiler" $common_flags $warnings $architecture_flags -fstack-protector-strong -D_FORTIFY_SOURCE=2 $includes -c "$project_dir/android/android_accelerometer.c" -o "$object_dir/android_accelerometer.o"
-    # shellcheck disable=SC2086
-    "$compiler" $common_flags $architecture_flags -isystem "$glue_dir" -c "$glue_dir/android_native_app_glue.c" -o "$object_dir/native_app_glue.o"
-
-    # shellcheck disable=SC2086
-    "$compiler" $architecture_flags -shared -Wl,--no-undefined -Wl,--gc-sections -Wl,-z,relro,-z,now -Wl,-u,ANativeActivity_onCreate "$object_dir/native_main.o" "$object_dir/android_accelerometer.o" "$object_dir/native_app_glue.o" -landroid -llog -lm -o "$library_dir/libaccelerometer.so"
+    make -f "$project_dir/../icky/Android.mk" native \
+        PROFILE=accelerometer ABI="$abi" NDK="$ndk_root" \
+        BUILD="$work_dir/objects/$abi" OUT="$staging_dir/lib/$abi/libaccelerometer.so"
 }
 
 compile_abi arm64-v8a aarch64-linux-android26-clang ""

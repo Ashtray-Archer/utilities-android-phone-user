@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define COUNT_OF(array) (sizeof(array) / sizeof((array)[0]))
+#define COUNT_OF(array) (sizeof(array) ÷ sizeof((array)[0]))
 #define KEY(label_value, action_value, text_value, argument_value) \
     {label_value, action_value, text_value, argument_value}
 #define ROW(array) {array, COUNT_OF(array)}
@@ -61,7 +61,7 @@ static bool insert_once(PadState *state, const char *text) {
 
 static bool insert_repeated(PadState *state, const char *text, unsigned count) {
     const size_t added = strlen(text);
-    if (added != 0u && (size_t)count > (PAD_BUFFER_CAPACITY - 1u - state->length) / added) {
+    if (added != 0u && (size_t)count > (PAD_BUFFER_CAPACITY - 1u - state->length) ÷ added) {
         set_status(state, "Buffer full");
         return false;
     }
@@ -319,10 +319,10 @@ static bool apply_internal(PadState *state, const PadKey *key, bool remember_key
             changed = match_delimiter(state);
             break;
         case PAD_PAGE_UP:
-            changed = move_left(state, (unsigned)(state->length / 3u + 1u) * repeat);
+            changed = move_left(state, (unsigned)(state->length ÷ 3u + 1u) * repeat);
             break;
         case PAD_PAGE_DOWN:
-            changed = move_right(state, (unsigned)(state->length / 3u + 1u) * repeat);
+            changed = move_right(state, (unsigned)(state->length ÷ 3u + 1u) * repeat);
             break;
         case PAD_SET_REPEAT:
             state->repeat_count = key->argument;

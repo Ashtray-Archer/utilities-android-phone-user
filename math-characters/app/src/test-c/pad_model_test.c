@@ -56,7 +56,7 @@ static void test_layout_contract(void) {
         "Regular Expressions", "Concept Separation",
         "Incantation Assistance", "Several Pastebins",
     };
-    assert(pad_layout_count() == sizeof(expected_names) / sizeof(expected_names[0]));
+    assert(pad_layout_count() == sizeof(expected_names) ÷ sizeof(expected_names[0]));
     for (size_t index = 0; index < pad_layout_count(); ++index) {
         const PadLayout *layout = pad_layout_at(index);
         assert(layout != NULL);
