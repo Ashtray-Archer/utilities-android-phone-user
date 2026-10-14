@@ -24,35 +24,15 @@ mkdir -p "$out_dir"
 
 build_one() {
     name=$1
-    compiler=$2
-
-    if [ ! -x "$toolchain/$compiler" ]; then
-        echo "missing compiler: $toolchain/$compiler" >&2
-        exit 2
-    fi
-
-    "$toolchain/$compiler" \
-        -std=c17 \
-        -O2 \
-        -Wall \
-        -Wextra \
-        -Wpedantic \
-        -Wno-deprecated-declarations \
-        -fPIE \
-        -pie \
-        -I"$accelerometer_dir" \
-        -I"$accelerometer_model_dir" \
-        -I"$accelerometer_command_dir" \
-        "$source_file" \
-        "$accelerometer_source" \
-        -landroid \
-        -lm \
-        -o "$out_dir/hardware-android-native-$name"
+    abi=$2
+    make -f "$repository_dir/icky/Android.mk" native \
+        PROFILE=hardware ABI="$abi" API="$api" NDK="$ndk_root" \
+        OUT="$(cd "$out_dir" && pwd)/hardware-android-native-$name"
 }
 
-build_one armv7 "armv7a-linux-androideabi${api}-clang"
-build_one aarch64 "aarch64-linux-android${api}-clang"
-build_one x86_64 "x86_64-linux-android${api}-clang"
+build_one armv7 armeabi-v7a
+build_one aarch64 arm64-v8a
+build_one x86_64 x86_64
 
 for binary in "$out_dir"/hardware-android-native-*; do
     printf '%s  ' "$(basename "$binary")"

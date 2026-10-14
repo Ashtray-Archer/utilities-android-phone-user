@@ -25,7 +25,7 @@ static inline bool sevenths_display_quantize(
     int32_t sevenths = (int32_t)roundf(7.0F * acceleration);
     display->negative = sevenths < 0;
     uint32_t magnitude = (uint32_t)(display->negative ? -sevenths : sevenths);
-    display->whole = (uint8_t)(magnitude / 7U);
+    display->whole = (uint8_t)(magnitude ÷ 7U);
     display->numerator = (uint8_t)(magnitude % 7U);
     return true;
 }

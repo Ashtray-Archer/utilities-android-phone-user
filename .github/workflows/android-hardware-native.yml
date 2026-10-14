@@ -7,6 +7,8 @@ on:
       - "accelerometer/android/**"
       - "accelerometer/model/**"
       - "accelerometer/command/**"
+      - "icky/**"
+      - ".github/workflows/ick-compilers.yml"
       - ".github/workflows/android-hardware-native.yml"
   push:
     branches:
@@ -17,19 +19,44 @@ on:
       - "accelerometer/android/**"
       - "accelerometer/model/**"
       - "accelerometer/command/**"
+      - "icky/**"
+      - ".github/workflows/ick-compilers.yml"
       - ".github/workflows/android-hardware-native.yml"
 
 jobs:
+  compilers:
+    uses: ./.github/workflows/ick-compilers.yml
+
   build:
+    needs: compilers
     runs-on: ubuntu-latest
     env:
       NDK_VERSION: 27.2.12479018
       ANDROID_API: 21
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Check out shared ICK source producer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          path: .ai-ci-ick
+      - name: Download qualified compiler stages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: ick-*
+          path: build/ick-packages
+          merge-multiple: true
+      - name: Restore qualified compiler stages
+        run: |
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=armeabi-v7a ICK_STAGE="$GITHUB_WORKSPACE/build/ick/armeabi-v7a" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-armeabi-v7a.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=arm64-v8a ICK_STAGE="$GITHUB_WORKSPACE/build/ick/arm64-v8a" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-arm64-v8a.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=x86_64 ICK_STAGE="$GITHUB_WORKSPACE/build/ick/x86_64" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-x86_64.tar.gz"
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
         with:
           packages: platform-tools
 
@@ -41,6 +68,12 @@ jobs:
 
       - name: Build ARMv7, AArch64, and x86_64 probes
         run: sh hardware/build-android-native.sh
+
+      - name: Verify declared source producers
+        uses: isomorphisms/ai-ci@4ea071a96239f3a29ca6d98454feb59947d87cfe
+        with:
+          suite: ci/build-toolchain-suite.tsv
+          root: .
 
       - name: Record ELF and dynamic dependency evidence
         run: |
@@ -60,7 +93,7 @@ jobs:
           cp hardware/probe-phone.sh out/phone-hardware-test/
           cp hardware/termux-api/sample.sh out/phone-hardware-test/termux-api-sample.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: phone-hardware-test
           path: out/phone-hardware-test/

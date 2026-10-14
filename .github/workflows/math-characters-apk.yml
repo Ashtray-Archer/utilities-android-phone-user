@@ -4,24 +4,33 @@ on:
   pull_request:
     paths:
       - 'math-characters/**'
+      - 'icky/**'
+      - '.github/workflows/ick-compilers.yml'
       - '.github/workflows/math-characters-apk.yml'
   push:
     branches: [main]
     paths:
       - 'math-characters/**'
+      - 'icky/**'
+      - '.github/workflows/ick-compilers.yml'
       - '.github/workflows/math-characters-apk.yml'
 
 permissions:
   contents: read
 
 jobs:
+  compilers:
+    uses: ./.github/workflows/ick-compilers.yml
+
   idric-layout-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/Idric
           ref: d93b5cf538836325812813e81c2dfdac159397b0
@@ -29,7 +38,7 @@ jobs:
 
       - name: Restore pinned Idriç compiler
         id: idric-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             idric-compiler/.tools
@@ -51,6 +60,7 @@ jobs:
           math-characters/check-idric-layouts.sh
 
   test-build:
+    needs: compilers
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -60,7 +70,26 @@ jobs:
       ANDROID_KEY_ALIAS: wegert-debug
       ANDROID_EXPECTED_CERT_SHA256: DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Check out shared ICK source producer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          path: .ai-ci-ick
+      - name: Download qualified compiler stages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: ick-*
+          path: build/ick-packages
+          merge-multiple: true
+      - name: Restore qualified compiler stages
+        run: |
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=armeabi-v7a ICK_STAGE="$GITHUB_WORKSPACE/build/ick/armeabi-v7a" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-armeabi-v7a.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=arm64-v8a ICK_STAGE="$GITHUB_WORKSPACE/build/ick/arm64-v8a" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-arm64-v8a.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=x86_64 ICK_STAGE="$GITHUB_WORKSPACE/build/ick/x86_64" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-x86_64.tar.gz"
 
       - name: Check out stable public test signer
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -71,27 +100,40 @@ jobs:
           sparse-checkout: _/build/app/wegert-debug.keystore
           sparse-checkout-cone-mode: false
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
 
       - name: Install Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018'
 
+      - name: Qualify owned host C producer
+        id: ick
+        uses: isomorphisms/ai-ci/ick-host@4ea071a96239f3a29ca6d98454feb59947d87cfe
       - name: Test C model and touch geometry
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
         run: math-characters/run-host-tests.sh
 
       - name: Build native APK
         run: math-characters/build-apk.sh
 
+      - name: Verify declared source producers
+        uses: isomorphisms/ai-ci@4ea071a96239f3a29ca6d98454feb59947d87cfe
+        with:
+          suite: ci/build-toolchain-suite.tsv
+          root: .
+
       - name: Verify native APK contract
         run: math-characters/ci/check-apk.sh math-characters/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: programmers-unicode-pad-debug-apk
           path: math-characters/app/build/outputs/apk/debug/app-debug.apk
@@ -102,25 +144,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: programmers-unicode-pad-debug-apk
           path: downloaded-apk
 
+      - name: Enable KVM access for the emulator
+        run: sudo chmod a+rw /dev/kvm
       - name: Launch and exercise native picker
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 29
           arch: x86_64
           profile: pixel_2
+          disable-linux-hw-accel: false
           disable-animations: true
           script: math-characters/ci/emulator-smoke.sh downloaded-apk/app-debug.apk /tmp/programmers-unicode-pad.png
 
       - name: Upload smoke-test screen
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: programmers-unicode-pad-smoke-screen
           path: /tmp/programmers-unicode-pad.png

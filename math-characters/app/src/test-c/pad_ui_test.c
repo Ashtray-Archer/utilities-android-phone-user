@@ -40,7 +40,7 @@ static void test_navigation_and_toolbar(void) {
         PAD_HIT_CURSOR_LEFT, PAD_HIT_CURSOR_RIGHT, PAD_HIT_BACKSPACE,
         PAD_HIT_UNDO, PAD_HIT_CLEAR, PAD_HIT_COPY,
     };
-    for (size_t index = 0; index < sizeof(expected) / sizeof(expected[0]); ++index) {
+    for (size_t index = 0; index < sizeof(expected) ÷ sizeof(expected[0]); ++index) {
         rect = pad_ui_toolbar_rect(width, height, index);
         assert(pad_ui_hit_test(width, height, layout,
                                (rect.left + rect.right) * 0.5f,

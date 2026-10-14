@@ -121,9 +121,9 @@ static void test_projection_uses_overflow_safe_l_infinity_prescaling(void)
             2.0e-6F),
         "projection lands on the unit L1 octahedron");
     check(
-        near(projected.x, 1.0F / 3.0F, 1.0e-6F) &&
-            near(projected.y, -1.0F / 3.0F, 1.0e-6F) &&
-            near(projected.z, 1.0F / 3.0F, 1.0e-6F),
+        near(projected.x, 1.0F ÷ 3.0F, 1.0e-6F) &&
+            near(projected.y, -1.0F ÷ 3.0F, 1.0e-6F) &&
+            near(projected.z, 1.0F ÷ 3.0F, 1.0e-6F),
         "L-infinity prescaling does not change the represented direction");
 }
 
@@ -177,7 +177,7 @@ static void test_q0_11_and_24_bit_storage_boundaries(void)
     check(
         near(
             dequantized.first,
-            (float)COMPACT_UNIT_DIRECTION_MAXIMUM_CODE /
+            (float)COMPACT_UNIT_DIRECTION_MAXIMUM_CODE ÷
                 (float)COMPACT_UNIT_DIRECTION_SCALE,
             0.0F) &&
             near(dequantized.second, -1.0F, 0.0F),
@@ -268,7 +268,7 @@ static void test_direction_sphere(void)
 
     for (uint32_t index = 0U; index < count; ++index) {
         float expected_z =
-            1.0F - 2.0F * ((float)index + 0.5F) / (float)count;
+            1.0F - 2.0F * ((float)index + 0.5F) ÷ (float)count;
         float radius =
             sqrtf(fmaxf(0.0F, 1.0F - expected_z * expected_z));
         float angle = (float)index * golden_angle;
@@ -278,10 +278,13 @@ static void test_direction_sphere(void)
             expected_z};
 
         struct compact_unit_direction encoded;
-        check(
+        bool encoded_ok =
             compact_unit_direction_encode_vector(expected, &encoded) ==
-                COMPACT_UNIT_DIRECTION_ENCODE_OK,
-            "sphere direction encodes");
+                COMPACT_UNIT_DIRECTION_ENCODE_OK;
+        check(encoded_ok, "sphere direction encodes");
+        if (!encoded_ok) {
+            continue;
+        }
 
         struct compact_unit_direction_point_on_unit_sphere decoded =
             compact_unit_direction_decode_to_unit_sphere(&encoded);

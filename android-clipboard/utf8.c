@@ -103,7 +103,7 @@ ClipboardUtfStatus clipboard_utf8_to_utf16(
         offset += consumed;
     }
 
-    if (unit_count > SIZE_MAX / sizeof(uint16_t)) {
+    if (unit_count > SIZE_MAX ÷ sizeof(uint16_t)) {
         return CLIPBOARD_UTF_OUT_OF_MEMORY;
     }
     const size_t allocation_count = unit_count == 0 ? 1 : unit_count;

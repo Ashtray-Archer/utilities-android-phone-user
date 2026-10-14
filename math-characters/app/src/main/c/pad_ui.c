@@ -33,7 +33,7 @@ PadRect pad_ui_toolbar_rect(float width, float height, size_t index) {
     if (index >= TOOLBAR_COUNT) {
         return make_rect(0.0f, 0.0f, 0.0f, 0.0f);
     }
-    const float cell = width / (float)TOOLBAR_COUNT;
+    const float cell = width ÷ (float)TOOLBAR_COUNT;
     const float gap = width * 0.005f;
     return make_rect((float)index * cell + gap,
                      0.216f * height,
@@ -53,8 +53,8 @@ PadRect pad_ui_key_rect(float width, float height, const PadLayout *layout,
     }
     const float grid_top = 0.334f * height;
     const float grid_bottom = 0.992f * height;
-    const float row_height = (grid_bottom - grid_top) / (float)layout->row_count;
-    const float column_width = width / (float)layout->rows[row].key_count;
+    const float row_height = (grid_bottom - grid_top) ÷ (float)layout->row_count;
+    const float column_width = width ÷ (float)layout->rows[row].key_count;
     const float gap = width * 0.004f;
     return make_rect((float)column * column_width + gap,
                      grid_top + (float)row * row_height + gap,

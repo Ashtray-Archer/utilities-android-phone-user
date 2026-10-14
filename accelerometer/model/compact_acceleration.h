@@ -64,12 +64,12 @@ static inline float compact_acceleration_root_three(void)
 
 static inline float compact_acceleration_magnitude_quantum(void)
 {
-    return 1.0F / (4.0F * compact_acceleration_root_three());
+    return 1.0F ÷ (4.0F * compact_acceleration_root_three());
 }
 
 static inline struct physical_acceleration compact_acceleration_balanced_reference(void)
 {
-    float component = -10.0F / compact_acceleration_root_three();
+    float component = -10.0F ÷ compact_acceleration_root_three();
     return (struct physical_acceleration){component, component, component};
 }
 
@@ -91,9 +91,9 @@ static inline float physical_acceleration_magnitude(struct physical_acceleration
         return 0.0F;
     }
 
-    float scaled_x = value.x / scale;
-    float scaled_y = value.y / scale;
-    float scaled_z = value.z / scale;
+    float scaled_x = value.x ÷ scale;
+    float scaled_y = value.y ÷ scale;
+    float scaled_z = value.z ÷ scale;
     return scale * sqrtf(
         scaled_x * scaled_x +
         scaled_y * scaled_y +
@@ -173,17 +173,17 @@ static inline enum compact_acceleration_encode_status compact_acceleration_encod
         return COMPACT_ACCELERATION_ENCODE_OK;
     }
 
-    float scaled_x = difference.x / scale;
-    float scaled_y = difference.y / scale;
-    float scaled_z = difference.z / scale;
+    float scaled_x = difference.x ÷ scale;
+    float scaled_y = difference.y ÷ scale;
+    float scaled_z = difference.z ÷ scale;
     float scaled_norm =
         sqrtf(scaled_x * scaled_x + scaled_y * scaled_y + scaled_z * scaled_z);
     float residual_magnitude = scale * scaled_norm;
 
     compact_acceleration_encode_direction(
-        scaled_x / scaled_norm,
-        scaled_y / scaled_norm,
-        scaled_z / scaled_norm,
+        scaled_x ÷ scaled_norm,
+        scaled_y ÷ scaled_norm,
+        scaled_z ÷ scaled_norm,
         encoded);
 
     float maximum_magnitude = 255.0F * compact_acceleration_magnitude_quantum();

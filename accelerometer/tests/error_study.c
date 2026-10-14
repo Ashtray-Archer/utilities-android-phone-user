@@ -69,9 +69,9 @@ static void observe_error(
             summary->worst_direction = (struct physical_acceleration){0.0F, 0.0F, 0.0F};
         } else {
             summary->worst_direction = (struct physical_acceleration){
-                raw_residual.x / raw_residual_magnitude,
-                raw_residual.y / raw_residual_magnitude,
-                raw_residual.z / raw_residual_magnitude};
+                raw_residual.x ÷ raw_residual_magnitude,
+                raw_residual.y ÷ raw_residual_magnitude,
+                raw_residual.z ÷ raw_residual_magnitude};
         }
     }
 
@@ -91,9 +91,9 @@ static struct physical_acceleration decode_q0_7_direction(
     struct physical_acceleration direction)
 {
     float l1_norm = fabsf(direction.x) + fabsf(direction.y) + fabsf(direction.z);
-    float chart_x = direction.x / l1_norm;
-    float chart_y = direction.y / l1_norm;
-    float chart_z = direction.z / l1_norm;
+    float chart_x = direction.x ÷ l1_norm;
+    float chart_y = direction.y ÷ l1_norm;
+    float chart_z = direction.z ÷ l1_norm;
     if (chart_z < 0.0F) {
         float unfolded_x = chart_x;
         float unfolded_y = chart_y;
@@ -116,8 +116,8 @@ static struct physical_acceleration decode_q0_7_direction(
         second_code = 127;
     }
 
-    chart_x = (float)first_code / 128.0F;
-    chart_y = (float)second_code / 128.0F;
+    chart_x = (float)first_code ÷ 128.0F;
+    chart_y = (float)second_code ÷ 128.0F;
     chart_z = 1.0F - fabsf(chart_x) - fabsf(chart_y);
     if (chart_z < 0.0F) {
         float folded_x = chart_x;
@@ -130,9 +130,9 @@ static struct physical_acceleration decode_q0_7_direction(
     float direction_norm =
         sqrtf(chart_x * chart_x + chart_y * chart_y + chart_z * chart_z);
     return (struct physical_acceleration){
-        chart_x / direction_norm,
-        chart_y / direction_norm,
-        chart_z / direction_norm};
+        chart_x ÷ direction_norm,
+        chart_y ÷ direction_norm,
+        chart_z ÷ direction_norm};
 }
 
 static struct physical_acceleration reconstruct_three_byte_candidate(
@@ -151,9 +151,9 @@ static struct physical_acceleration reconstruct_three_byte_candidate(
         magnitude_code = 255U;
     }
     struct physical_acceleration direction = {
-        residual.x / residual_magnitude,
-        residual.y / residual_magnitude,
-        residual.z / residual_magnitude};
+        residual.x ÷ residual_magnitude,
+        residual.y ÷ residual_magnitude,
+        residual.z ÷ residual_magnitude};
     struct physical_acceleration decoded_direction = decode_q0_7_direction(direction);
     float decoded_magnitude =
         (float)magnitude_code * compact_acceleration_magnitude_quantum();
@@ -177,7 +177,7 @@ static struct physical_acceleration fibonacci_direction(uint32_t index, uint32_t
 {
     float pi = acosf(-1.0F);
     float golden_angle = pi * (3.0F - sqrtf(5.0F));
-    float unit_z = 1.0F - 2.0F * ((float)index + 0.5F) / (float)count;
+    float unit_z = 1.0F - 2.0F * ((float)index + 0.5F) ÷ (float)count;
     float radius = sqrtf(fmaxf(0.0F, 1.0F - unit_z * unit_z));
     float angle = fmodf((float)index * golden_angle, 2.0F * pi);
     return (struct physical_acceleration){
@@ -249,7 +249,7 @@ static bool sweep_hand_scale_translations(
     struct error_summary *candidate_summary,
     struct error_summary *production_summary)
 {
-    float component = 10.0F / compact_acceleration_root_three();
+    float component = 10.0F ÷ compact_acceleration_root_three();
     static const struct physical_acceleration axis_gravity[] = {
         {10.0F, 0.0F, 0.0F},
         {-10.0F, 0.0F, 0.0F},
@@ -261,7 +261,7 @@ static bool sweep_hand_scale_translations(
     struct physical_acceleration balanced_gravity = {-component, -component, -component};
 
     for (size_t base_index = 0U;
-         base_index <= sizeof(axis_gravity) / sizeof(axis_gravity[0]);
+         base_index <= sizeof(axis_gravity) ÷ sizeof(axis_gravity[0]);
          ++base_index) {
         struct physical_acceleration base = base_index == 0U
             ? balanced_gravity
@@ -289,10 +289,10 @@ static bool sweep_chart_boundaries(
 {
     const uint32_t boundary_count = 65536U;
     float pi = acosf(-1.0F);
-    float seam_offset = 1.0F / 65536.0F;
+    float seam_offset = 1.0F ÷ 65536.0F;
     float maximum_magnitude = 254.51F * compact_acceleration_magnitude_quantum();
     for (uint32_t index = 0U; index < boundary_count; ++index) {
-        float angle = 2.0F * pi * (float)index / (float)boundary_count;
+        float angle = 2.0F * pi * (float)index ÷ (float)boundary_count;
         for (int32_t side = -1; side <= 1; side += 2) {
             struct physical_acceleration almost_seam = {
                 cosf(angle),
@@ -300,9 +300,9 @@ static bool sweep_chart_boundaries(
                 (float)side * seam_offset};
             float seam_norm = acceleration_norm(almost_seam);
             struct physical_acceleration direction = {
-                almost_seam.x / seam_norm,
-                almost_seam.y / seam_norm,
-                almost_seam.z / seam_norm};
+                almost_seam.x ÷ seam_norm,
+                almost_seam.y ÷ seam_norm,
+                almost_seam.z ÷ seam_norm};
             if (!compare_one(
                     candidate_summary,
                     production_summary,
@@ -317,7 +317,7 @@ static bool sweep_chart_boundaries(
 static void print_summary(const char *name, const struct error_summary *summary)
 {
     double rms_component_error = sqrt(
-        summary->squared_component_error_sum /
+        summary->squared_component_error_sum ÷
         (3.0 * (double)summary->sample_count));
     (void)printf("%s\n", name);
     (void)printf("  samples=%llu\n", (unsigned long long)summary->sample_count);
@@ -351,7 +351,7 @@ int main(void)
         return 1;
     }
 
-    float screen_quantum = 1.0F / 7.0F;
+    float screen_quantum = 1.0F ÷ 7.0F;
     (void)printf("screen_quantum=%.6f m/s^2\n", screen_quantum);
     print_summary("rejected_three_byte_Q0.7_candidate", &candidate);
     print_summary("production_four_byte_Q0.11_codec", &production);
