@@ -28,13 +28,15 @@ umask 077
 # Detect an already complete download left by an interrupted commit.
 complete=false
 if [[ -f $partial ]]; then
-    read -r hash _ < <(sha256sum -- "$partial")
+    hash=$(sha256sum -- "$partial")
+    hash=${hash%% *}
     [[ $hash != "$expected" ]] || complete=true
 fi
 if [[ $complete == false ]]; then
     curl --proto '=https,http' --fail --silent --show-error \
          --retry 2 --continue-at - --output "$partial" -- "$url"
-    read -r hash _ < <(sha256sum -- "$partial")
+    hash=$(sha256sum -- "$partial")
+    hash=${hash%% *}
     if [[ $hash != "$expected" ]]; then
         printf 'SHA-256 mismatch; unverified partial retained: %s\n' "$partial" >&2
         exit 1
