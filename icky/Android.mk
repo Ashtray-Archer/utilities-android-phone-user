@@ -35,6 +35,7 @@ MODE_arm64-v8a = -ffixed-x18
 MODE_x86_64 = -march=x86-64-v2 -mno-avx -mno-movbe
 TARGET_FLAGS = $(MODE_$(ABI))
 COMMON = -std=c17 -O2 -g -gdwarf-4 -gno-variable-location-views -fPIC -ffunction-sections -fdata-sections
+COMMON += $(EXTRA_CFLAGS)
 WARN = -Wall -Wextra -Werror -Wpedantic -Wshadow
 ifeq ($(PROFILE),picker)
 WARN += -Wconversion

@@ -5,6 +5,8 @@ project_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # The two graphical consumers share acquisition and packaging, not app logic.
 accelerometer_dir=$project_dir
 utility_name=${1:-accelerometer}
+instrument_kind=0
+source_name=$utility_name/app/src/main/c/native_main.c
 if [ "$#" -gt 1 ]; then
     echo "usage: $0 [accelerometer|spirit-level]" >&2
     exit 2
@@ -14,6 +16,19 @@ case "$utility_name" in
     spirit-level)
         project_dir=$(CDPATH= cd -- "$accelerometer_dir/../spirit-level" && pwd)
         native_library=spirit_level
+        ;;
+    gyroscope|magnetometer)
+        project_dir=$(CDPATH= cd -- "$accelerometer_dir/../$utility_name" && pwd)
+        native_library=$utility_name
+        source_name=instrument/native_main.c
+        if [ "$utility_name" = gyroscope ]; then instrument_kind=1; else instrument_kind=2; fi
+        ;;
+    ambient-light)
+        : "${AMBIENT_LIGHT_ROOT:?explicit standalone Ambient Light source root is required}"
+        project_dir=$(CDPATH= cd -- "$AMBIENT_LIGHT_ROOT" && pwd)
+        native_library=ambient_light
+        source_name=instrument/native_main.c
+        instrument_kind=3
         ;;
     *) echo "unknown native utility: $utility_name" >&2; exit 2 ;;
 esac
@@ -59,9 +74,11 @@ mkdir -p "$staging_dir" "$debug_output_dir" "$distribution_output_dir"
 
 compile_abi() {
     abi=$1
+    sources="$source_name"
+    if [ "$instrument_kind" = 0 ]; then sources="$sources accelerometer/android/android_accelerometer.c"; fi
     make -f "$accelerometer_dir/../icky/Android.mk" native \
         PROFILE=accelerometer ABI="$abi" NDK="$ndk_root" \
-        SOURCE_accelerometer="$utility_name/app/src/main/c/native_main.c accelerometer/android/android_accelerometer.c" \
+        SOURCE_accelerometer="$sources" EXTRA_CFLAGS="-DINSTRUMENT_KIND=$instrument_kind" \
         INCLUDE_accelerometer="-I$project_dir/model -I$project_dir/app/src/main/c -I$accelerometer_dir/model -I$accelerometer_dir/android -I${SUBPIXEL_ROOT:-$accelerometer_dir/../.subpixel}/subpixel/include" \
         BUILD="$work_dir/objects/$abi" OUT="$staging_dir/lib/$abi/lib$native_library.so"
 }

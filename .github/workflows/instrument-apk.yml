@@ -1,0 +1,174 @@
+name: Continuous sensor instrument packages
+
+on:
+  pull_request:
+    paths:
+      - 'gyroscope/**'
+      - 'magnetometer/**'
+      - 'instrument/**'
+      - 'accelerometer/**'
+      - 'geometry/**'
+      - 'icky/**'
+      - '.github/workflows/ick-compilers.yml'
+      - '.github/workflows/instrument-apk.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'gyroscope/**'
+      - 'magnetometer/**'
+      - 'instrument/**'
+      - 'accelerometer/**'
+      - 'geometry/**'
+      - 'icky/**'
+      - '.github/workflows/ick-compilers.yml'
+      - '.github/workflows/instrument-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compilers:
+    uses: ./.github/workflows/ick-compilers.yml
+
+  build:
+    needs: compilers
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [gyroscope, magnetometer]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
+      ANDROID_KEYSTORE_PASSWORD: wegert-debug
+      ANDROID_KEY_PASSWORD: wegert-debug
+      ANDROID_KEY_ALIAS: wegert-debug
+      ANDROID_EXPECTED_CERT_SHA256: DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Check out canonical shared font
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/rough.framebuffer
+          ref: 83ea1bf4989a8857b9d70c9ae238aa9e0932bf0e
+          path: .subpixel
+      - name: Check out shared ICK producer
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          path: .ai-ci-ick
+      - name: Qualify host ICK
+        id: ick
+        uses: isomorphisms/ai-ci/ick-host@4ea071a96239f3a29ca6d98454feb59947d87cfe
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: ick-*
+          path: build/ick-packages
+          merge-multiple: true
+      - name: Restore qualified ICK stages
+        run: |
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=armeabi-v7a ICK_STAGE="$GITHUB_WORKSPACE/build/ick/armeabi-v7a" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-armeabi-v7a.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=arm64-v8a ICK_STAGE="$GITHUB_WORKSPACE/build/ick/arm64-v8a" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-arm64-v8a.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=x86_64 ICK_STAGE="$GITHUB_WORKSPACE/build/ick/x86_64" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-x86_64.tar.gz"
+      - name: Check out stable public test signer
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphismes/wegert
+          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
+          path: .test-signing
+          sparse-checkout: _/build/app/wegert-debug.keystore
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+
+      - name: Install Android build inputs
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018'
+
+      - name: Build signed native APKs
+        run: |
+          mkdir -p receipts
+          ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.2.12479018" \
+            sh accelerometer/build-apk.sh "${{ matrix.app }}" | tee receipts/build.txt
+
+      - name: Verify identity, single-ABI contents and stripped native code
+        run: |
+          set -eu
+          distribution=${{ matrix.app }}/app/build/outputs/apk/distribution
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            apk="$distribution/${{ matrix.app }}-$abi.apk"
+            test -f "$apk"
+            test "$(unzip -Z1 "$apk" | grep -Ec '^lib/[^/]+/lib${{ matrix.app }}[.]so$')" -eq 1
+            unzip -Z1 "$apk" | grep -Fx "lib/$abi/lib${{ matrix.app }}.so"
+            if unzip -Z1 "$apk" | grep -q 'classes.dex'; then
+              echo 'FAIL: unexpected application DEX' >&2
+              exit 1
+            fi
+            "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$apk" |
+              grep -F "package: name='com.ashtrayarcher.${{ matrix.app }}' versionCode='1'"
+            unzip -p "$apk" "lib/$abi/lib${{ matrix.app }}.so" > "$RUNNER_TEMP/${{ matrix.app }}-$abi.so"
+            if readelf -S "$RUNNER_TEMP/${{ matrix.app }}-$abi.so" | grep -q '[.]debug_'; then
+              echo 'FAIL: debug sections survived stripping' >&2
+              exit 1
+            fi
+            readelf --wide --dyn-syms "$RUNNER_TEMP/${{ matrix.app }}-$abi.so" | grep 'ANativeActivity_onCreate'
+            sha256sum "$apk" >> receipts/apk-sha256.txt
+            stat -c '%n %s bytes' "$apk" >> receipts/apk-sizes.txt
+          done
+          readelf -A "$RUNNER_TEMP/${{ matrix.app }}-armeabi-v7a.so" | tee receipts/arm-attributes.txt
+          grep -q 'Tag_THUMB_ISA_use: Thumb-2' receipts/arm-attributes.txt
+          printf '%s\n' 'PASS package checks; physical-device acceptance remains PENDING' > receipts/package.txt
+
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Replace-install, launch and draw on emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: |
+            adb install -r ${{ matrix.app }}/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r ${{ matrix.app }}/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n com.ashtrayarcher.${{ matrix.app }}/android.app.NativeActivity
+            test -n "$(adb shell pidof com.ashtrayarcher.${{ matrix.app }})"
+            adb logcat -d -s Instrument:I | tee receipts/emulator-frames.txt
+            grep -Fq frame_posted receipts/emulator-frames.txt
+            adb shell dumpsys meminfo com.ashtrayarcher.${{ matrix.app }} > receipts/emulator-memory.txt
+            adb shell screencap -p /sdcard/instrument.png
+            adb pull /sdcard/instrument.png receipts/emulator.png
+
+      - name: Retain single-ABI delivery APKs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ matrix.app }}-apks-${{ env.CANDIDATE_SHA }}
+          path: ${{ matrix.app }}/app/build/outputs/apk/distribution/${{ matrix.app }}-*.apk
+          if-no-files-found: error
+
+      - name: Retain exact-head evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ matrix.app }}-evidence-${{ env.CANDIDATE_SHA }}
+          path: receipts/
+          if-no-files-found: error
