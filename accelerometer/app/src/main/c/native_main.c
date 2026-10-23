@@ -5,6 +5,7 @@
 
 #include "accelerometer_model.h"
 #include "android_accelerometer.h"
+#include "glyph_subpixel.h"
 #include "sevenths_display.h"
 
 #include <stdbool.h>
@@ -242,6 +243,12 @@ static uint8_t *build_glyph_mask(char character, int32_t scale)
     uint8_t *coverage = (uint8_t *)malloc(size);
     if (coverage == NULL) {
         return NULL;
+    }
+
+    /* A continuous centerline removes the stair-step geometry of the old
+     * five-by-seven '/' bitmap. The mask remains cached by glyph and scale. */
+    if (character == '/' && subpixel_slash_mask(coverage, (unsigned)scale)) {
+        return coverage;
     }
 
     const uint8_t *rows = glyph_rows(character);
