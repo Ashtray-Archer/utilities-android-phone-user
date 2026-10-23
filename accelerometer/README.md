@@ -93,3 +93,22 @@ No special Android permission is required for the ordinary accelerometer.
 ## Cross-project Android boundary
 
 The reusable NDK ASensorManager adapter now has its canonical generic copy in [isomorphisms/android-NDK](https://github.com/isomorphisms/android-NDK/tree/main/native/sensors/accelerometer). This repository remains canonical for its compact model, CLI, NativeActivity screen, and device evidence.
+
+## Straight slash from shared Subpixel
+
+The fraction slash `/` now uses one continuous Euclidean line centerline and the
+bounded, 8×8 sample-mask whole-path renderer in
+[rough.framebuffer's Subpixel library](https://github.com/isomorphisms/rough.framebuffer/tree/ba093e1f7f8dc426cdffafd79334f67001245fc4/subpixel).
+It is no longer shaped by interpolation between two-pixel-wide staircase bitmap
+rows. Rounded endpoints and fractional pixel coverage use the same geometry at
+all scales. The existing glyph raster cache and native-window compositing
+remain in place; the other glyphs retain their previous supersampled bitmap
+masters until they acquire independently reviewed continuous geometry.
+
+The ICK-based Android build and host glyph test require a checkout of the
+Subpixel source at `ba093e1f7f8dc426cdffafd79334f67001245fc4` under `.subpixel/` in the repository root. CI
+checks out that exact revision; a different checkout fails qualification instead
+of silently substituting another rasterizer. The host glyph test compares the
+actual native output against an independently calculated 8×8 sampled Euclidean
+line-segment tube at five scales. A successful host test is **not** A1/C67
+physical-device acceptance or evidence of smoothness on the actual display.

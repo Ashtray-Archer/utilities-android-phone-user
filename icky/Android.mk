@@ -1,5 +1,10 @@
 # ICK owns maintained C; NDK tools own upstream glue, assembly and linking.
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+# One pinned upstream rasterizer shared by Android and the host glyph test.
+SUBPIXEL_ROOT ?= $(ROOT)/.subpixel
+SUBPIXEL_REVISION := 83ea1bf4989a8857b9d70c9ae238aa9e0932bf0e
+SUBPIXEL_FILES := curve_patch.c curve_patch_5x5.c coverage_plane.c path.c font.c
+SUBPIXEL_OBJECTS = $(addprefix $(BUILD)/subpixel/,$(SUBPIXEL_FILES:.c=.o)) $(BUILD)/subpixel/font_5x7.o
 PROFILE ?= accelerometer
 AICI_ICK_ROOT ?= $(ROOT)/.ai-ci-ick
 ICK_STAGE_ROOT ?= $(ROOT)/build/ick
@@ -34,17 +39,20 @@ WARN = -Wall -Wextra -Werror -Wpedantic -Wshadow
 ifeq ($(PROFILE),picker)
 WARN += -Wconversion
 endif
-SOURCE_accelerometer = accelerometer/app/src/main/c/native_main.c accelerometer/android/android_accelerometer.c
+SOURCE_accelerometer = accelerometer/app/src/main/c/native_main.c accelerometer/app/src/main/c/glyph_subpixel.c accelerometer/android/android_accelerometer.c
 SOURCE_picker = math-characters/app/src/main/c/native_main.c math-characters/app/src/main/c/pad_model.c math-characters/app/src/main/c/pad_ui.c
 SOURCE_hardware = hardware/android-native/hardware_sensor.c accelerometer/android/android_accelerometer.c
 SOURCE_clipboard = android-clipboard/device-smoke/smoke.c android-clipboard/clipboard_jni.c android-clipboard/utf8.c
-INCLUDE_accelerometer = -I"$(ROOT)/accelerometer/app/src/main/c" -I"$(ROOT)/accelerometer/model" -I"$(ROOT)/accelerometer/android"
+INCLUDE_accelerometer = -I"$(ROOT)/accelerometer/app/src/main/c" -I"$(ROOT)/accelerometer/model" -I"$(ROOT)/accelerometer/android" -I"$(SUBPIXEL_ROOT)/subpixel/include"
 INCLUDE_picker = -I"$(ROOT)/math-characters/app/src/main/c"
 INCLUDE_hardware = -I"$(ROOT)/accelerometer/android" -I"$(ROOT)/accelerometer/model" -I"$(ROOT)/accelerometer/command"
 INCLUDE_clipboard = -I"$(ROOT)/android-clipboard"
 SOURCES = $(SOURCE_$(PROFILE))
 INCLUDES = $(INCLUDE_$(PROFILE)) -isystem "$(GLUE)"
 OBJECTS = $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
+ifeq ($(PROFILE),accelerometer)
+OBJECTS += $(SUBPIXEL_OBJECTS)
+endif
 LIBS_accelerometer = -landroid -llog -lm
 LIBS_picker = -landroid -llog
 LIBS_hardware = -landroid -lm
@@ -64,7 +72,9 @@ endif
 ifeq ($(PROFILE),clipboard)
 WARN = -Wall -Wextra -Werror -Wpedantic
 endif
-.PHONY: native check-owned-producer
+.PHONY: native check-owned-producer check-subpixel
+check-subpixel:
+	@test "$$(git -C "$(SUBPIXEL_ROOT)" rev-parse HEAD 2>/dev/null)" = "$(SUBPIXEL_REVISION)" || { echo 'Subpixel source checkout is absent or at the wrong revision' >&2; exit 1; }
 native: $(OUT)
 	"$(NDK_READELF)" -h -r "$(OUT)" > "$(BUILD)/linked-output.elf"
 	! grep -Eq 'R_[A-Z0-9_]+_COPY' "$(BUILD)/linked-output.elf"
@@ -79,6 +89,16 @@ check-owned-producer:
 	test -x "$(NDK_CC)"
 
 $(BUILD)/%.s: $(ROOT)/%.c FORCE | check-owned-producer
+	mkdir -p "$(@D)"
+	"$(ICK_COMPILER)" $(ICK_EXTRA_FLAGS) $(ICK_NDK_FLAGS) $(COMMON) $(WARN) $(HARDENING) -D__ANDROID_API__=$(API) -D__ANDROID_MIN_SDK_VERSION__=$(API) $(INCLUDES) -S "$<" -o "$@"
+
+# These original Subpixel sources are compiled by the same pinned ICK stage,
+# not by an NDK consumer compiler and not through a vendored duplicate.
+$(BUILD)/subpixel/%.s: $(SUBPIXEL_ROOT)/subpixel/src/%.c FORCE | check-owned-producer check-subpixel
+	mkdir -p "$(@D)"
+	"$(ICK_COMPILER)" $(ICK_EXTRA_FLAGS) $(ICK_NDK_FLAGS) $(COMMON) $(WARN) $(HARDENING) -D__ANDROID_API__=$(API) -D__ANDROID_MIN_SDK_VERSION__=$(API) $(INCLUDES) -S "$<" -o "$@"
+
+$(BUILD)/subpixel/font_5x7.s: $(SUBPIXEL_ROOT)/subpixel/examples/font_5x7.c FORCE | check-owned-producer check-subpixel
 	mkdir -p "$(@D)"
 	"$(ICK_COMPILER)" $(ICK_EXTRA_FLAGS) $(ICK_NDK_FLAGS) $(COMMON) $(WARN) $(HARDENING) -D__ANDROID_API__=$(API) -D__ANDROID_MIN_SDK_VERSION__=$(API) $(INCLUDES) -S "$<" -o "$@"
 

@@ -1,5 +1,8 @@
 # Fixed source-production commands; ICK is the only owned-C frontend.
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+SUBPIXEL_ROOT ?= $(ROOT)/.subpixel
+SUBPIXEL_REVISION := 83ea1bf4989a8857b9d70c9ae238aa9e0932bf0e
+SUBPIXEL_SOURCES := $(addprefix $(SUBPIXEL_ROOT)/subpixel/src/,curve_patch.c curve_patch_5x5.c coverage_plane.c path.c font.c) $(SUBPIXEL_ROOT)/subpixel/examples/font_5x7.c
 ICK ?= ick
 ICK_FLAGS ?= -fno-link-libatomic
 BUILD ?= $(ROOT)/build/icky-host
@@ -11,15 +14,21 @@ PICKER_FLAGS = -std=c17 -Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -
 MODEL_HEADERS = $(wildcard $(ROOT)/accelerometer/model/*.h $(ROOT)/accelerometer/command/*.h $(ROOT)/geometry/*.h)
 PICKER_HEADERS = $(wildcard $(ROOT)/math-characters/app/src/main/c/*.h $(ROOT)/math-characters/app/src/main/c/*.inc)
 .PHONY: model-tests picker-tests clipboard-tests
-model-tests: $(BUILD)/compact_unit_direction_test $(addprefix $(BUILD)/,$(MODEL_TESTS))
+model-tests: $(BUILD)/compact_unit_direction_test $(addprefix $(BUILD)/,$(MODEL_TESTS)) $(BUILD)/glyph_subpixel_test
 	"$(BUILD)/compact_unit_direction_test"
 	"$(BUILD)/compact_acceleration_test"
 	"$(BUILD)/error_study"
 	"$(BUILD)/accelerometer_snapshot_test"
+	"$(BUILD)/glyph_subpixel_test"
 	"$(BUILD)/inspection_fixture" > "$(BUILD)/inspection.tsv"
 	grep -Fqx "$$(printf 'android.x_m_per_s2\t1.25')" "$(BUILD)/inspection.tsv"
 	grep -Fqx "$$(printf 'compact.encode_status\tok')" "$(BUILD)/inspection.tsv"
 	grep -Fq 'What the screen shows' "$(BUILD)/inspection.tsv"
+
+$(BUILD)/glyph_subpixel_test: $(ROOT)/accelerometer/tests/glyph_subpixel_test.c $(ROOT)/accelerometer/app/src/main/c/glyph_subpixel.c $(ROOT)/accelerometer/app/src/main/c/glyph_subpixel.h $(SUBPIXEL_SOURCES)
+	@test "$$(git -C "$(SUBPIXEL_ROOT)" rev-parse HEAD 2>/dev/null)" = "$(SUBPIXEL_REVISION)" || { echo 'Subpixel checkout is absent or at the wrong revision' >&2; exit 1; }
+	mkdir -p "$(@D)"
+	$(ICK) $(ICK_FLAGS) $(MODEL_FLAGS) -I"$(ROOT)/accelerometer/app/src/main/c" -I"$(SUBPIXEL_ROOT)/subpixel/include" $(filter %.c,$^) -lm -o "$@"
 
 $(BUILD)/compact_unit_direction_test: $(ROOT)/geometry/tests/compact_unit_direction_test.c $(MODEL_HEADERS)
 	mkdir -p "$(@D)"
