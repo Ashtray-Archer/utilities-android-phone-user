@@ -165,8 +165,9 @@ static int32_t floor_divide(int32_t numerator, int32_t denominator)
 }
 
 /*
- * Reconstruct one continuous glyph from the 5x7 samples, then sample that
- * shape on a 4x4 grid inside each framebuffer pixel. The interpolation
+ * Legacy glyphs reconstruct their shape from 5x7 samples and sample
+ * on a 4x4 grid inside each pixel. Slash uses a separate continuous stroke
+ * with 8x8 Subpixel coverage. The legacy interpolation
  * threshold is exactly 2/5: low enough to bridge diagonal bitmap samples
  * such as X without turning the one-cell strokes into solid blocks.
  */
