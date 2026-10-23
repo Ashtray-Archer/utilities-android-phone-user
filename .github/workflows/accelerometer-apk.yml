@@ -35,6 +35,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Check out pinned shared Subpixel whole-path renderer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/rough.framebuffer
+          ref: ba093e1f7f8dc426cdffafd79334f67001245fc4
+          path: .subpixel
+      - name: Confirm Subpixel source revision
+        run: test "$(git -C .subpixel rev-parse HEAD)" = 'ba093e1f7f8dc426cdffafd79334f67001245fc4'
       - name: Check out shared ICK source producer
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
