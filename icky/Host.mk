@@ -14,6 +14,13 @@ PICKER_FLAGS = -std=c17 -Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -
 MODEL_HEADERS = $(wildcard $(ROOT)/accelerometer/model/*.h $(ROOT)/accelerometer/command/*.h $(ROOT)/geometry/*.h)
 PICKER_HEADERS = $(wildcard $(ROOT)/math-characters/app/src/main/c/*.h $(ROOT)/math-characters/app/src/main/c/*.inc)
 .PHONY: model-tests picker-tests clipboard-tests
+spirit-tests: $(BUILD)/spirit_level_test
+	"$(BUILD)/spirit_level_test"
+
+$(BUILD)/spirit_level_test: $(ROOT)/spirit-level/tests/spirit_level_test.c $(SUBPIXEL_SOURCES)
+	mkdir -p "$(@D)"
+	$(ICK) $(ICK_FLAGS) $(MODEL_FLAGS) $(CFLAGS) -I"$(ROOT)/accelerometer/model" -I"$(ROOT)/spirit-level/model" -I"$(ROOT)/spirit-level/app/src/main/c" -I"$(SUBPIXEL_ROOT)/subpixel/include" $(filter %.c,$^) -lm -o "$@"
+
 model-tests: $(BUILD)/compact_unit_direction_test $(addprefix $(BUILD)/,$(MODEL_TESTS)) $(BUILD)/glyph_subpixel_test
 	"$(BUILD)/compact_unit_direction_test"
 	"$(BUILD)/compact_acceleration_test"

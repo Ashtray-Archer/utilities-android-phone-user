@@ -2,7 +2,25 @@
 set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# The two graphical consumers share acquisition and packaging, not app logic.
+accelerometer_dir=$project_dir
+utility_name=${1:-accelerometer}
+if [ "$#" -gt 1 ]; then
+    echo "usage: $0 [accelerometer|spirit-level]" >&2
+    exit 2
+fi
+case "$utility_name" in
+    accelerometer) native_library=accelerometer ;;
+    spirit-level)
+        project_dir=$(CDPATH= cd -- "$accelerometer_dir/../spirit-level" && pwd)
+        native_library=spirit_level
+        ;;
+    *) echo "unknown native utility: $utility_name" >&2; exit 2 ;;
+esac
 sdk_root=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
+version_code=1
+version_name=0.1.0
+if [ "$utility_name" = accelerometer ]; then version_code=2; version_name=0.2.1; fi
 if [ -z "$sdk_root" ]; then
     echo "ANDROID_HOME or ANDROID_SDK_ROOT is required" >&2
     exit 2
@@ -32,7 +50,8 @@ do
     fi
 done
 
-work_dir=$(mktemp -d "${TMPDIR:-/tmp}/accelerometer-build.XXXXXX")
+work_dir=$(mktemp -d "${TMPDIR:-/tmp}/$utility_name-build.XXXXXX")
+trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
 staging_dir="$work_dir/staging"
 debug_output_dir="$project_dir/app/build/outputs/apk/debug"
 distribution_output_dir="$project_dir/app/build/outputs/apk/distribution"
@@ -40,9 +59,11 @@ mkdir -p "$staging_dir" "$debug_output_dir" "$distribution_output_dir"
 
 compile_abi() {
     abi=$1
-    make -f "$project_dir/../icky/Android.mk" native \
+    make -f "$accelerometer_dir/../icky/Android.mk" native \
         PROFILE=accelerometer ABI="$abi" NDK="$ndk_root" \
-        BUILD="$work_dir/objects/$abi" OUT="$staging_dir/lib/$abi/libaccelerometer.so"
+        SOURCE_accelerometer="$utility_name/app/src/main/c/native_main.c accelerometer/android/android_accelerometer.c" \
+        INCLUDE_accelerometer="-I$project_dir/model -I$project_dir/app/src/main/c -I$accelerometer_dir/model -I$accelerometer_dir/android -I${SUBPIXEL_ROOT:-$accelerometer_dir/../.subpixel}/subpixel/include" \
+        BUILD="$work_dir/objects/$abi" OUT="$staging_dir/lib/$abi/lib$native_library.so"
 }
 
 compile_abi arm64-v8a aarch64-linux-android26-clang ""
@@ -61,8 +82,8 @@ compiled_resources="$work_dir/compiled-resources.zip"
     --manifest "$project_dir/app/src/main/AndroidManifest.xml" \
     --min-sdk-version 26 \
     --target-sdk-version 36 \
-    --version-code 2 \
-    --version-name 0.2.1 \
+    --version-code "$version_code" \
+    --version-name "$version_name" \
     -o "$base_apk" \
     "$compiled_resources"
 
@@ -127,9 +148,9 @@ package_apk() {
     for abi in "$@"; do
         target_dir="$package_staging/lib/$abi"
         mkdir -p "$target_dir"
-        cp "$staging_dir/lib/$abi/libaccelerometer.so" "$target_dir/libaccelerometer.so"
+        cp "$staging_dir/lib/$abi/lib$native_library.so" "$target_dir/lib$native_library.so"
         if [ "$strip_native" = yes ]; then
-            "$strip_tool" --strip-unneeded "$target_dir/libaccelerometer.so"
+            "$strip_tool" --strip-unneeded "$target_dir/lib$native_library.so"
         fi
     done
 
@@ -155,27 +176,27 @@ package_apk \
 # retained as a fallback when the ABI is not known.
 package_apk \
     armeabi-v7a \
-    "$distribution_output_dir/accelerometer-armeabi-v7a.apk" \
+    "$distribution_output_dir/$utility_name-armeabi-v7a.apk" \
     yes \
     armeabi-v7a
 package_apk \
     arm64-v8a \
-    "$distribution_output_dir/accelerometer-arm64-v8a.apk" \
+    "$distribution_output_dir/$utility_name-arm64-v8a.apk" \
     yes \
     arm64-v8a
 package_apk \
     x86_64 \
-    "$distribution_output_dir/accelerometer-x86_64.apk" \
+    "$distribution_output_dir/$utility_name-x86_64.apk" \
     yes \
     x86_64
 package_apk \
     universal \
-    "$distribution_output_dir/accelerometer-universal.apk" \
+    "$distribution_output_dir/$utility_name-universal.apk" \
     yes \
     arm64-v8a armeabi-v7a x86_64
 
 printf '%s\n' "$debug_output_dir/app-debug.apk"
-printf '%s\n' "$distribution_output_dir/accelerometer-armeabi-v7a.apk"
-printf '%s\n' "$distribution_output_dir/accelerometer-arm64-v8a.apk"
-printf '%s\n' "$distribution_output_dir/accelerometer-x86_64.apk"
-printf '%s\n' "$distribution_output_dir/accelerometer-universal.apk"
+printf '%s\n' "$distribution_output_dir/$utility_name-armeabi-v7a.apk"
+printf '%s\n' "$distribution_output_dir/$utility_name-arm64-v8a.apk"
+printf '%s\n' "$distribution_output_dir/$utility_name-x86_64.apk"
+printf '%s\n' "$distribution_output_dir/$utility_name-universal.apk"
