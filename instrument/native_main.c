@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/types.h>
 
 #if INSTRUMENT_KIND == 1
 #define SENSOR_TYPE ASENSOR_TYPE_GYROSCOPE
@@ -170,7 +171,8 @@ void android_main(struct android_app *app) {
         if (id == 3 && state.queue) {
             ASensorEvent event;
             bool changed = false;
-            while (ASensorEventQueue_getEvents(state.queue,&event,1) > 0) {
+            ssize_t received;
+            while ((received = ASensorEventQueue_getEvents(state.queue,&event,1)) > 0) {
                 if (!state.enabled || event.type != SENSOR_TYPE || event.timestamp <= state.timestamp) continue;
                 bool valid = true;
                 for (unsigned axis = 0; axis < AXES; ++axis)
@@ -183,10 +185,19 @@ void android_main(struct android_app *app) {
                 state.status = "ANDROID READING";
                 changed = true;
             }
+            if (received < 0) {
+                state.have_sample = false;
+                state.status = "SENSOR READ FAILED";
+                changed = true;
+            }
             if (changed) draw(&state);
         }
     }
     disable(&state);
     if (state.queue) (void)ASensorManager_destroyEventQueue(state.manager,state.queue);
-    for (unsigned i = 0; i < 96; ++i) free(cache[i].coverage);
+    for (unsigned i = 0; i < 96; ++i) {
+        free(cache[i].coverage);
+        cache[i].coverage = NULL;
+    }
+    replacement = 0;
 }
