@@ -1,0 +1,17 @@
+directives:
+
+export SavedRecipeRuntime.saved_recipe_name as saved_recipe_name
+[0]: %let v1 = (%let v2 = ("user-recipe") in (%let v3 = (1) in (%let v4 = (%con _builtin.NIL()) in (%con RecipeShopping.SavedRecipe(v2, v0, v3, v4))))) in (%let v5 = (%let v6 = (%con RecipeShopping.save_recipe(v1)) in (%let v7 = (RecipeShopping.begin_shopping()) in (RecipeShopping.transition(v6, v7)))) in (%case v5 of { %conalt RecipeShopping.Shopping(v8, v9, v10, v11, v12, v13, v14, v15, v16, v17) => %case v8 of { %conalt _builtin.CONS(v18, v19) => %case v19 of { %conalt _builtin.NIL() => %case v18 of { %conalt RecipeShopping.SavedRecipe(v20, v21, v22, v23) => v21 Nothing } Just %case v5 of { %conalt RecipeShopping.Shopping(v24, v25, v26, v27, v28, v29, v30, v31, v32, v33) => v33 Nothing } } Just %case v5 of { %conalt RecipeShopping.Shopping(v34, v35, v36, v37, v38, v39, v40, v41, v42, v43) => v43 Nothing } } Nothing }))
+
+export Prelude.EqOrd.== as _checked_2
+[0, 1]: %let v2 = (%op ==String(v0, v1)) in (%case v2 of { %constalt(0) => 0 Just 1 })
+
+export Prelude.Interfaces.Bool.Semigroup.<+> as _checked_25
+[0, 1]: %case v0 of { %constalt(1) => 1| %constalt(0) => v1 Nothing }
+
+export Prelude.Interfaces.Bool.Semigroup.<+> as _checked_53
+[0, 1]: %case v0 of { %constalt(1) => v1| %constalt(0) => 0 Nothing }
+
+export Prelude.EqOrd./= as _checked_89
+[0, 1]: %let v2 = (Prelude.EqOrd.==(v0, v1)) in (%case v2 of { %constalt(1) => 0| %constalt(0) => 1 Nothing })
+

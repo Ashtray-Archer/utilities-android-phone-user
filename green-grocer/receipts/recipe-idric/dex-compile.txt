@@ -1,0 +1,1 @@
+Error: dex rejected checked program: Recursive checked helper is not in the DEX specialization slice: Data.Nat.div'

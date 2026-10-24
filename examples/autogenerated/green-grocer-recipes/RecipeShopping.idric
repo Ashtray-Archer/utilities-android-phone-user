@@ -1,0 +1,534 @@
+module RecipeShopping
+
+import Data.List
+import Data.Nat
+import Data.Text
+
+%unbound_implicits off
+
+-- Select recipes, combine their ingredients, subtract the pantry, and only
+-- then round the remaining demand to actual saleable packages.
+
+public export
+record RationalAmount where
+  constructor Fraction
+  numerator : Number
+  denominator_less_one : Number
+
+export
+denominator : RationalAmount → Number
+denominator value = S value.denominator_less_one
+
+export
+whole : Number → RationalAmount
+whole value = Fraction value 0
+
+export
+fraction : Number → Number → Maybe RationalAmount
+fraction _ 0 = Nothing
+fraction top (S bottom) = Just (Fraction top bottom)
+
+export
+equal_amount : RationalAmount → RationalAmount → Bool
+equal_amount left right =
+  left.numerator × denominator right ≟ right.numerator × denominator left
+
+export
+add_amount : RationalAmount → RationalAmount → RationalAmount
+add_amount left right = Fraction
+  (left.numerator × denominator right + right.numerator × denominator left)
+  (minus (denominator left × denominator right) 1)
+
+export
+scale_amount : RationalAmount → Number → Number → RationalAmount
+scale_amount value top bottom_less_one = Fraction
+  (value.numerator × top)
+  (minus (denominator value × S bottom_less_one) 1)
+
+export
+subtract_owned : RationalAmount → RationalAmount → RationalAmount
+subtract_owned required owned = Fraction
+  (minus (required.numerator × denominator owned)
+         (owned.numerator × denominator required))
+  (minus (denominator required × denominator owned) 1)
+
+public export
+choice dimension_kind one_of
+  mass
+  volume
+  count
+
+export
+same_dimension : dimension_kind → dimension_kind → Bool
+same_dimension mass mass = True
+same_dimension volume volume = True
+same_dimension count count = True
+same_dimension _ _ = False
+
+public export
+choice measure_unit one_of
+  grams
+  kilograms
+  millilitres
+  litres
+  each
+  dozen
+
+public export
+record Measure where
+  constructor Measured
+  dimension : dimension_kind
+  base_amount : RationalAmount
+
+export
+measure : measure_unit → RationalAmount → Measure
+measure grams value = Measured mass value
+measure kilograms value = Measured mass (scale_amount value 1000 0)
+measure millilitres value = Measured volume value
+measure litres value = Measured volume (scale_amount value 1000 0)
+measure each value = Measured count value
+measure dozen value = Measured count (scale_amount value 12 0)
+
+public export
+record IngredientIdentity where
+  constructor IngredientNamed
+  ingredient_text : Text
+
+export
+same_ingredient : IngredientIdentity → IngredientIdentity → Bool
+same_ingredient left right = left.ingredient_text ≟ right.ingredient_text
+
+public export
+record Ingredient where
+  constructor Needs
+  ingredient_identity : IngredientIdentity
+  ingredient_name : Text
+  ingredient_measure : Measure
+  preparation : Text
+  acceptable_substitutions : List IngredientIdentity
+
+public export
+record Servings where
+  constructor Serves
+  servings_less_one : Number
+
+export
+serving_count : Servings → Number
+serving_count value = S value.servings_less_one
+
+public export
+record Recipe where
+  constructor SavedRecipe
+  recipe_identity : Text
+  recipe_name : Text
+  recipe_servings : Servings
+  recipe_ingredients : List Ingredient
+
+public export
+record Selection where
+  constructor Cook
+  selected_recipe : Text
+  selected_servings : Servings
+
+public export
+record Requirement where
+  constructor Requires
+  required_ingredient : IngredientIdentity
+  required_name : Text
+  required_dimension : dimension_kind
+  required_amount : RationalAmount
+  permitted_substitutions : List IngredientIdentity
+
+-- Substitutions shared by several recipes must be acceptable to all of them.
+common_substitutions : List IngredientIdentity → List IngredientIdentity → List IngredientIdentity
+common_substitutions left right = filter (\candidate ⇒ any (same_ingredient candidate) right) left
+
+export
+same_requirement : Requirement → Requirement → Bool
+same_requirement left right =
+  same_ingredient left.required_ingredient right.required_ingredient &&
+  same_dimension left.required_dimension right.required_dimension
+
+insert_requirement : Requirement → List Requirement → List Requirement
+insert_requirement value [] = [value]
+insert_requirement value (first :: rest) =
+  if same_requirement value first
+    then { required_amount := add_amount first.required_amount value.required_amount,
+                  permitted_substitutions := common_substitutions first.permitted_substitutions value.permitted_substitutions } first :: rest
+    else first :: insert_requirement value rest
+
+export
+combine_requirements : List Requirement → List Requirement
+combine_requirements values = foldl (flip insert_requirement) [] values
+
+recipe_requirements : Recipe → Servings → List Requirement
+recipe_requirements recipe chosen = map scaled recipe.recipe_ingredients
+  where
+    scaled : Ingredient → Requirement
+    scaled ingredient = Requires ingredient.ingredient_identity ingredient.ingredient_name
+      ingredient.ingredient_measure.dimension
+      (scale_amount ingredient.ingredient_measure.base_amount
+        (serving_count chosen) recipe.recipe_servings.servings_less_one)
+      ingredient.acceptable_substitutions
+
+export
+requirements_for : List Recipe → List Selection → Either Text (List Requirement)
+requirements_for recipes selections = map combine_requirements (collect selections)
+  where
+    valid_ingredient : Ingredient → Bool
+    valid_ingredient ingredient =
+      not (ingredient.ingredient_identity.ingredient_text ≟ "") &&
+      not (ingredient.ingredient_name ≟ "") &&
+      ingredient.ingredient_measure.base_amount.numerator > 0
+
+    collect : List Selection → Either Text (List Requirement)
+    collect [] = Right []
+    collect (selection :: rest) =
+      case find (\recipe ⇒ recipe.recipe_identity ≟ selection.selected_recipe) recipes of
+        Nothing ⇒ Left ("Saved recipe is missing: " ++ selection.selected_recipe)
+        Just recipe ⇒
+          if null recipe.recipe_ingredients || not (all valid_ingredient recipe.recipe_ingredients)
+            then Left ("Recipe needs valid ingredients: " ++ recipe.recipe_name)
+            else map (recipe_requirements recipe selection.selected_servings ++) (collect rest)
+
+public export
+record PantryItem where
+  constructor HaveAtHome
+  pantry_ingredient : IngredientIdentity
+  pantry_measure : Measure
+
+public export
+record NetRequirement where
+  constructor AfterPantry
+  demand : Requirement
+  owned_amount : RationalAmount
+  remaining_amount : RationalAmount
+
+export
+subtract_pantry : List PantryItem → Requirement → NetRequirement
+subtract_pantry pantry required =
+  let owned = foldl add_amount (whole 0)
+        (map (base_amount . pantry_measure)
+          (filter (\item ⇒ same_ingredient item.pantry_ingredient required.required_ingredient &&
+            same_dimension item.pantry_measure.dimension required.required_dimension) pantry))
+  in AfterPantry required owned (subtract_owned required.required_amount owned)
+
+public export
+record Store where
+  constructor AtStore
+  retailer_identity : Text
+  store_identity : Text
+
+export
+same_store : Store → Store → Bool
+same_store left right = left.retailer_identity ≟ right.retailer_identity &&
+  left.store_identity ≟ right.store_identity
+
+public export
+choice availability_kind one_of
+  in_stock
+  out_of_stock
+  availability_unknown
+
+public export
+record Product where
+  constructor SaleableProduct
+  internal_product_identity : Text
+  product_store : Store
+  retailer_product_identity : Text
+  checkout_identity : Maybe Text
+  product_ingredient : IngredientIdentity
+  product_name : Text
+  package_measure : Measure
+  observed_cents : Maybe Number
+  availability : availability_kind
+  observation_identity : Text
+
+export
+same_product : Product → Product → Bool
+same_product left right =
+  left.internal_product_identity ≟ right.internal_product_identity &&
+  same_store left.product_store right.product_store &&
+  left.retailer_product_identity ≟ right.retailer_product_identity
+
+public export
+record ApprovedMatch where
+  constructor ShopperApproved
+  matched_requirement : Requirement
+  matched_product : Product
+  substitution_approved : Bool
+
+export
+approve_match : Requirement → Product → Bool → Either Text ApprovedMatch
+approve_match required product substitution =
+  if product.internal_product_identity ≟ "" || product.retailer_product_identity ≟ "" ||
+     product.product_store.retailer_identity ≟ "" || product.product_store.store_identity ≟ ""
+    then Left "Product needs distinct internal, retailer and store identifiers"
+    else if not (same_dimension required.required_dimension product.package_measure.dimension)
+    then Left "Package and ingredient use different dimensions"
+    else if product.package_measure.base_amount.numerator ≟ 0
+      then Left "Package amount is missing or zero"
+      else if same_ingredient required.required_ingredient product.product_ingredient
+        then Right (ShopperApproved required product False)
+        else if substitution && any (same_ingredient product.product_ingredient) required.permitted_substitutions
+          then Right (ShopperApproved required product True)
+          else Left "Substitution needs an acceptable ingredient and explicit approval"
+
+-- Positive divisor is supplied by the denominator representation. Idriç's
+-- Prelude divNatNZ supplies total exact division without Float conversion.
+ceiling_ratio : Number → Number → Number
+ceiling_ratio top bottom_less_one =
+  divNatNZ (top + bottom_less_one) (S bottom_less_one) ItIsSucc
+
+export
+package_count : RationalAmount → RationalAmount → Maybe Number
+package_count _ (Fraction 0 _) = Nothing
+package_count needed package = Just (ceiling_ratio
+  (needed.numerator × denominator package)
+  (minus (denominator needed × package.numerator) 1))
+
+public export
+record PurchaseLine where
+  constructor BuyPackages
+  purchase_product : Product
+  packages : Number
+  purchased_amount : RationalAmount
+  surplus_amount : RationalAmount
+  line_cents : Number
+
+public export
+choice line_problem one_of
+  match_missing
+  match_ambiguous
+  store_changed
+  product_missing
+  product_ambiguous
+  price_missing
+  price_changed
+  package_changed
+  checkout_changed
+  identity_changed
+  product_out_of_stock
+  product_availability_unknown
+  invalid_package
+  substitution_changed
+
+public export
+choice planned_line one_of
+  pantry_covered NetRequirement
+  unresolved NetRequirement line_problem
+  ready NetRequirement PurchaseLine
+
+same_package : Measure → Measure → Bool
+same_package left right = same_dimension left.dimension right.dimension &&
+  equal_amount left.base_amount right.base_amount
+
+export
+revalidate : Store → ApprovedMatch → List Product → Either line_problem Product
+revalidate store approved fresh =
+  if not (same_store store approved.matched_product.product_store)
+    then Left store_changed
+    else case filter (\product ⇒ same_store store product.product_store &&
+                 product.retailer_product_identity ≟ approved.matched_product.retailer_product_identity) fresh of
+      [] ⇒ Left product_missing
+      [product] ⇒
+        if not (same_product product approved.matched_product)
+          then Left identity_changed
+          else if not (same_ingredient product.product_ingredient approved.matched_product.product_ingredient)
+            then Left identity_changed
+          else if not (same_package product.package_measure approved.matched_product.package_measure)
+            then Left package_changed
+          else if not (product.checkout_identity ≟ approved.matched_product.checkout_identity)
+            then Left checkout_changed
+          else case product.availability of
+            out_of_stock ⇒ Left product_out_of_stock
+            availability_unknown ⇒ Left product_availability_unknown
+            in_stock ⇒ case (product.observed_cents, approved.matched_product.observed_cents) of
+              (Just current, Just previous) ⇒ if current ≟ previous then Right product else Left price_changed
+              _ ⇒ Left price_missing
+      _ ⇒ Left product_ambiguous
+
+plan_requirement : Store → List ApprovedMatch → List Product → NetRequirement → planned_line
+plan_requirement store approved fresh needed =
+  if needed.remaining_amount.numerator ≟ 0
+    then pantry_covered needed
+    else case filter (\match ⇒ same_requirement match.matched_requirement needed.demand) approved of
+      [] ⇒ unresolved needed match_missing
+      [match] ⇒ case revalidate store match fresh of
+        Left problem ⇒ unresolved needed problem
+        Right product ⇒ case approve_match needed.demand product match.substitution_approved of
+          Left _ ⇒ unresolved needed substitution_changed
+          Right _ ⇒ case (package_count needed.remaining_amount product.package_measure.base_amount, product.observed_cents) of
+            (Just amount, Just cents) ⇒
+              let purchased = scale_amount product.package_measure.base_amount amount 0
+              in ready needed (BuyPackages product amount purchased
+                (subtract_owned purchased needed.remaining_amount) (cents × amount))
+            _ ⇒ unresolved needed invalid_package
+      _ ⇒ unresolved needed match_ambiguous
+
+export
+shopping_plan : Store → List NetRequirement → List ApprovedMatch → List Product → List planned_line
+shopping_plan store needed approved fresh = map (plan_requirement store approved fresh) needed
+
+export
+cart_total : List planned_line → Number
+cart_total [] = 0
+cart_total (ready _ line :: rest) = line.line_cents + cart_total rest
+cart_total (_ :: rest) = cart_total rest
+
+export
+plan_complete : List planned_line → Bool
+plan_complete [] = True
+plan_complete (unresolved _ _ :: _) = False
+plan_complete (_ :: rest) = plan_complete rest
+
+public export
+choice shopping_screen one_of
+  recipes_screen
+  recipe_editor Text
+  ingredients_screen
+  stores_screen
+  matches_screen
+  cart_screen
+
+public export
+record ShoppingState where
+  constructor Shopping
+  saved_recipes : List Recipe
+  selections : List Selection
+  pantry : List PantryItem
+  selected_store : Maybe Store
+  approved_matches : List ApprovedMatch
+  fresh_products : List Product
+  screen : shopping_screen
+  previous_screens : List shopping_screen
+  review_approved : Bool
+  notice : Text
+
+export
+begin_shopping : ShoppingState
+begin_shopping = Shopping [] [] [] Nothing [] [] recipes_screen [] False ""
+
+export
+current_plan : ShoppingState → Either Text (List planned_line)
+current_plan state = do
+  needed ← requirements_for state.saved_recipes state.selections
+  case state.selected_store of
+    Nothing ⇒ Left "Choose a retailer and store"
+    Just store ⇒ Right (shopping_plan store (map (subtract_pantry state.pantry) needed)
+      state.approved_matches state.fresh_products)
+
+public export
+choice user_action one_of
+  save_recipe Recipe
+  select_recipe Selection
+  unselect_recipe Text
+  set_pantry (List PantryItem)
+  choose_store Store
+  observe_products (List Product)
+  approve_product Requirement Product Bool
+  go_to shopping_screen
+  go_back
+  approve_review
+
+export
+transition : user_action → ShoppingState → ShoppingState
+transition (save_recipe recipe) state =
+  if recipe.recipe_identity ≟ "" || recipe.recipe_name ≟ ""
+    then { notice := "Recipe needs an identity and name" } state
+    else { saved_recipes := recipe :: filter (\old ⇒ not (old.recipe_identity ≟ recipe.recipe_identity)) state.saved_recipes,
+                  review_approved := False, notice := "Recipe saved" } state
+transition (select_recipe selection) state =
+  if any (\recipe ⇒ recipe.recipe_identity ≟ selection.selected_recipe) state.saved_recipes
+    then { selections := selection :: filter (\old ⇒ not (old.selected_recipe ≟ selection.selected_recipe)) state.selections,
+                  review_approved := False, notice := "Servings updated" } state
+    else { notice := "Select a saved recipe" } state
+transition (unselect_recipe identity) state =
+  { selections := filter (\old ⇒ not (old.selected_recipe ≟ identity)) state.selections,
+           review_approved := False, notice := "Recipe removed from this plan" } state
+transition (set_pantry items) state = { pantry := items, review_approved := False, notice := "Pantry updated" } state
+transition (choose_store store) state = { selected_store := Just store, fresh_products := [],
+  review_approved := False, notice := "Revalidate matches at this store" } state
+transition (observe_products products) state = { fresh_products := products,
+  review_approved := False, notice := "Review current prices and availability" } state
+transition (approve_product required product substitution) state =
+  case state.selected_store of
+    Nothing ⇒ { notice := "Choose a retailer and store" } state
+    Just store ⇒ if not (same_store store product.product_store)
+      then { notice := "Product belongs to a different store" } state
+      else case approve_match required product substitution of
+        Left message ⇒ { notice := message } state
+        Right match ⇒ { approved_matches := match :: filter (\old ⇒ not (same_requirement old.matched_requirement required)) state.approved_matches,
+                               review_approved := False, notice := "Product match approved" } state
+transition (go_to destination) state = { screen := destination, previous_screens := state.screen :: state.previous_screens } state
+transition go_back state = case state.previous_screens of
+  [] ⇒ { screen := recipes_screen } state
+  previous :: rest ⇒ { screen := previous, previous_screens := rest } state
+transition approve_review state = case current_plan state of
+  Left message ⇒ { review_approved := False, notice := message } state
+  Right plan ⇒ if plan_complete plan && not (null state.selections)
+    then { review_approved := True, notice := "Cart reviewed; retailer handoff may proceed" } state
+    else { review_approved := False, notice := "Resolve every ingredient before handoff" } state
+
+-- A retailer write has three outcomes. A lost response is uncertain, never a
+-- successful add and never permission for an automatic duplicate retry.
+public export
+choice handoff_result one_of
+  not_sent
+  add_acknowledged
+  add_rejected Text
+  add_outcome_unknown Text
+
+public export
+record HandoffItem where
+  constructor RetailerAdd
+  handoff_product : Product
+  handoff_packages : Number
+  handoff_status : handoff_result
+
+-- Merge physical products shared by different ingredient identities before
+-- writing the cart. Requirement rows retain their individual explanations.
+merge_handoff : PurchaseLine → List HandoffItem → List HandoffItem
+merge_handoff line [] = [RetailerAdd line.purchase_product line.packages not_sent]
+merge_handoff line (first :: rest) =
+  if same_product line.purchase_product first.handoff_product
+    then { handoff_packages := first.handoff_packages + line.packages } first :: rest
+    else first :: merge_handoff line rest
+
+export
+prepare_handoff : ShoppingState → Either Text (List HandoffItem)
+prepare_handoff state =
+  if not state.review_approved
+    then Left "Explicit cart review is required"
+    else do
+      plan ← current_plan state
+      if not (plan_complete plan)
+        then Left "Cart needs revalidation"
+        else collect plan []
+  where
+    collect : List planned_line → List HandoffItem → Either Text (List HandoffItem)
+    collect [] items = Right items
+    collect (ready _ line :: rest) items = case line.purchase_product.checkout_identity of
+      Nothing ⇒ Left "Retailer checkout identifier is missing"
+      Just "" ⇒ Left "Retailer checkout identifier is empty"
+      Just _ ⇒ collect rest (merge_handoff line items)
+    collect (pantry_covered _ :: rest) items = collect rest items
+    collect (unresolved _ _ :: _) _ = Left "Cart contains an unresolved ingredient"
+
+export
+record_handoff_result : Product → handoff_result → List HandoffItem → List HandoffItem
+record_handoff_result product result = map (\item ⇒
+  if same_product product item.handoff_product
+    then { handoff_status := result } item else item)
+
+-- The C oracle has bounded fields; this checks the explicit projection rather
+-- than narrowing exact recipe arithmetic or dropping overflowing cart lines.
+export
+fits_c_oracle : List planned_line → Bool
+fits_c_oracle plan = length plan <= 64 && cart_total plan <= 18446744073709551615 && all fits plan
+  where
+    fits : planned_line → Bool
+    fits (ready _ line) = line.packages <= 4294967295 &&
+      line.line_cents <= 18446744073709551615
+    fits (unresolved _ _) = False
+    fits _ = True
