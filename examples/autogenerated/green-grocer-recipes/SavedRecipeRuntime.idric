@@ -1,0 +1,17 @@
+module SavedRecipeRuntime
+
+import RecipeShopping
+import Data.Text
+
+-- Isolate the save transition from the independently blocked numeric probe.
+%export "dex:saved_recipe_name"
+saved_recipe_name : Text → Text
+saved_recipe_name name =
+  let recipe = SavedRecipe "user-recipe" name (Serves 1) []
+      state = transition (save_recipe recipe) begin_shopping
+  in case state.saved_recipes of
+    [saved] ⇒ saved.recipe_name
+    _ ⇒ state.notice
+
+main : IO ()
+main = pure ()

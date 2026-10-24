@@ -1,0 +1,34 @@
+module RecipeRuntime
+
+import RecipeShopping
+import Data.Text
+
+-- Observable scalar boundary around the real domain functions. The domain
+-- records and exact Number arithmetic remain in Idriç inside this boundary.
+-- This is a compiler/runtime probe, not an alternative app implementation.
+%export "dex:packages_for_grams"
+packages_for_grams : Int32 → Int32
+packages_for_grams grams_needed =
+  if grams_needed < 0
+    then -1
+    else case package_count (whole (cast grams_needed)) (whole 300) of
+      Nothing ⇒ -1
+      Just packages ⇒ cast packages
+
+%export "dex:saved_recipe_name"
+saved_recipe_name : Text → Text
+saved_recipe_name name =
+  let recipe = SavedRecipe "user-recipe" name (Serves 1) []
+      state = transition (save_recipe recipe) begin_shopping
+  in case state.saved_recipes of
+    [saved] ⇒ saved.recipe_name
+    _ ⇒ state.notice
+
+main : IO ()
+main = do
+  putStrLn (show (packages_for_grams 0))
+  putStrLn (show (packages_for_grams 300))
+  putStrLn (show (packages_for_grams 301))
+  putStrLn (show (packages_for_grams 500))
+  putStrLn (saved_recipe_name "User-entered soup")
+  putStrLn (saved_recipe_name "")
