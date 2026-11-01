@@ -330,3 +330,14 @@ requires exact result codes. Permission-mutant and UID-mutant acceptance must
 be established afresh, not inherited from those labels. The later manager UI
 launch also used an unresolvable implicit intent and is made explicit using
 the exact exported component in the pinned official APK.
+
+At ece12736459f9cdb54528237f5ff59a91735b7b9 / run 41354279642,
+API 34 and 35 both pass actual A/B/C and long capture, exclusion policies,
+actual process-crash recovery, replacement and wrong-signer controls, and
+unchanged Gboard. The API 35 screenshot confirms all sixteen cards and header
+outside system bars. All three migration lanes pass. The fixed independent
+controller now reports the expected external-caller refusal, but the exact
+result-code assertion stops: Android's pretty instrumentation output omits the
+code when a stream is present. The qualifier now requests raw output and keeps
+both exact assertions. Application code and candidate version 14 are unchanged
+for this qualification-only follow-up; fresh receipts must still name its head.
