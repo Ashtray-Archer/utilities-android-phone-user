@@ -1,4 +1,5 @@
 #include "pasteboard_model.h"
+#include "clipboard.h"
 
 #include <android/input.h>
 #include <android/log.h>
@@ -193,21 +194,6 @@ static jstring new_java_string_utf8_with_class(JNIEnv *environment, jclass strin
         (*environment)->DeleteLocalRef(environment, charset);
     }
     (*environment)->DeleteLocalRef(environment, array);
-    return result;
-}
-
-static jstring new_java_string_utf8(JNIEnv *environment, const char *text) {
-    jclass string_class = (*environment)->FindClass(environment, "java/lang/String");
-    if (string_class == NULL || clear_exception(environment, "finding java.lang.String")) {
-        return NULL;
-    }
-    const jmethodID constructor = (*environment)->GetMethodID(
-        environment, string_class, "<init>", "([BLjava/lang/String;)V");
-    jstring result = NULL;
-    if (constructor != NULL && !clear_exception(environment, "finding UTF-8 String constructor")) {
-        result = new_java_string_utf8_with_class(environment, string_class, constructor, text);
-    }
-    (*environment)->DeleteLocalRef(environment, string_class);
     return result;
 }
 
@@ -531,192 +517,49 @@ static void render(AppContext *context) {
     end_canvas(context, &session);
 }
 
-static size_t valid_utf8_prefix(const char *text, size_t length) {
-    if (length == 0u) {
-        return 0u;
-    }
-    size_t start = length - 1u;
-    while (start > 0u && (((unsigned char)text[start] & 0xC0u) == 0x80u)) {
-        --start;
-    }
-    const unsigned char lead = (unsigned char)text[start];
-    size_t expected = 1u;
-    if ((lead & 0xE0u) == 0xC0u) expected = 2u;
-    else if ((lead & 0xF0u) == 0xE0u) expected = 3u;
-    else if ((lead & 0xF8u) == 0xF0u) expected = 4u;
-    const size_t actual = length - start;
-    return actual < expected ? start : length;
-}
-
+/*
+ * The shared clipboard adapter retains the exact Android visibility result.
+ * The original fixed-slot model cannot represent embedded NUL or >8191 bytes,
+ * so refuse such values instead of recording an altered copy of the clip.
+ * The full-size persisted archive and error UI are separate acceptance work.
+ */
 static bool read_current_clipboard(AppContext *context, char *output, size_t capacity) {
+    (void)context;
     if (capacity < 2u) {
         return false;
     }
     output[0] = '\0';
-    ANativeActivity *activity = context->app->activity;
-    JNIEnv *environment = NULL;
-    bool detach = false;
-    if (!attach_environment(activity, &environment, &detach)) {
+    char *text = NULL;
+    size_t length = 0u;
+    const ClipboardStatus status = clipboard_get_utf8(&text, &length);
+    if (status != CLIPBOARD_OK) {
+        if (status != CLIPBOARD_NO_VISIBLE_CLIP && status != CLIPBOARD_NO_TEXT) {
+            LOG_ERROR("clipboard read refused: %s", clipboard_status_name(status));
+        }
         return false;
     }
-    bool success = false;
-    jobject clipboard = NULL;
-    jobject clip = NULL;
-    jobject item = NULL;
-    jobject chars = NULL;
-    jstring string = NULL;
-    jbyteArray bytes = NULL;
-    jstring service_name = NULL;
-    jstring charset = NULL;
-    jclass activity_class = NULL;
-    jclass clipboard_class = NULL;
-    jclass clip_class = NULL;
-    jclass item_class = NULL;
-    jclass chars_class = NULL;
-    jclass string_class = NULL;
-
-    activity_class = (*environment)->GetObjectClass(environment, activity->clazz);
-    const jmethodID get_system_service = activity_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, activity_class, "getSystemService",
-                                    "(Ljava/lang/String;)Ljava/lang/Object;");
-    service_name = (*environment)->NewStringUTF(environment, "clipboard");
-    if (get_system_service != NULL && service_name != NULL) {
-        clipboard = (*environment)->CallObjectMethod(environment, activity->clazz,
-                                                      get_system_service, service_name);
+    const bool admissible = length > 0u && length < capacity &&
+                            memchr(text, '\0', length) == NULL;
+    if (!admissible && length > 0u) {
+        LOG_ERROR("clipboard text is not representable in the fixed model (%zu bytes)",
+                  length);
     }
-    clipboard_class = clipboard == NULL ? NULL : (*environment)->GetObjectClass(environment, clipboard);
-    const jmethodID get_primary_clip = clipboard_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, clipboard_class, "getPrimaryClip",
-                                    "()Landroid/content/ClipData;");
-    if (get_primary_clip != NULL) {
-        clip = (*environment)->CallObjectMethod(environment, clipboard, get_primary_clip);
+    if (admissible) {
+        memcpy(output, text, length);
+        output[length] = '\0';
     }
-    clip_class = clip == NULL ? NULL : (*environment)->GetObjectClass(environment, clip);
-    const jmethodID get_item_count = clip_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, clip_class, "getItemCount", "()I");
-    const jmethodID get_item_at = clip_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, clip_class, "getItemAt",
-                                    "(I)Landroid/content/ClipData$Item;");
-    if (get_item_count != NULL && get_item_at != NULL) {
-        const jint count = (*environment)->CallIntMethod(environment, clip, get_item_count);
-        if (count > 0) {
-            item = (*environment)->CallObjectMethod(environment, clip, get_item_at, 0);
-        }
-    }
-    item_class = item == NULL ? NULL : (*environment)->GetObjectClass(environment, item);
-    const jmethodID get_text = item_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, item_class, "getText",
-                                    "()Ljava/lang/CharSequence;");
-    const jmethodID coerce_to_text = item_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, item_class, "coerceToText",
-                                    "(Landroid/content/Context;)Ljava/lang/CharSequence;");
-    if (get_text != NULL) {
-        chars = (*environment)->CallObjectMethod(environment, item, get_text);
-    }
-    if (chars == NULL && coerce_to_text != NULL) {
-        chars = (*environment)->CallObjectMethod(environment, item, coerce_to_text, activity->clazz);
-    }
-    chars_class = chars == NULL ? NULL : (*environment)->GetObjectClass(environment, chars);
-    const jmethodID to_string = chars_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, chars_class, "toString",
-                                    "()Ljava/lang/String;");
-    if (to_string != NULL) {
-        string = (jstring)(*environment)->CallObjectMethod(environment, chars, to_string);
-    }
-    string_class = string == NULL ? NULL : (*environment)->FindClass(environment, "java/lang/String");
-    const jmethodID get_bytes = string_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, string_class, "getBytes",
-                                    "(Ljava/lang/String;)[B");
-    charset = (*environment)->NewStringUTF(environment, "UTF-8");
-    if (get_bytes != NULL && charset != NULL) {
-        bytes = (jbyteArray)(*environment)->CallObjectMethod(environment, string, get_bytes, charset);
-    }
-    if (bytes != NULL && !clear_exception(environment, "reading clipboard text")) {
-        const jsize byte_count = (*environment)->GetArrayLength(environment, bytes);
-        size_t copied = (size_t)byte_count;
-        if (copied >= capacity) {
-            copied = capacity - 1u;
-        }
-        if (copied > 0u) {
-            (*environment)->GetByteArrayRegion(environment, bytes, 0, (jsize)copied,
-                                                (jbyte *)output);
-            if ((size_t)byte_count >= capacity) {
-                copied = valid_utf8_prefix(output, copied);
-            }
-        }
-        output[copied] = '\0';
-        success = copied > 0u && !clear_exception(environment, "copying clipboard bytes");
-    } else {
-        (void)clear_exception(environment, "reading clipboard");
-    }
-
-    if (charset != NULL) (*environment)->DeleteLocalRef(environment, charset);
-    if (bytes != NULL) (*environment)->DeleteLocalRef(environment, bytes);
-    if (string_class != NULL) (*environment)->DeleteLocalRef(environment, string_class);
-    if (string != NULL) (*environment)->DeleteLocalRef(environment, string);
-    if (chars_class != NULL) (*environment)->DeleteLocalRef(environment, chars_class);
-    if (chars != NULL) (*environment)->DeleteLocalRef(environment, chars);
-    if (item_class != NULL) (*environment)->DeleteLocalRef(environment, item_class);
-    if (item != NULL) (*environment)->DeleteLocalRef(environment, item);
-    if (clip_class != NULL) (*environment)->DeleteLocalRef(environment, clip_class);
-    if (clip != NULL) (*environment)->DeleteLocalRef(environment, clip);
-    if (clipboard_class != NULL) (*environment)->DeleteLocalRef(environment, clipboard_class);
-    if (clipboard != NULL) (*environment)->DeleteLocalRef(environment, clipboard);
-    if (service_name != NULL) (*environment)->DeleteLocalRef(environment, service_name);
-    if (activity_class != NULL) (*environment)->DeleteLocalRef(environment, activity_class);
-    if (detach) {
-        (void)(*activity->vm)->DetachCurrentThread(activity->vm);
-    }
-    return success;
+    clipboard_free(text);
+    return admissible;
 }
 
 static bool copy_to_clipboard(AppContext *context, const char *text) {
-    ANativeActivity *activity = context->app->activity;
-    JNIEnv *environment = NULL;
-    bool detach = false;
-    if (!attach_environment(activity, &environment, &detach)) {
+    (void)context;
+    const ClipboardStatus status = clipboard_set_utf8(text, strlen(text), 0);
+    if (status != CLIPBOARD_OK) {
+        LOG_ERROR("clipboard copy failed: %s", clipboard_status_name(status));
         return false;
     }
-    bool success = false;
-    jclass activity_class = (*environment)->GetObjectClass(environment, activity->clazz);
-    const jmethodID get_system_service = activity_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, activity_class, "getSystemService",
-                                    "(Ljava/lang/String;)Ljava/lang/Object;");
-    jstring service_name = (*environment)->NewStringUTF(environment, "clipboard");
-    jobject clipboard = (get_system_service == NULL || service_name == NULL) ? NULL :
-        (*environment)->CallObjectMethod(environment, activity->clazz,
-                                          get_system_service, service_name);
-    jclass clip_data_class = (*environment)->FindClass(environment, "android/content/ClipData");
-    const jmethodID new_plain_text = clip_data_class == NULL ? NULL :
-        (*environment)->GetStaticMethodID(environment, clip_data_class, "newPlainText",
-            "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;");
-    jstring label = (*environment)->NewStringUTF(environment, "Pasteboard");
-    jstring value = new_java_string_utf8(environment, text);
-    jobject clip = (new_plain_text == NULL || label == NULL || value == NULL) ? NULL :
-        (*environment)->CallStaticObjectMethod(environment, clip_data_class,
-                                               new_plain_text, label, value);
-    jclass clipboard_class = clipboard == NULL ? NULL :
-        (*environment)->GetObjectClass(environment, clipboard);
-    const jmethodID set_primary_clip = clipboard_class == NULL ? NULL :
-        (*environment)->GetMethodID(environment, clipboard_class, "setPrimaryClip",
-                                    "(Landroid/content/ClipData;)V");
-    if (set_primary_clip != NULL && clip != NULL &&
-        !clear_exception(environment, "building clipboard data")) {
-        (*environment)->CallVoidMethod(environment, clipboard, set_primary_clip, clip);
-        success = !clear_exception(environment, "ClipboardManager.setPrimaryClip");
-    }
-    if (clip != NULL) (*environment)->DeleteLocalRef(environment, clip);
-    if (value != NULL) (*environment)->DeleteLocalRef(environment, value);
-    if (label != NULL) (*environment)->DeleteLocalRef(environment, label);
-    if (clipboard_class != NULL) (*environment)->DeleteLocalRef(environment, clipboard_class);
-    if (clip_data_class != NULL) (*environment)->DeleteLocalRef(environment, clip_data_class);
-    if (clipboard != NULL) (*environment)->DeleteLocalRef(environment, clipboard);
-    if (service_name != NULL) (*environment)->DeleteLocalRef(environment, service_name);
-    if (activity_class != NULL) (*environment)->DeleteLocalRef(environment, activity_class);
-    if (detach) {
-        (void)(*activity->vm)->DetachCurrentThread(activity->vm);
-    }
-    return success;
+    return true;
 }
 
 static uint64_t now_ms(void) {
@@ -852,6 +695,20 @@ void android_main(struct android_app *app) {
     LOG_INFO("state %s from %s", context.loaded ? "loaded" : "started fresh",
              context.storage_path);
 
+    JNIEnv *clipboard_environment = NULL;
+    bool clipboard_detach = false;
+    if (attach_environment(app->activity, &clipboard_environment, &clipboard_detach)) {
+        const ClipboardStatus status = clipboard_bridge_init(
+            clipboard_environment, app->activity->clazz);
+        if (status != CLIPBOARD_OK) {
+            LOG_ERROR("could not initialize clipboard bridge: %s",
+                      clipboard_status_name(status));
+        }
+        if (clipboard_detach) {
+            (void)(*app->activity->vm)->DetachCurrentThread(app->activity->vm);
+        }
+    }
+
     app->userData = &context;
     app->onAppCmd = handle_command;
     app->onInputEvent = handle_input;
@@ -866,6 +723,7 @@ void android_main(struct android_app *app) {
         }
         if (app->destroyRequested != 0) {
             save_state(&context);
+            (void)clipboard_bridge_shutdown();
             return;
         }
         if (context.redraw && app->window != NULL) {
