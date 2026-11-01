@@ -108,3 +108,13 @@ inodes and recovery that does not resurrect acknowledged deleted text. Both
 modern formats remain supported. The original v1 file is retired only after
 two synced modern copies exist. These current changes also compile/link through
 ICK and NDK locally; installed acceptance remains separate.
+
+Tap-to-copy now attaches an advisory retained identity to its immutable ClipData
+instead of preparing a marker in a separate history transaction. Source tests
+exercise an intervening external capture and both mismatched and unknown hints.
+The checked reducer alone decides whether the exact identity/text pair is an
+own copy. Source/host checks, deterministic direct DEX and ICK/NDK compilation
+pass locally. Private companion protocol v2 carries this hint; the stable user
+service tag is retained, and candidate version code 5 requests replacement.
+PB3 storage is unchanged. Installed loader, actual callbacks and physical-device
+acceptance remain separate evidence obligations.

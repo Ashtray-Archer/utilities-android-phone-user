@@ -485,11 +485,11 @@ static void draw_entry_text(CanvasSession *session, RectF rect, const char *text
     (*environment)->DeleteLocalRef(environment, value);
 }
 
-static void draw_board_dots(CanvasSession *session, float width, float height,
+static void draw_board_dots(CanvasSession *session, Viewport viewport,
                             size_t active_board) {
-    const float y = header_height(height) * 0.48f;
-    const float spacing = clampf(width * 0.038f, 18.0f, 28.0f);
-    const float center = width * 0.5f;
+    const float y = viewport.top + header_height(viewport.height) * 0.48f;
+    const float spacing = clampf(viewport.width * 0.038f, 18.0f, 28.0f);
+    const float center = viewport.left + viewport.width * 0.5f;
     for (size_t index = 0u; index < PASTEBOARD_BOARD_COUNT; ++index) {
         const float x = center + ((float)index - 1.0f) * spacing;
         const bool active = index == active_board;
@@ -578,6 +578,7 @@ static void capture_current_clipboard(AppContext *context) {
             status == CLIPBOARD_NO_VISIBLE_CLIP ? "Clipboard is empty or unavailable" : "Clipboard could not be read";
         (void)snprintf(context->message, sizeof(context->message), "%s", message);
         clipboard_free(bytes);
+        clipboard_free(details.origin_utf8);
         context->redraw ← true;
         return;
     }
@@ -590,9 +591,11 @@ static void capture_current_clipboard(AppContext *context) {
         ((uint64_t)now.tv_sec * UINT64_C(1000) + (uint64_t)now.tv_nsec ÷ UINT64_C(1000000)));
     (void)snprintf(identity, sizeof(identity), "foreground:%ld:%ld:%ld:%llu", (long)getpid(),
         (long)now.tv_sec, now.tv_nsec, (unsigned long long)sequence);
-    PBText arguments[3] ← {literal_text(identity), literal_text(timestamp), {bytes, length}};
-    (void)history_action(context, "capture_foreground", arguments, 3u);
+    PBText arguments[4] ← {literal_text(identity), literal_text(timestamp), {bytes, length},
+        {details.origin_utf8, details.origin_length}};
+    (void)history_action(context, "capture_foreground", arguments, 4u);
     clipboard_free(bytes);
+    clipboard_free(details.origin_utf8);
 }
 
 static void copy_entry(AppContext *context, const char *identity) {
@@ -602,17 +605,14 @@ static void copy_entry(AppContext *context, const char *identity) {
     if (text == NULL) return;
     const size_t length ← entry->text.length;
     memcpy(text, entry->text.bytes, length + 1u);
-    PBText argument ← literal_text(identity);
-    /* Prepare the source-owned marker before the OS effect, so an immediate
-     * shell callback cannot reorder a card copied from this application. */
-    const bool prepared ← history_action(context, "seen", &argument, 1u);
-    const ClipboardStatus copied ← clipboard_set_utf8(text, length, 0);
+    /* The same ClipData carries the retained identity and exact text. The
+     * checked reducer validates that pair even if another capture intervenes. */
+    const ClipboardStatus copied ← clipboard_set_utf8_with_origin(text, length, 0,
+        entry->identity.bytes, entry->identity.length);
     free(text);
     if (copied == CLIPBOARD_OK) {
-        (void)snprintf(context->message, sizeof(context->message), "%s",
-            prepared ? "Copied" : "Copied; history marker could not be saved");
+        (void)snprintf(context->message, sizeof(context->message), "%s", "Copied");
     } else {
-        if (prepared) (void)history_action(context, "copy_failed", &argument, 1u);
         (void)snprintf(context->message, sizeof(context->message), "%s", "Clipboard copy failed");
     }
     context->redraw ← true;
@@ -665,7 +665,7 @@ static void render(AppContext *context) {
         draw_utf8(&session, "›", viewport.left + viewport.width - 80.0f, viewport.top + 35.0f, 30.0f, COLOR_TEXT);
         draw_utf8(&session, "×", viewport.left + viewport.width - 35.0f, viewport.top + 35.0f, 27.0f, COLOR_TEXT);
     } else {
-        draw_board_dots(&session, viewport.width, viewport.height, (uint32_t)context->state.selected_board);
+        draw_board_dots(&session, viewport, (uint32_t)context->state.selected_board);
         draw_utf8(&session, "⋮", viewport.left + viewport.width - 34.0f, viewport.top + 39.0f, 30.0f, COLOR_TEXT);
     }
     const char *status ← !context->loaded ? "History unavailable" :

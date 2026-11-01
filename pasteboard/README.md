@@ -40,9 +40,11 @@ native interpreter, arbitrary DEX patching or generated replacement app is used.
 New text enters the selected board first. An exact-text duplicate is globally
 unique; recopying an older record promotes the same record on its current board
 and preserves protection. Repeating the immediately seen value leaves order
-unchanged. Copying a card prepares a checked marker before the Android clipboard
-effect so its observer callback does not promote it. Failed copies clear that
-marker only if no intervening capture has superseded it.
+unchanged. A card copy carries an advisory retained identity in the same
+immutable Android ClipData. The checked reducer verifies the identity and exact
+text before preserving its position, including when another capture intervenes.
+The hint grants no authority and cannot suppress different or new text. A
+failed clipboard write leaves history untouched.
 
 When a board is full, its oldest unprotected card moves to the archive. Its full
 text remains retained. If all sixteen cards are protected, a new capture goes
@@ -76,7 +78,7 @@ Valid original `pasteboard.bin` v1 records are imported through the checked
 reducer when no new-format history exists. The original file remains until two
 independently synced modern copies exist, then is retired. An incompatible or
 damaged legacy record stops migration and preserves the original. The stable
-package is `com.isomorphisms.pasteboard`; candidate version code 4
+package is `com.isomorphisms.pasteboard`; candidate version code 5
 uses the persistent Wegert public test certificate
 `de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
 An installation with another legacy signer cannot be replaced by Android;

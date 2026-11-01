@@ -24,7 +24,7 @@
 #define REQUEST_PERMISSION_CODE 151
 #define INTERFACE_TRANSACTION 0x5f4e5446
 #define WORKER_CONNECTION_DESCRIPTOR "moe.shizuku.server.IShizukuServiceConnection"
-#define WORKER_DESCRIPTOR "com.isomorphisms.pasteboard.ClipboardObserver.v1"
+#define WORKER_DESCRIPTOR "com.isomorphisms.pasteboard.ClipboardObserver.v2"
 
 static struct {
     pthread_mutex_t mutex;

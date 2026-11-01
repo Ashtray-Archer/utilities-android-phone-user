@@ -24,6 +24,8 @@ typedef enum {
 typedef struct {
     int item_count;
     int sensitive;
+    char *origin_utf8;
+    size_t origin_length;
 } ClipboardDetails;
 
 /*
@@ -55,7 +57,9 @@ ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len);
  * indication. Multi-item clips are explicitly refused by this history-facing
  * API; the original first-item getter above retains its existing contract.
  * A sensitive clip still returns its exact text and flag to the caller, which
- * must apply the user's retention policy before saving it. */
+ * must apply the user's retention policy before saving it. On success, a
+ * present origin hint is separately malloc-owned and must also be freed. The
+ * hint is public clipboard metadata, never authentication or read authority. */
 ClipboardStatus clipboard_get_utf8_details(char **out_bytes, size_t *out_len,
                                           ClipboardDetails *out_details);
 
@@ -66,6 +70,10 @@ ClipboardStatus clipboard_get_utf8_details(char **out_bytes, size_t *out_len,
  * interpreted by the system clipboard UI on API 33+.
  */
 ClipboardStatus clipboard_set_utf8(const char *bytes, size_t len, int sensitive);
+/* Attach an advisory exact-text origin hint in the same immutable ClipData.
+ * Existing callers retain the untagged setter contract. */
+ClipboardStatus clipboard_set_utf8_with_origin(const char *bytes, size_t len, int sensitive,
+                                              const char *origin, size_t origin_length);
 
 /* API 28+ uses clearPrimaryClip(); older Android receives an empty text clip. */
 ClipboardStatus clipboard_clear(void);

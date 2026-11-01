@@ -231,13 +231,22 @@ remember_delivery : History → Text → Text → History
 remember_delivery history delivery contents =
   { last_seen := contents, delivered := delivery :: history.delivered } history
 
-capture_entry : History → Text → Text → Text → Transition
-capture_entry history delivery timestamp contents =
+copied_entry_matches : History → Text → Text → Bool
+copied_entry_matches history origin contents = case find_identity origin history.entries of
+  Just entry ⇒ not (origin ≟ "") && entry.contents ≟ contents
+  Nothing ⇒ False
+
+capture_entry : History → Text → Text → Text → Text → Transition
+capture_entry history delivery timestamp contents origin =
   if not history.capture_enabled then TransitionTo "paused" history else
   if delivery ≟ "" || not (valid_text delivery && valid_text timestamp &&
                              valid_text contents)
     then TransitionTo "unsupported_text" history else
   if elem delivery history.delivered then TransitionTo "replayed" history else
+  -- Public metadata is only a no-reorder hint for already retained exact text.
+  -- It grants no authority and can never suppress different/new contents.
+  if copied_entry_matches history origin contents then TransitionTo "own_copy"
+    (remember_delivery history delivery contents) else
   if contents ≟ "" then TransitionTo "empty"
     (remember_delivery history delivery "") else
   if contents ≟ history.last_seen then TransitionTo "duplicate"
@@ -295,12 +304,20 @@ delete_entry history identity = case find_identity identity history.entries of
 
 dispatch : History → Text → List Text → Transition
 dispatch history "capture" [delivery, timestamp, contents] =
-  capture_entry history delivery timestamp contents
+  capture_entry history delivery timestamp contents ""
+dispatch history "capture" [delivery, timestamp, contents, origin] =
+  capture_entry history delivery timestamp contents origin
 dispatch history "capture_foreground" [delivery, timestamp, contents] =
   if history.automatic_requested then TransitionTo "automatic_pending" history
-  else capture_entry history delivery timestamp contents
+  else capture_entry history delivery timestamp contents ""
+dispatch history "capture_foreground" [delivery, timestamp, contents, origin] =
+  if history.automatic_requested then TransitionTo "automatic_pending" history
+  else capture_entry history delivery timestamp contents origin
 dispatch history "capture_observer" [delivery, timestamp, contents] =
-  if history.automatic_requested then capture_entry history delivery timestamp contents
+  if history.automatic_requested then capture_entry history delivery timestamp contents ""
+  else TransitionTo "background_disabled" history
+dispatch history "capture_observer" [delivery, timestamp, contents, origin] =
+  if history.automatic_requested then capture_entry history delivery timestamp contents origin
   else TransitionTo "background_disabled" history
 dispatch history "request_automatic" [] = TransitionTo "automatic_requested"
   ({ automatic_requested := True } history)

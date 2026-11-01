@@ -276,23 +276,23 @@ jobject pb_observer_provider_request(JNIEnv *e, jstring name, jstring token,
     jmethodID descriptors ← sdk_method(e, "android/os/Bundle", "hasFileDescriptors", "()Z");
     jmethodID get ← sdk_method(e, "android/os/Bundle", "getString", "(Ljava/lang/String;)Ljava/lang/String;");
     if (extras == NULL || size == NULL || descriptors == NULL || get == NULL ||
-        (*e)->CallIntMethod(e, extras, size) != 3 || (*e)->CallBooleanMethod(e, extras, descriptors) ||
+        (*e)->CallIntMethod(e, extras, size) != 4 || (*e)->CallBooleanMethod(e, extras, descriptors) ||
         (*e)->ExceptionCheck(e)) return result_bundle(e, -1);
-    const char *keys[3] ← {"delivery", "timestamp", "text"};
-    PBText arguments[3] ← {{0}};
+    const char *keys[4] ← {"delivery", "timestamp", "text", "origin"};
+    PBText arguments[4] ← {{0}};
     int valid ← 1;
-    for (size_t index ← 0u; valid && index < 3u; ++index) {
+    for (size_t index ← 0u; valid && index < 4u; ++index) {
         jstring key ← (*e)->NewStringUTF(e, keys[index]);
         jstring value ← key ? (*e)->CallObjectMethod(e, extras, get, key) : NULL;
         valid ← pb_history_native_text(e, value, &arguments[index]);
     }
     valid ← valid && arguments[0].length > 0u && arguments[0].length < 128u && arguments[1].length < 32u;
     PBHistoryView view ← {0};
-    valid ← valid && pb_history_apply(e, "capture_observer", arguments, 3u, &view);
+    valid ← valid && pb_history_apply(e, "capture_observer", arguments, 4u, &view);
     const int unsupported ← valid && strcmp(view.outcome, "unsupported_text") == 0;
     int accepted ← valid && (strcmp(view.outcome, "captured") == 0 || strcmp(view.outcome, "archived") == 0 ||
         strcmp(view.outcome, "duplicate") == 0 || strcmp(view.outcome, "replayed") == 0 ||
-        strcmp(view.outcome, "empty") == 0 || unsupported);
+        strcmp(view.outcome, "empty") == 0 || strcmp(view.outcome, "own_copy") == 0 || unsupported);
     if (accepted) {
         (void)pthread_mutex_lock(&app_mutex);
         last_heartbeat ← time(NULL);
@@ -305,7 +305,7 @@ jobject pb_observer_provider_request(JNIEnv *e, jstring name, jstring token,
         (void)snprintf(app_status, sizeof(app_status), "%s", valid ? "Capture refused by history policy" : pb_history_last_error());
         (void)pthread_mutex_unlock(&app_mutex);
     }
-    for (size_t index ← 0u; index < 3u; ++index) free(arguments[index].bytes);
+    for (size_t index ← 0u; index < 4u; ++index) free(arguments[index].bytes);
     pb_history_view_free(&view);
     return result_bundle(e, accepted ? 1 : 0);
 }
@@ -317,6 +317,7 @@ typedef struct ClipboardEvent ClipboardEvent;
 struct ClipboardEvent {
     ClipboardEvent *next;
     PBText text;
+    PBText origin;
     char delivery[96];
     char timestamp[32];
     char token[65];
@@ -353,6 +354,7 @@ static jint caller_uid(JNIEnv *e) {
 static void free_event(ClipboardEvent *event) {
     if (event == NULL) return;
     free(event->text.bytes);
+    free(event->origin.bytes);
     free(event);
 }
 
@@ -403,7 +405,7 @@ static int deliver(JNIEnv *e, ClipboardEvent *event) {
     int valid ← resolver && uri && extras && !(*e)->ExceptionCheck(e);
     if (valid && event) valid ← put_text(e, extras, "delivery", (PBText){event->delivery, strlen(event->delivery)}) &&
         put_text(e, extras, "timestamp", (PBText){event->timestamp, strlen(event->timestamp)}) &&
-        put_text(e, extras, "text", event->text);
+        put_text(e, extras, "text", event->text) && put_text(e, extras, "origin", event->origin);
     jmethodID call ← sdk_method(e, "android/content/ContentResolver", "call",
         "(Landroid/net/Uri;Ljava/lang/String;Ljava/lang/String;Landroid/os/Bundle;)Landroid/os/Bundle;");
     jstring name ← valid && call ? (*e)->NewStringUTF(e, event ? "observer_event" : "observer_heartbeat") : NULL;
@@ -483,7 +485,7 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_initialize(JNIEnv *e, jobject
     valid ← valid && held_context && held_manager && held_self && !(*e)->ExceptionCheck(e);
     if (valid) {
         jmethodID attach ← sdk_method(e, "android/os/Binder", "attachInterface", "(Landroid/os/IInterface;Ljava/lang/String;)V");
-        jstring descriptor ← attach ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v1") : NULL;
+        jstring descriptor ← attach ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v2") : NULL;
         if (descriptor) (*e)->CallVoidMethod(e, self, attach, NULL, descriptor);
         valid ← descriptor && !(*e)->ExceptionCheck(e);
     }
@@ -556,7 +558,7 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_onTransact(JNIEnv *e, jobject
     int valid ← 0;
     if (code == 0x5f4e5446 && reply) {
         jmethodID write ← sdk_method(e, "android/os/Parcel", "writeString", "(Ljava/lang/String;)V");
-        jstring descriptor ← write ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v1") : NULL;
+        jstring descriptor ← write ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v2") : NULL;
         if (descriptor) (*e)->CallVoidMethod(e, reply, write, descriptor);
         valid ← descriptor && !(*e)->ExceptionCheck(e);
     } else if (code == 16777115 && caller_uid(e) == 2000 && (flags & ~0x12) == 0) {
@@ -565,7 +567,7 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_onTransact(JNIEnv *e, jobject
     } else if (code == 2 && service.initialized && caller_uid(e) == (jint)service.owner &&
                data && reply && (flags & ~0x12) == 0) {
         jmethodID enforce ← sdk_method(e, "android/os/Parcel", "enforceInterface", "(Ljava/lang/String;)V");
-        jstring descriptor ← enforce ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v1") : NULL;
+        jstring descriptor ← enforce ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v2") : NULL;
         if (descriptor) (*e)->CallVoidMethod(e, data, enforce, descriptor);
         jmethodID read ← sdk_method(e, "android/os/Parcel", "readString", "()Ljava/lang/String;");
         jstring token ← descriptor && read && !(*e)->ExceptionCheck(e) ? (*e)->CallObjectMethod(e, data, read) : NULL;
@@ -603,10 +605,15 @@ Java_com_isomorphisms_pasteboard_ClipboardListener_onPrimaryClipChanged(JNIEnv *
     size_t length ← 0u;
     ClipboardDetails details;
     const ClipboardStatus read ← clipboard_get_utf8_details(&text, &length, &details);
-    if (read != CLIPBOARD_OK || details.sensitive) { clipboard_free(text); return; }
+    if (read != CLIPBOARD_OK || details.sensitive) {
+        clipboard_free(text); clipboard_free(details.origin_utf8); return;
+    }
     ClipboardEvent *event ← calloc(1u, sizeof(*event));
-    if (event == NULL) { clipboard_free(text); stop_listener(e); return; }
+    if (event == NULL) {
+        clipboard_free(text); clipboard_free(details.origin_utf8); stop_listener(e); return;
+    }
     event->text ← (PBText){text, length};
+    event->origin ← (PBText){details.origin_utf8, details.origin_length};
     struct timespec now ← {0};
     if (clock_gettime(CLOCK_REALTIME, &now) == 0)
         (void)snprintf(event->timestamp, sizeof(event->timestamp), "%llu",

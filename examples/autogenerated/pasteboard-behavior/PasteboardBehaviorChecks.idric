@@ -53,6 +53,16 @@ main = do
   second ← perform first "capture" ["b", "2", "B"] "captured"
   third ← perform second "capture" ["c", "3", "C"] "captured"
   ensure "three captures newest first" (inspect third (\history ⇒ board_contents 1 history ≟ ["C", "B", "A"]))
+  intervening ← perform third "capture" ["d", "4", "D"] "captured"
+  tagged_copy ← perform intervening "capture" ["tagged", "5", "B", "b"] "own_copy"
+  ensure "copy origin preserves order after an intervening external capture" (inspect tagged_copy
+    (\history ⇒ board_contents 1 history ≟ ["D", "C", "B", "A"]))
+  mismatched_hint ← perform tagged_copy "capture" ["e", "6", "E", "b"] "captured"
+  ensure "origin cannot suppress different external text" (inspect mismatched_hint
+    (\history ⇒ board_contents 1 history ≟ ["E", "D", "C", "B", "A"]))
+  unknown_hint ← perform mismatched_hint "capture" ["f", "7", "F", "unknown"] "captured"
+  ensure "unknown origin cannot suppress new external text" (inspect unknown_hint
+    (\history ⇒ head' (board_contents 1 history) ≟ Just "F"))
   automatic ← perform third "request_automatic" [] "automatic_requested"
   foreground_refused ← perform automatic "capture_foreground" ["f", "4", "foreground sample"] "automatic_pending"
   ensure "foreground sampling cannot overtake observer queue" (foreground_refused ≟ automatic)
