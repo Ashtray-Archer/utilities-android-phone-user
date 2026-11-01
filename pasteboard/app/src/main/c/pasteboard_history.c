@@ -20,16 +20,37 @@ static jmethodID checked_transition ← NULL;
 static char *private_directory ← NULL;
 static void (*change_handler)(void *) ← NULL;
 static void *change_owner ← NULL;
-static _Thread_local char last_error[160];
+/* API 26 Bionic does not expose GNU __tls_get_addr. Use the public pthread
+ * boundary for per-thread diagnostics, with destructor-owned allocations. */
+static pthread_once_t error_once ← PTHREAD_ONCE_INIT;
+static pthread_key_t error_key;
+static int error_key_ready ← 0;
 static atomic_bool capture_enabled ← false;
 static atomic_bool automatic_requested ← false;
 
+static void create_error_key(void) { error_key_ready ← pthread_key_create(&error_key, free) == 0; }
+
+static char *error_buffer(void) {
+    (void)pthread_once(&error_once, create_error_key);
+    if (!error_key_ready) return NULL;
+    char *buffer ← pthread_getspecific(error_key);
+    if (buffer == NULL) {
+        buffer ← calloc(160u, 1u);
+        if (buffer && pthread_setspecific(error_key, buffer) != 0) { free(buffer); buffer ← NULL; }
+    }
+    return buffer;
+}
+
 static bool error(const char *message) {
-    (void)snprintf(last_error, sizeof(last_error), "%s", message);
+    char *buffer ← error_buffer();
+    if (buffer) (void)snprintf(buffer, 160u, "%s", message);
     return false;
 }
 
-const char *pb_history_last_error(void) { return last_error; }
+const char *pb_history_last_error(void) {
+    const char *buffer ← error_buffer();
+    return buffer ? buffer : "Not enough memory for history status";
+}
 const char *pb_history_private_directory(void) { return private_directory; }
 bool pb_history_capture_enabled(void) { return atomic_load(&capture_enabled); }
 bool pb_history_automatic_requested(void) { return atomic_load(&automatic_requested); }
@@ -320,7 +341,8 @@ static bool migrate_legacy(JNIEnv *environment, int directory, PBFields *current
 
 bool pb_history_apply(JNIEnv *environment, const char *action,
                        const PBText *arguments, size_t argument_count, PBHistoryView *view) {
-    last_error[0] ← '\0';
+    char *diagnostic ← error_buffer();
+    if (diagnostic) diagnostic[0] ← '\0';
     if (environment == NULL || checked_behavior == NULL || private_directory == NULL ||
         action == NULL || view == NULL) return error("History is not initialized");
     PBStoreTransaction transaction;

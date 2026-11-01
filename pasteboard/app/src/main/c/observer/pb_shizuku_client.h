@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-/* OS capability state only. Browser navigation/source/history remain Idriç
- * values. None of these states grants a document admission or network result. */
+/* OS authorization only. Capture, ordering and retention remain checked Idriç
+ * decisions; a status enum alone does not authorize an event. */
 typedef enum {
     PB_SHIZUKU_UNAVAILABLE = 0,
     PB_SHIZUKU_ATTACHING = 1,
@@ -31,8 +31,8 @@ pb_shizuku_capability_state pb_shizuku_client_authorization(JNIEnv *environment,
                                                             uint64_t *capability_epoch);
 int pb_shizuku_client_request_permission(JNIEnv *environment);
 
-/* App-owned native acquisition adapter only; never return this broad service
- * handle to document code or distribute it as the private ingress capability.
+/* App-owned companion adapter only; never return this broad service
+ * handle to application behavior or distribute it as the private capture key.
  * The caller owns the returned local JNI reference. */
 jobject pb_shizuku_client_authorized_server(JNIEnv *environment,
                                             uid_t *server_uid,

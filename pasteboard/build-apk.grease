@@ -34,11 +34,17 @@ setglobal ENV.ANDROID_SOURCE_COMMIT = $(git -C "$repository" rev-parse HEAD)
 var ndk = "$sdk/ndk/27.2.12479018"
 cd "$repository"
 for abi in arm64-v8a armeabi-v7a x86_64 {
-  make -f icky/Android.mk native PROFILE=pasteboard ABI="$abi" NDK="$ndk" \
-    BUILD="$output/objects/$abi" OUT="$output/native/$abi/libpasteboard.so" > "$output/compile-$abi.txt" 2>&1
+  try {
+    make -f icky/Android.mk native PROFILE=pasteboard ABI="$abi" NDK="$ndk" \
+      BUILD="$output/objects/$abi" OUT="$output/native/$abi/libpasteboard.so" > "$output/compile-$abi.txt" 2>&1
+  }
+  if (_error.code !== 0) { cat "$output/compile-$abi.txt"; exit 1 }
   # Fixed canonical APK producer; no first-party Java source or alternate model.
-  bash "$backend/apk/build-nativeactivity-apk.sh" "$repository/pasteboard/app/src/main/AndroidManifest.xml" \
-    "$output/native/$abi/libpasteboard.so" "$abi" "$output/pasteboard-$abi.apk" > "$output/package-$abi.txt" 2>&1
+  try {
+    bash "$backend/apk/build-nativeactivity-apk.sh" "$repository/pasteboard/app/src/main/AndroidManifest.xml" \
+      "$output/native/$abi/libpasteboard.so" "$abi" "$output/pasteboard-$abi.apk" > "$output/package-$abi.txt" 2>&1
+  }
+  if (_error.code !== 0) { cat "$output/package-$abi.txt"; exit 1 }
   sha256sum "$output/pasteboard-$abi.apk" > "$output/pasteboard-$abi.apk.sha256"
 }
 cp "$checked/consumer-commit.txt" "$checked/frontend-commit.txt" "$checked/backend-commit.txt" "$checked/digests.txt" "$output/"

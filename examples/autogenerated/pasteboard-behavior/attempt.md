@@ -60,7 +60,33 @@ Starting inspected heads:
 
 ## Execution record
 
-Implementation and qualification are in progress. No DEX/ART, observer, APK,
-emulator or physical-device success is claimed by this attempt record.
-Compiler/runtime failures and resulting reusable language work will be retained
-here when observed.
+The current checked source passes its host behavior checks. Direct DEX emission,
+independent baksmali decoding and repeated-byte determinism pass. An actual
+compiled wrong-order source mutant is rejected by the ordering oracle. These
+are not ART or installed-APK acceptance.
+
+The platform declarations use the canonical typed framework encoder. The
+canonical NativeActivity producer accepts one declared DEX input, so JNI
+platform classes occupy `classes.dex` and the checked reducer remains an
+immutable DEX asset loaded by API-26 `InMemoryDexClassLoader`. This is ART code
+execution, not a native interpreter. Both DEX inputs must be bound to installed
+acceptance receipts; execution is still pending.
+
+The first integrated exact-head build (`49408003ae67dd34102eb41fddf1f84cddd3c0a7`)
+typechecked/emitted DEX and passed the host controls, then correctly refused
+file opening under the existing Fortify profile. ai-ci PR #333 extends that
+shared profile with checked open/openat varargs and independent negative
+controls rather than disabling hardening. The extension passes actual Bionic
+static runtime at O1/O2/O3/Os on the Linux x86_64 host; ARM ABI and Android tests
+remain separate.
+
+Local ICK-to-NDK x86_64 linking then exposed unsupported GNU TLS symbol
+`__tls_get_addr` at the API-26 boundary. Native per-thread diagnostic buffers now
+use public pthread keys and destructors. No application semantics moved back
+to C. That current x86_64 native library compiles and links successfully.
+
+The first Grease parse rejected a quoted glob in a word list; the coordinator
+uses the documented `io.glob` expression instead and has executed successfully
+through the exact Grease source launcher. No alternate shell implementation was
+used. Installed DEX/ART, observer, full Android UI and physical-device acceptance
+remain pending.

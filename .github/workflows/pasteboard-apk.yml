@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          ref: edb615dcca30863b19a61318f6d365c25cc2ebdf
           path: .ai-ci-ick
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -129,8 +129,10 @@ jobs:
         run: ${{ env.GREASE }} pasteboard/build-checked.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$GITHUB_WORKSPACE/.tools/android-NDK" "$GITHUB_WORKSPACE/build/pasteboard-checked"
       - name: Package ABI-specific signed APKs through canonical producer
         run: ${{ env.GREASE }} pasteboard/build-apk.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/android-NDK" "$ANDROID_HOME" "$GITHUB_WORKSPACE/build/pasteboard-checked" "$GITHUB_WORKSPACE/build/pasteboard-apks"
+      - name: Build independent ai-ci oracle and real clipboard-copy fixture
+        run: ${{ env.GREASE }} .ai-ci-ick/pasteboard/prepare.grease "$GITHUB_WORKSPACE/.ai-ci-ick" "$GITHUB_WORKSPACE/.tools/Idric" "$GITHUB_WORKSPACE/.tools/android-NDK" "$ANDROID_HOME" "$GITHUB_WORKSPACE/build/ick/x86_64" "$ANDROID_KEYSTORE" "$GITHUB_WORKSPACE/build/pasteboard-independent"
       - name: Retain Grease execution environment for independent emulator steps
-        run: ${{ env.GREASE }} -c 'tar -czf build/pasteboard-grease.tar.gz .tools/runtime/.build/grease .tools/runtime/grease/source'
+        run: ${{ env.GREASE }} -c 'tar -czf build/pasteboard-grease.tar.gz .tools/runtime/.build/grease .tools/runtime/grease/source .tools/Idric/_/.tools'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -138,6 +140,7 @@ jobs:
           path: |
             build/pasteboard-checked
             build/pasteboard-apks
+            build/pasteboard-independent
           if-no-files-found: warn
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -148,6 +151,11 @@ jobs:
             build/pasteboard-apks/*.tsv
             build/pasteboard-apks/*commit.txt
             build/pasteboard-apks/digests.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pasteboard-independent-inputs
+          path: build/pasteboard-independent
           if-no-files-found: error
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

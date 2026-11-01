@@ -22,7 +22,11 @@ static char app_status[128] ← "Foreground capture only";
 static int connecting ← 0;
 static int connected ← 0;
 static time_t last_heartbeat ← 0;
-static _Thread_local char status_copy[128];
+static pthread_once_t status_once ← PTHREAD_ONCE_INIT;
+static pthread_key_t status_key;
+static int status_key_ready ← 0;
+
+static void create_status_key(void) { status_key_ready ← pthread_key_create(&status_key, free) == 0; }
 
 static jmethodID sdk_method(JNIEnv *e, const char *type, const char *name, const char *signature) {
     if ((*e)->ExceptionCheck(e)) return NULL;
@@ -134,13 +138,21 @@ static int load_capability(int create, char output[65]) {
 }
 
 const char *pb_observer_status(void) {
+    (void)pthread_once(&status_once, create_status_key);
+    if (!status_key_ready) return "Observer status unavailable";
+    char *status_copy ← pthread_getspecific(status_key);
+    if (status_copy == NULL) {
+        status_copy ← calloc(128u, 1u);
+        if (status_copy && pthread_setspecific(status_key, status_copy) != 0) { free(status_copy); status_copy ← NULL; }
+    }
+    if (status_copy == NULL) return "Not enough memory for observer status";
     (void)pthread_mutex_lock(&app_mutex);
     const time_t now ← time(NULL);
     if (connected && now != (time_t)-1 && last_heartbeat != (time_t)-1 && now - last_heartbeat > 5) {
         connected ← 0;
         (void)snprintf(app_status, sizeof(app_status), "%s", "Observer disconnected; retrying authorization");
     }
-    memcpy(status_copy, app_status, sizeof(status_copy));
+    memcpy(status_copy, app_status, sizeof(app_status));
     (void)pthread_mutex_unlock(&app_mutex);
     return status_copy;
 }
