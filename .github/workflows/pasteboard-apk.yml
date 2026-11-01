@@ -5,6 +5,11 @@ on:
   push:
     branches: [recover-pasteboard-20261101, main]
   workflow_dispatch:
+    inputs:
+      rebuild_compilers:
+        description: Rebuild pinned ICK stages instead of restoring the retained source-identical stages
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,7 +21,9 @@ concurrency:
 
 jobs:
   compilers:
-    uses: ./.github/workflows/ick-compilers.yml
+    uses: ./.github/workflows/pasteboard-ick-compilers.yml
+    with:
+      rebuild: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_compilers || false }}
 
   test-build:
     needs: compilers
@@ -37,7 +44,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: edb615dcca30863b19a61318f6d365c25cc2ebdf
+          ref: dc490a98bed3d8a1f57b5d7c55ee285a0f6324d6
           path: .ai-ci-ick
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -186,6 +193,20 @@ jobs:
         with:
           name: pasteboard-grease
           path: downloaded-tools
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pasteboard-independent-inputs
+          path: build/pasteboard-independent
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pasteboard-build-evidence
+          path: downloaded-evidence
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: dc490a98bed3d8a1f57b5d7c55ee285a0f6324d6
+          path: .ai-ci-independent
+          persist-credentials: false
       - name: Restore pinned Grease runtime
         run: tar -xzf downloaded-tools/pasteboard-grease.tar.gz
       - name: Enable emulator KVM
@@ -198,10 +219,16 @@ jobs:
           target: google_apis
           profile: pixel_2
           disable-animations: true
-          script: ${{ env.GREASE }} pasteboard/ci/emulator-smoke.grease "$GITHUB_WORKSPACE/downloaded-apks/pasteboard-x86_64.apk" "$ANDROID_HOME/platform-tools/adb" "$GITHUB_WORKSPACE/build/emulator-evidence"
+          script: |
+            ${{ env.GREASE }} pasteboard/ci/emulator-smoke.grease "$GITHUB_WORKSPACE/downloaded-apks/pasteboard-x86_64.apk" "$ANDROID_HOME/platform-tools/adb" "$GITHUB_WORKSPACE/build/emulator-evidence"
+            ${{ env.GREASE }} .ai-ci-independent/pasteboard/observe-art.grease "$ANDROID_HOME/platform-tools/adb" emulator-5554 '${{ matrix.api }}' "$GITHUB_WORKSPACE/downloaded-apks/pasteboard-x86_64.apk" "$GITHUB_WORKSPACE/downloaded-evidence/pasteboard-checked/wrong-order.dex" "$GITHUB_WORKSPACE/build/pasteboard-independent" "$GITHUB_WORKSPACE/build/art-evidence"
+            ${{ env.GREASE }} .ai-ci-independent/pasteboard/observe-installed.grease "$ANDROID_HOME/platform-tools/adb" emulator-5554 '${{ matrix.api }}' "$GITHUB_WORKSPACE/downloaded-apks/pasteboard-x86_64.apk" "$GITHUB_WORKSPACE/build/pasteboard-independent" "$GITHUB_WORKSPACE/build/clipboard-evidence"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: pasteboard-emulator-api${{ matrix.api }}
-          path: build/emulator-evidence
+          path: |
+            build/emulator-evidence
+            build/art-evidence
+            build/clipboard-evidence
           if-no-files-found: warn

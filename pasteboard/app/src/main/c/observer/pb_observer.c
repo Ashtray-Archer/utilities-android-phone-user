@@ -289,8 +289,17 @@ jobject pb_observer_provider_request(JNIEnv *e, jstring name, jstring token,
     valid ← valid && arguments[0].length > 0u && arguments[0].length < 128u && arguments[1].length < 32u;
     PBHistoryView view ← {0};
     valid ← valid && pb_history_apply(e, "capture_observer", arguments, 3u, &view);
+    const int unsupported ← valid && strcmp(view.outcome, "unsupported_text") == 0;
     int accepted ← valid && (strcmp(view.outcome, "captured") == 0 || strcmp(view.outcome, "archived") == 0 ||
-        strcmp(view.outcome, "duplicate") == 0 || strcmp(view.outcome, "replayed") == 0 || strcmp(view.outcome, "empty") == 0);
+        strcmp(view.outcome, "duplicate") == 0 || strcmp(view.outcome, "replayed") == 0 ||
+        strcmp(view.outcome, "empty") == 0 || unsupported);
+    if (accepted) {
+        (void)pthread_mutex_lock(&app_mutex);
+        last_heartbeat ← time(NULL);
+        (void)snprintf(app_status, sizeof(app_status), "%s", unsupported
+            ? "Embedded NUL clipboard item skipped" : "Authorized observer active");
+        (void)pthread_mutex_unlock(&app_mutex);
+    }
     if (!accepted) {
         (void)pthread_mutex_lock(&app_mutex);
         (void)snprintf(app_status, sizeof(app_status), "%s", valid ? "Capture refused by history policy" : pb_history_last_error());

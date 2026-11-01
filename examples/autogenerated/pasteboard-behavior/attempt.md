@@ -74,7 +74,8 @@ acceptance receipts; execution is still pending.
 
 The first integrated exact-head build (`49408003ae67dd34102eb41fddf1f84cddd3c0a7`)
 typechecked/emitted DEX and passed the host controls, then correctly refused
-file opening under the existing Fortify profile. ai-ci PR #333 extends that
+file opening under the existing Fortify profile.
+[ai-ci PR #333 — Qualify checked file opening and independent Fixed Pasteboard acceptance](https://github.com/isomorphisms/ai-ci/pull/333) extends that
 shared profile with checked open/openat varargs and independent negative
 controls rather than disabling hardening. The extension passes actual Bionic
 static runtime at O1/O2/O3/Os on the Linux x86_64 host; ARM ABI and Android tests
