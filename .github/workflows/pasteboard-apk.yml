@@ -209,6 +209,8 @@ jobs:
           persist-credentials: false
       - name: Restore pinned Grease runtime
         run: tar -xzf downloaded-tools/pasteboard-grease.tar.gz
+      - name: Install declared acceptance-tool dependency
+        run: ${{ env.GREASE }} -c 'sudo apt-get update; sudo apt-get install -y ripgrep'
       - name: Enable emulator KVM
         run: ${{ env.GREASE }} -c 'sudo chmod a+rw /dev/kvm'
       - name: Execute installed checked model, restart and replacement
