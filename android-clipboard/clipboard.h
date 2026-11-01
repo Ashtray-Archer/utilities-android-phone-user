@@ -17,8 +17,14 @@ typedef enum {
     CLIPBOARD_INVALID_UTF8 = 5,
     CLIPBOARD_OUT_OF_MEMORY = 6,
     CLIPBOARD_JNI_ERROR = 7,
-    CLIPBOARD_ALREADY_INITIALIZED = 8
+    CLIPBOARD_ALREADY_INITIALIZED = 8,
+    CLIPBOARD_UNSUPPORTED_ITEMS = 9
 } ClipboardStatus;
+
+typedef struct {
+    int item_count;
+    int sensitive;
+} ClipboardDetails;
 
 /*
  * Initialize once from an Android framework thread or another thread that has
@@ -44,6 +50,14 @@ ClipboardStatus clipboard_has_text(int *out_has_text);
  * Release the buffer with clipboard_free(). Empty text is CLIPBOARD_OK,len=0.
  */
 ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len);
+
+/* Capture one immutable ClipData snapshot, including its sensitive-content
+ * indication. Multi-item clips are explicitly refused by this history-facing
+ * API; the original first-item getter above retains its existing contract.
+ * A sensitive clip still returns its exact text and flag to the caller, which
+ * must apply the user's retention policy before saving it. */
+ClipboardStatus clipboard_get_utf8_details(char **out_bytes, size_t *out_len,
+                                          ClipboardDetails *out_details);
 
 /*
  * `bytes[0..len)` is strict standard UTF-8, not JNI modified UTF-8.

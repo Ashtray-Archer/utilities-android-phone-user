@@ -123,6 +123,13 @@ jobs:
         id: ick
         uses: isomorphisms/ai-ci/ick-host@4ea071a96239f3a29ca6d98454feb59947d87cfe
 
+      - name: Retain the qualified host compiler for local continuation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pasteboard-qualified-host-ick
+          path: ${{ runner.temp }}/ick-host-stage
+          if-no-files-found: error
+
       - name: Test shared clipboard JNI bridge on host
         env:
           ICK: ${{ steps.ick.outputs.compiler }}
@@ -132,6 +139,11 @@ jobs:
         env:
           ICK: ${{ steps.ick.outputs.compiler }}
         run: sh pasteboard/run-host-tests.sh
+
+      - name: Test lossless history storage and framing
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
+        run: make -f icky/Host.mk pasteboard-store-tests
 
       - name: Build native APK
         run: sh pasteboard/build-apk.sh

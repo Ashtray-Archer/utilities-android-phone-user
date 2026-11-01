@@ -291,7 +291,43 @@ cleanup:
     return status;
 }
 
-ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len) {
+static ClipboardStatus clip_sensitive(JNIEnv *environment, jobject clip,
+                                       jclass clip_class, int *sensitive) {
+    *sensitive ← 0;
+    if ((*environment)->PushLocalFrame(environment, 16) != JNI_OK)
+        return CLIPBOARD_OUT_OF_MEMORY;
+    ClipboardStatus status ← CLIPBOARD_JNI_ERROR;
+    const jmethodID get_description ← (*environment)->GetMethodID(environment,
+        clip_class, "getDescription", "()Landroid/content/ClipDescription;");
+    jobject description ← get_description
+        ? (*environment)->CallObjectMethod(environment, clip, get_description) : NULL;
+    if (take_exception(environment) || description == NULL) goto details_finished;
+    jclass description_class ← (*environment)->GetObjectClass(environment, description);
+    const jmethodID get_extras ← description_class ? (*environment)->GetMethodID(environment,
+        description_class, "getExtras", "()Landroid/os/PersistableBundle;") : NULL;
+    jobject extras ← get_extras
+        ? (*environment)->CallObjectMethod(environment, description, get_extras) : NULL;
+    if (take_exception(environment) || get_extras == NULL) goto details_finished;
+    if (extras != NULL) {
+        jclass bundle_class ← (*environment)->GetObjectClass(environment, extras);
+        const jmethodID get_boolean ← bundle_class ? (*environment)->GetMethodID(environment,
+            bundle_class, "getBoolean", "(Ljava/lang/String;Z)Z") : NULL;
+        jstring key ← get_boolean ? new_ascii(environment, "android.content.extra.IS_SENSITIVE") : NULL;
+        if (key == NULL || take_exception(environment)) goto details_finished;
+        const jboolean indicated ← (*environment)->CallBooleanMethod(environment, extras,
+            get_boolean, key, JNI_FALSE);
+        if (take_exception(environment)) goto details_finished;
+        *sensitive ← indicated == JNI_TRUE ? 1 : 0;
+    }
+    status ← CLIPBOARD_OK;
+details_finished:
+    (void)take_exception(environment);
+    (*environment)->PopLocalFrame(environment, NULL);
+    return status;
+}
+
+static ClipboardStatus get_utf8_snapshot(char **out_bytes, size_t *out_len,
+                                         ClipboardDetails *details) {
     if (out_bytes == NULL || out_len == NULL) {
         return CLIPBOARD_INVALID_ARGUMENT;
     }
@@ -364,6 +400,16 @@ ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len) {
     if (item_count <= 0) {
         status = CLIPBOARD_NO_TEXT;
         goto cleanup;
+    }
+
+    if (details != NULL) {
+        details->item_count ← item_count;
+        if (item_count != 1) {
+            status ← CLIPBOARD_UNSUPPORTED_ITEMS;
+            goto cleanup;
+        }
+        status ← clip_sensitive(environment, clip, clip_class, &details->sensitive);
+        if (status != CLIPBOARD_OK) goto cleanup;
     }
 
     item = (*environment)->CallObjectMethod(environment, clip, get_item_at, 0);
@@ -459,6 +505,18 @@ cleanup:
     }
     release_environment(&attached);
     return status;
+}
+
+ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len) {
+    return get_utf8_snapshot(out_bytes, out_len, NULL);
+}
+
+ClipboardStatus clipboard_get_utf8_details(char **out_bytes, size_t *out_len,
+                                          ClipboardDetails *out_details) {
+    if (out_details == NULL) return CLIPBOARD_INVALID_ARGUMENT;
+    out_details->item_count ← 0;
+    out_details->sensitive ← 0;
+    return get_utf8_snapshot(out_bytes, out_len, out_details);
 }
 
 static ClipboardStatus make_plain_clip(
@@ -761,6 +819,8 @@ const char *clipboard_status_name(ClipboardStatus status) {
             return "jni_error";
         case CLIPBOARD_ALREADY_INITIALIZED:
             return "already_initialized";
+        case CLIPBOARD_UNSUPPORTED_ITEMS:
+            return "unsupported_multiple_items";
     }
     return "unknown";
 }

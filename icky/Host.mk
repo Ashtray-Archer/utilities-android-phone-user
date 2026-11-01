@@ -62,3 +62,16 @@ pasteboard-tests: $(BUILD)/pasteboard_model_test
 $(BUILD)/pasteboard_model_test: $(ROOT)/pasteboard/app/src/main/c/pasteboard_model.c $(ROOT)/pasteboard/app/src/test-c/pasteboard_model_test.c $(ROOT)/pasteboard/app/src/main/c/pasteboard_model.h $(ROOT)/pasteboard/app/src/main/c/pasteboard_config.generated.h
 	mkdir -p "$(@D)"
 	$(ICK) $(ICK_FLAGS) -D_XOPEN_SOURCE=700 -std=c17 -Wall -Wextra -Werror -Wpedantic -I"$(ROOT)/pasteboard/app/src/main/c" $(filter %.c,$^) -o "$@"
+
+.PHONY: pasteboard-store-tests
+pasteboard-store-tests: $(BUILD)/pasteboard_store_test $(BUILD)/pasteboard_wire_test
+	"$(BUILD)/pasteboard_store_test"
+	"$(BUILD)/pasteboard_wire_test"
+
+$(BUILD)/pasteboard_store_test: $(ROOT)/pasteboard/app/src/main/c/pasteboard_store.c $(ROOT)/pasteboard/app/src/test-c/pasteboard_store_test.c $(ROOT)/android-clipboard/utf8.c $(ROOT)/pasteboard/app/src/main/c/pasteboard_store.h
+	mkdir -p "$(@D)"
+	$(ICK) $(ICK_FLAGS) -D_GNU_SOURCE -DPB_STORE_TESTING -std=c17 -Wall -Wextra -Werror -Wpedantic -I"$(ROOT)/pasteboard/app/src/main/c" -I"$(ROOT)/android-clipboard" $(filter %.c,$^) -o "$@"
+
+$(BUILD)/pasteboard_wire_test: $(ROOT)/pasteboard/app/src/main/c/pasteboard_wire.c $(ROOT)/pasteboard/app/src/test-c/pasteboard_wire_test.c $(ROOT)/android-clipboard/utf8.c $(ROOT)/pasteboard/app/src/main/c/pasteboard_wire.h
+	mkdir -p "$(@D)"
+	$(ICK) $(ICK_FLAGS) -std=c17 -Wall -Wextra -Werror -Wpedantic -I"$(ROOT)/pasteboard/app/src/main/c" -I"$(ROOT)/android-clipboard" $(filter %.c,$^) -o "$@"
