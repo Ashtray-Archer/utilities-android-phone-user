@@ -148,13 +148,7 @@ static bool write_exact(FILE *file, const void *buffer, size_t bytes) {
 }
 
 static bool read_exact(FILE *file, void *buffer, size_t bytes) {
-    unsigned char *output = buffer;
-    for (size_t index = 0u; index < bytes; ++index) {
-        const int next = fgetc(file);
-        if (next == EOF) return false;
-        output[index] = (unsigned char)next;
-    }
-    return true;
+    return fread(buffer, 1u, bytes, file) == bytes;
 }
 
 bool pasteboard_save(const PasteboardState *state, const char *path) {

@@ -1,0 +1,36 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'usage: grease emulator-smoke.grease APK ADB NEW_EVIDENCE' >&2; exit 2 }
+var apk = ARGV[0]
+var adb = ARGV[1]
+var output = ARGV[2]
+if test -e "$output" { echo 'refusing reused emulator evidence' >&2; exit 2 }
+mkdir -p "$output"
+"$adb" -s emulator-5554 shell getprop ro.build.fingerprint > "$output/fingerprint.txt"
+"$adb" -s emulator-5554 shell getprop ro.build.version.sdk > "$output/api.txt"
+sha256sum "$apk" > "$output/apk.sha256"
+"$adb" -s emulator-5554 install -r "$apk" > "$output/install.txt"
+"$adb" -s emulator-5554 logcat -c
+"$adb" -s emulator-5554 shell am start -W -n com.isomorphisms.pasteboard/android.app.NativeActivity > "$output/start.txt"
+sleep 5
+"$adb" -s emulator-5554 shell pidof com.isomorphisms.pasteboard > "$output/pid.txt"
+test -s "$output/pid.txt"
+"$adb" -s emulator-5554 exec-out screencap -p > "$output/screen.png"
+try { "$adb" -s emulator-5554 exec-out run-as com.isomorphisms.pasteboard cat files/history.v2 > "$output/history.bin" }
+var storage_result = _error.code
+"$adb" -s emulator-5554 logcat -d -v threadtime > "$output/logcat.txt"
+if (storage_result !== 0) { echo 'FAIL installed checked behavior did not create history' >&2; exit 1 }
+rg -a -q -F 'PBHIST2' "$output/history.bin"
+rg -a -q -F '3:PB3' "$output/history.bin"
+"$adb" -s emulator-5554 shell am force-stop com.isomorphisms.pasteboard
+"$adb" -s emulator-5554 shell am start -W -n com.isomorphisms.pasteboard/android.app.NativeActivity > "$output/restart.txt"
+sleep 3
+"$adb" -s emulator-5554 exec-out run-as com.isomorphisms.pasteboard cat files/history.v2 > "$output/restarted-history.bin"
+cmp "$output/history.bin" "$output/restarted-history.bin"
+"$adb" -s emulator-5554 install -r "$apk" > "$output/replacement-install.txt"
+"$adb" -s emulator-5554 shell am start -W -n com.isomorphisms.pasteboard/android.app.NativeActivity > "$output/replacement-start.txt"
+sleep 3
+"$adb" -s emulator-5554 exec-out run-as com.isomorphisms.pasteboard cat files/history.v2 > "$output/replaced-history.bin"
+cmp "$output/history.bin" "$output/replaced-history.bin"
+printf 'installed_model_asset_loader\tPASS\ninitial_checked_history_persistence\tPASS\nprocess_restart\tPASS\nsame_candidate_replacement\tPASS\nprivileged_clipboard_observation\tNOT_VERIFIED\nphysical_devices\tNOT_VERIFIED\n' > "$output/result.tsv"
+cat "$output/result.tsv"

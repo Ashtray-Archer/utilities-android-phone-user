@@ -1,4 +1,7 @@
-#include "pasteboard_model.h"
+#include "pasteboard_config.generated.h"
+#include "pasteboard_history.h"
+#include "observer/pb_observer.h"
+#include "observer/pb_shizuku_client.h"
 #include "clipboard.h"
 
 #include <android/input.h>
@@ -13,9 +16,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #define LOG_TAG "Pasteboard"
 #define LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -46,13 +52,20 @@ typedef struct {
 
 typedef struct {
     struct android_app *app;
-    PasteboardState state;
+    PBHistoryView state;
     bool redraw;
     bool loaded;
     float down_x;
     float down_y;
     int down_card;
-    char storage_path[512];
+    atomic_bool history_changed;
+    int menu;
+    char *selected_identity;
+    char *down_identity;
+    bool archive;
+    size_t archive_page;
+    char message[160];
+    char observer_status[128];
 } AppContext;
 
 typedef struct {
@@ -366,22 +379,27 @@ static size_t make_preview(const char *text, char *output, size_t capacity) {
     }
     size_t written = 0u;
     bool previous_space = false;
-    for (const unsigned char *cursor = (const unsigned char *)text;
-         *cursor != 0u && written + 1u < capacity; ++cursor) {
+    const unsigned char *cursor = (const unsigned char *)text;
+    while (*cursor != 0u && written + 1u < capacity) {
         unsigned char value = *cursor;
+        const size_t width = value < 0x80u ? 1u : value < 0xe0u ? 2u : value < 0xf0u ? 3u : 4u;
+        if (width > capacity - written - 1u) break;
         if (value == (unsigned char)'\n' || value == (unsigned char)'\r' ||
             value == (unsigned char)'\t') {
             value = (unsigned char)' ';
         }
         if (value == (unsigned char)' ') {
             if (previous_space) {
+                ++cursor;
                 continue;
             }
             previous_space = true;
         } else {
             previous_space = false;
         }
-        output[written++] = (char)value;
+        if (width == 1u) output[written++] = (char)value;
+        else { memcpy(output + written, cursor, width); written += width; }
+        cursor += width;
     }
     output[written] = '\0';
     return written;
@@ -480,262 +498,420 @@ static void draw_board_dots(CanvasSession *session, float width, float height,
     }
 }
 
+static PBHistoryEntry *entry_by_identity(AppContext *context, const char *identity) {
+    if (identity == NULL) return NULL;
+    for (size_t index ← 0u; index < context->state.count; ++index)
+        if (pb_text_equal(context->state.entries[index].identity, identity)) return &context->state.entries[index];
+    return NULL;
+}
+
+static PBHistoryEntry *entry_for_slot(AppContext *context, size_t slot) {
+    size_t index_on_board ← 0u;
+    const size_t wanted ← slot + (context->archive ? context->archive_page * PASTEBOARD_SLOT_COUNT : 0u);
+    for (size_t index ← 0u; index < context->state.count; ++index) {
+        PBHistoryEntry *entry ← &context->state.entries[index];
+        if (entry->board != (context->archive ? -1 : context->state.selected_board)) continue;
+        if (index_on_board++ == wanted) return entry;
+    }
+    return NULL;
+}
+
+static size_t archive_count(const AppContext *context) {
+    size_t count ← 0u;
+    for (size_t index ← 0u; index < context->state.count; ++index)
+        if (context->state.entries[index].board == -1) ++count;
+    return count;
+}
+
+static const char *outcome_message(const char *outcome) {
+    static const struct { const char *outcome; const char *message; } messages[] ← {
+        {"captured", "Text saved"}, {"archived", "Board full; text saved in archive"},
+        {"protected", "Entry protected"}, {"unprotected", "Protection removed"},
+        {"deleted", "Entry deleted"}, {"entry_protected", "Unprotect this entry before deleting"},
+        {"protected_board_full", "Destination board is protected and full"},
+        {"invalid_move", "Move to an adjacent board"}, {"invalid_board", "No board in that direction"},
+        {"moved", "Entry moved"}, {"paused", "Capture paused"}, {"resumed", "Capture resumed"},
+        {"foreground_only", "Foreground capture only"}, {"automatic_requested", "Authorize Shizuku for automatic capture"},
+        {"unsupported_text", "Embedded NUL is not supported; text was not saved"},
+        {"identity_conflict", "Capture identity conflict; history preserved"},
+        {"missing_entry", "Entry no longer exists"}, {"archive_cleared", "Unprotected archive entries deleted"},
+        {"automatic_pending", "Automatic capture is selected"}, {"background_disabled", "Foreground capture only"}
+    };
+    for (size_t index ← 0u; index < sizeof(messages) ÷ sizeof(messages[0]); ++index)
+        if (strcmp(outcome, messages[index].outcome) == 0) return messages[index].message;
+    return "";
+}
+
+static bool history_action(AppContext *context, const char *action, PBText *arguments, size_t count) {
+    JNIEnv *environment ← NULL;
+    bool detach ← false;
+    if (!attach_environment(context->app->activity, &environment, &detach)) return false;
+    const bool accepted ← pb_history_apply(environment, action, arguments, count, &context->state);
+    const char *message ← accepted ? outcome_message(context->state.outcome) : pb_history_last_error();
+    if (message[0] != '\0') (void)snprintf(context->message, sizeof(context->message), "%s", message);
+    if (detach) (void)(*context->app->activity->vm)->DetachCurrentThread(context->app->activity->vm);
+    context->redraw ← true;
+    if (accepted) context->loaded ← true;
+    return accepted;
+}
+
+static PBText literal_text(const char *text) { return (PBText){(char *)text, strlen(text)}; }
+
+static void history_changed(void *owner) {
+    AppContext *context ← owner;
+    atomic_store(&context->history_changed, true);
+    ALooper_wake(context->app->looper);
+}
+
+static void capture_current_clipboard(AppContext *context) {
+    /* The checked mode selects one acquisition channel. Foreground sampling
+     * must not overtake queued automatic captures. This is never a poll loop. */
+    if (!context->loaded || !context->state.capture_enabled || context->state.automatic_requested) return;
+    char *bytes ← NULL;
+    size_t length ← 0u;
+    ClipboardDetails details;
+    const ClipboardStatus status ← clipboard_get_utf8_details(&bytes, &length, &details);
+    if (status != CLIPBOARD_OK || details.sensitive) {
+        const char *message ← status == CLIPBOARD_OK ? "Sensitive clipboard text is not saved" :
+            status == CLIPBOARD_UNSUPPORTED_ITEMS ? "Multiple clipboard items are not captured" :
+            status == CLIPBOARD_NO_TEXT ? "Clipboard has no plain text" :
+            status == CLIPBOARD_NO_VISIBLE_CLIP ? "Clipboard is empty or unavailable" : "Clipboard could not be read";
+        (void)snprintf(context->message, sizeof(context->message), "%s", message);
+        clipboard_free(bytes);
+        context->redraw ← true;
+        return;
+    }
+    struct timespec now ← {0};
+    static uint64_t sequence ← 0u;
+    (void)clock_gettime(CLOCK_REALTIME, &now);
+    char identity[96], timestamp[32];
+    ++sequence;
+    (void)snprintf(timestamp, sizeof(timestamp), "%llu", (unsigned long long)
+        ((uint64_t)now.tv_sec * UINT64_C(1000) + (uint64_t)now.tv_nsec ÷ UINT64_C(1000000)));
+    (void)snprintf(identity, sizeof(identity), "foreground:%ld:%ld:%ld:%llu", (long)getpid(),
+        (long)now.tv_sec, now.tv_nsec, (unsigned long long)sequence);
+    PBText arguments[3] ← {literal_text(identity), literal_text(timestamp), {bytes, length}};
+    (void)history_action(context, "capture_foreground", arguments, 3u);
+    clipboard_free(bytes);
+}
+
+static void copy_entry(AppContext *context, const char *identity) {
+    PBHistoryEntry *entry ← entry_by_identity(context, identity);
+    if (entry == NULL) return;
+    char *text ← malloc(entry->text.length + 1u);
+    if (text == NULL) return;
+    const size_t length ← entry->text.length;
+    memcpy(text, entry->text.bytes, length + 1u);
+    PBText argument ← literal_text(identity);
+    /* Prepare the source-owned marker before the OS effect, so an immediate
+     * shell callback cannot reorder a card copied from this application. */
+    const bool prepared ← history_action(context, "seen", &argument, 1u);
+    const ClipboardStatus copied ← clipboard_set_utf8(text, length, 0);
+    free(text);
+    if (copied == CLIPBOARD_OK) {
+        (void)snprintf(context->message, sizeof(context->message), "%s",
+            prepared ? "Copied" : "Copied; history marker could not be saved");
+    } else {
+        if (prepared) (void)history_action(context, "copy_failed", &argument, 1u);
+        (void)snprintf(context->message, sizeof(context->message), "%s", "Clipboard copy failed");
+    }
+    context->redraw ← true;
+}
+
+static RectF menu_row(Viewport viewport, int index) {
+    const float top ← viewport.top + header_height(viewport.height) + 105.0f;
+    const float height ← minimum(76.0f, (viewport.height - 160.0f) ÷ 8.0f);
+    return (RectF){viewport.left + 24.0f, top + (float)index * height,
+        viewport.left + viewport.width - 24.0f, top + (float)(index + 1) * height - 6.0f};
+}
+
+static void close_menu(AppContext *context) {
+    context->menu ← 0;
+    free(context->selected_identity);
+    context->selected_identity ← NULL;
+    context->redraw ← true;
+}
+
+static const char *menu_title(AppContext *context, int index) {
+    if (context->menu == 1) {
+        const char *titles[8] ← {"Enable automatic capture", "Use foreground capture only",
+            context->state.capture_enabled ? "Pause capture" : "Resume capture",
+            "Open archive", "Capture current clipboard", "Open Shizuku", "Clear unprotected archive…", "Close"};
+        return titles[index];
+    }
+    if (context->menu == 2) {
+        PBHistoryEntry *entry ← entry_by_identity(context, context->selected_identity);
+        const char *titles[5] ← {"Copy", entry && entry->protected ? "Unprotect" : "Protect",
+            context->archive ? "Restore to selected board" : "Swipe card to move it", "Delete…", "Close"};
+        return titles[index];
+    }
+    return index == 0 ? (context->menu == 3 ? "Confirm delete" : "Confirm clear archive") : "Cancel";
+}
+
 static void render(AppContext *context) {
-    if (context->app->window == NULL) {
-        return;
-    }
+    if (context->app->window == NULL) return;
     CanvasSession session;
-    if (!begin_canvas(context, &session)) {
-        return;
+    if (!begin_canvas(context, &session)) return;
+    const Viewport viewport ← content_viewport(context->app);
+    (*session.env)->CallVoidMethod(session.env, session.canvas, session.draw_color, (jint)COLOR_BACKGROUND);
+    if (context->archive) {
+        char title[96];
+        const size_t count ← archive_count(context);
+        const size_t pages ← count == 0u ? 1u : 1u + (count - 1u) ÷ PASTEBOARD_SLOT_COUNT;
+        if (context->archive_page >= pages) context->archive_page ← pages - 1u;
+        (void)snprintf(title, sizeof(title), "Archive %zu/%zu", context->archive_page + 1u, pages);
+        draw_utf8(&session, title, viewport.left + 52.0f, viewport.top + 30.0f, 20.0f, COLOR_TEXT);
+        draw_utf8(&session, "‹", viewport.left + 15.0f, viewport.top + 35.0f, 30.0f, COLOR_TEXT);
+        draw_utf8(&session, "›", viewport.left + viewport.width - 80.0f, viewport.top + 35.0f, 30.0f, COLOR_TEXT);
+        draw_utf8(&session, "×", viewport.left + viewport.width - 35.0f, viewport.top + 35.0f, 27.0f, COLOR_TEXT);
+    } else {
+        draw_board_dots(&session, viewport.width, viewport.height, (uint32_t)context->state.selected_board);
+        draw_utf8(&session, "⋮", viewport.left + viewport.width - 34.0f, viewport.top + 39.0f, 30.0f, COLOR_TEXT);
     }
-    const Viewport viewport = content_viewport(context->app);
-    (*session.env)->CallVoidMethod(session.env, session.canvas, session.draw_color,
-                                   (jint)COLOR_BACKGROUND);
-
-    draw_board_dots(&session, viewport.width, viewport.height, context->state.current_board);
-    const PasteboardBoard *board = &context->state.boards[context->state.current_board];
-    for (size_t index = 0u; index < PASTEBOARD_SLOT_COUNT; ++index) {
-        RectF rect = card_rect(viewport.width, viewport.height, index);
-        rect.left += viewport.left;
-        rect.right += viewport.left;
-        rect.top += viewport.top;
-        rect.bottom += viewport.top;
-        const bool occupied = index < board->count;
+    const char *status ← !context->loaded ? "History unavailable" :
+        !context->state.capture_enabled ? "Capture paused" :
+        context->state.automatic_requested ? pb_observer_status() : "Foreground capture only";
+    draw_utf8(&session, status, viewport.left + 14.0f, viewport.top + header_height(viewport.height) - 7.0f,
+        13.0f, COLOR_MUTED);
+    for (size_t index ← 0u; index < PASTEBOARD_SLOT_COUNT; ++index) {
+        RectF rect ← card_rect(viewport.width, viewport.height, index);
+        rect.left += viewport.left; rect.right += viewport.left;
+        rect.top += viewport.top; rect.bottom += viewport.top;
+        PBHistoryEntry *entry ← entry_for_slot(context, index);
         draw_round_rect(&session, rect, 18.0f, COLOR_BORDER);
-        RectF inner = {rect.left + 1.8f, rect.top + 1.8f,
-                       rect.right - 1.8f, rect.bottom - 1.8f};
-        draw_round_rect(&session, inner, 16.5f, occupied ? COLOR_CARD : COLOR_CARD_EMPTY);
-
-        char slot[8];
-        (void)snprintf(slot, sizeof(slot), "%zu", index + 1u);
-        draw_utf8(&session, slot, rect.left + 10.0f, rect.top + 19.0f,
-                  13.0f, COLOR_MUTED);
-        if (occupied) {
-            draw_entry_text(&session, rect, board->entries[index].text);
+        const RectF inner ← {rect.left + 1.8f, rect.top + 1.8f, rect.right - 1.8f, rect.bottom - 1.8f};
+        draw_round_rect(&session, inner, 16.5f, entry ? COLOR_CARD : COLOR_CARD_EMPTY);
+        char slot[32];
+        (void)snprintf(slot, sizeof(slot), "%zu%s", index + 1u, entry && entry->protected ? " •" : "");
+        draw_utf8(&session, slot, rect.left + 10.0f, rect.top + 19.0f, 13.0f, COLOR_MUTED);
+        if (entry) {
+            draw_utf8(&session, "⋮", rect.right - 25.0f, rect.top + 28.0f, 24.0f, COLOR_MUTED);
+            draw_entry_text(&session, rect, entry->text.bytes);
+        }
+    }
+    if (context->menu != 0) {
+        RectF panel ← {viewport.left + 10.0f, viewport.top + header_height(viewport.height) + 10.0f,
+            viewport.left + viewport.width - 10.0f, viewport.top + viewport.height - 10.0f};
+        draw_round_rect(&session, panel, 20.0f, COLOR_BACKGROUND);
+        RectF status_rect ← {panel.left + 16.0f, panel.top + 8.0f, panel.right - 16.0f, panel.top + 82.0f};
+        draw_entry_text(&session, status_rect, context->message[0] ? context->message : status);
+        const int count ← context->menu == 1 ? 8 : context->menu == 2 ? 5 : 2;
+        for (int index ← 0; index < count; ++index) {
+            const RectF row ← menu_row(viewport, index);
+            draw_round_rect(&session, row, 12.0f, COLOR_CARD);
+            draw_utf8(&session, menu_title(context, index), row.left + 16.0f, row.top + 37.0f, 22.0f, COLOR_TEXT);
         }
     }
     end_canvas(context, &session);
 }
 
-/*
- * The shared clipboard adapter retains the exact Android visibility result.
- * The original fixed-slot model cannot represent embedded NUL or >8191 bytes,
- * so refuse such values instead of recording an altered copy of the clip.
- * The full-size persisted archive and error UI are separate acceptance work.
- */
-static bool has_embedded_nul(const char *text, size_t length) {
-    for (size_t index = 0u; index < length; ++index) {
-        if (text[index] == '\0') return true;
+static void open_shizuku(AppContext *context) {
+    JNIEnv *e ← NULL;
+    bool detach ← false;
+    if (!attach_environment(context->app->activity, &e, &detach)) return;
+    if ((*e)->PushLocalFrame(e, 24) == JNI_OK) {
+        jclass type ← (*e)->FindClass(e, "android/content/Context");
+        jmethodID get ← type ? (*e)->GetMethodID(e, type, "getPackageManager", "()Landroid/content/pm/PackageManager;") : NULL;
+        jobject pm ← get ? (*e)->CallObjectMethod(e, context->app->activity->clazz, get) : NULL;
+        jclass manager ← (*e)->FindClass(e, "android/content/pm/PackageManager");
+        jmethodID launch ← manager ? (*e)->GetMethodID(e, manager, "getLaunchIntentForPackage",
+            "(Ljava/lang/String;)Landroid/content/Intent;") : NULL;
+        jstring name ← launch ? (*e)->NewStringUTF(e, "moe.shizuku.privileged.api") : NULL;
+        jobject intent ← pm && name ? (*e)->CallObjectMethod(e, pm, launch, name) : NULL;
+        jmethodID start ← type ? (*e)->GetMethodID(e, type, "startActivity", "(Landroid/content/Intent;)V") : NULL;
+        if (intent && start) (*e)->CallVoidMethod(e, context->app->activity->clazz, start, intent);
+        if (!intent || (*e)->ExceptionCheck(e))
+            (void)snprintf(context->message, sizeof(context->message), "%s", "Shizuku is unavailable on this device");
+        if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+        (*e)->PopLocalFrame(e, NULL);
     }
-    return false;
+    if (detach) (void)(*context->app->activity->vm)->DetachCurrentThread(context->app->activity->vm);
 }
 
-static bool read_current_clipboard(AppContext *context, char *output, size_t capacity) {
-    (void)context;
-    if (capacity < 2u) {
-        return false;
-    }
-    output[0] = '\0';
-    char *text = NULL;
-    size_t length = 0u;
-    const ClipboardStatus status = clipboard_get_utf8(&text, &length);
-    if (status != CLIPBOARD_OK) {
-        if (status != CLIPBOARD_NO_VISIBLE_CLIP && status != CLIPBOARD_NO_TEXT) {
-            LOG_ERROR("clipboard read refused: %s", clipboard_status_name(status));
+static void menu_action(AppContext *context, int row) {
+    if (context->menu == 1) {
+        if (row == 0) {
+            (void)history_action(context, "request_automatic", NULL, 0u);
+            JNIEnv *e ← NULL; bool detach ← false;
+            if (attach_environment(context->app->activity, &e, &detach)) {
+                if (pb_observer_enable(e) != 0)
+                    (void)snprintf(context->message, sizeof(context->message), "%s", "Start Shizuku and grant Pasteboard permission");
+                if (detach) (void)(*context->app->activity->vm)->DetachCurrentThread(context->app->activity->vm);
+            }
+        } else if (row == 1) {
+            (void)history_action(context, "foreground_only", NULL, 0u);
+            pb_observer_connected(0);
+        } else if (row == 2) {
+            (void)history_action(context, context->state.capture_enabled ? "pause" : "resume", NULL, 0u);
+            pb_observer_connected(0);
+        } else if (row == 3) { context->archive ← true; context->archive_page ← 0u; }
+        else if (row == 4) capture_current_clipboard(context);
+        else if (row == 5) { open_shizuku(context); context->redraw ← true; return; }
+        else if (row == 6) { context->menu ← 4; context->redraw ← true; return; }
+        if (row == 0 || row == 1 || row == 2) {
+            JNIEnv *e ← NULL; bool detach ← false;
+            if (attach_environment(context->app->activity, &e, &detach)) {
+                pb_observer_try_start(e);
+                if (detach) (void)(*context->app->activity->vm)->DetachCurrentThread(context->app->activity->vm);
+            }
         }
-        return false;
+        if (row != 7 && row != 3) { context->redraw ← true; return; }
+        close_menu(context);
+        return;
     }
-    const bool admissible = length > 0u && length < capacity &&
-                            !has_embedded_nul(text, length);
-    if (!admissible && length > 0u) {
-        LOG_ERROR("clipboard text is not representable in the fixed model (%zu bytes)",
-                  length);
+    if (context->menu == 2) {
+        PBText identity ← literal_text(context->selected_identity ? context->selected_identity : "");
+        if (row == 0) copy_entry(context, context->selected_identity);
+        else if (row == 1) (void)history_action(context, "protect", &identity, 1u);
+        else if (row == 2 && context->archive) (void)history_action(context, "restore", &identity, 1u);
+        else if (row == 3) { context->menu ← 3; context->redraw ← true; return; }
+        close_menu(context);
+        return;
     }
-    if (admissible) {
-        memcpy(output, text, length);
-        output[length] = '\0';
-    }
-    clipboard_free(text);
-    return admissible;
-}
-
-static bool copy_to_clipboard(AppContext *context, const char *text) {
-    (void)context;
-    const ClipboardStatus status = clipboard_set_utf8(text, strlen(text), 0);
-    if (status != CLIPBOARD_OK) {
-        LOG_ERROR("clipboard copy failed: %s", clipboard_status_name(status));
-        return false;
-    }
-    return true;
-}
-
-static uint64_t now_ms(void) {
-    struct timespec value;
-    if (clock_gettime(CLOCK_REALTIME, &value) != 0) {
-        return 0u;
-    }
-    return (uint64_t)value.tv_sec * UINT64_C(1000) + (uint64_t)value.tv_nsec / UINT64_C(1000000);
-}
-
-static void save_state(AppContext *context) {
-    if (!pasteboard_save(&context->state, context->storage_path)) {
-        LOG_ERROR("could not save pasteboard state to %s", context->storage_path);
-    }
-}
-
-static void capture_current_clipboard(AppContext *context) {
-    char text[PASTEBOARD_TEXT_CAPACITY];
-    if (read_current_clipboard(context, text, sizeof(text)) &&
-        pasteboard_capture(&context->state, context->state.current_board, text, now_ms())) {
-        save_state(context);
-        context->redraw = true;
-        LOG_INFO("captured current clipboard into board %u", context->state.current_board);
-    }
+    if (row == 0 && context->menu == 3) {
+        PBText identity ← literal_text(context->selected_identity ? context->selected_identity : "");
+        (void)history_action(context, "delete", &identity, 1u);
+    } else if (row == 0 && context->menu == 4) (void)history_action(context, "clear_archive", NULL, 0u);
+    close_menu(context);
 }
 
 static int32_t handle_input(struct android_app *app, AInputEvent *event) {
-    AppContext *context = app->userData;
-    if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION || app->window == NULL) {
-        return 0;
-    }
-    const int32_t action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
-    const Viewport viewport = content_viewport(app);
-    const float raw_x = AMotionEvent_getX(event, 0u);
-    const float raw_y = AMotionEvent_getY(event, 0u);
-    const float x = raw_x - viewport.left;
-    const float y = raw_y - viewport.top;
-
+    AppContext *context ← app->userData;
+    if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION || app->window == NULL) return 0;
+    const int32_t action ← AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
+    const Viewport viewport ← content_viewport(app);
+    const float x ← AMotionEvent_getX(event, 0) - viewport.left;
+    const float y ← AMotionEvent_getY(event, 0) - viewport.top;
     if (action == AMOTION_EVENT_ACTION_DOWN) {
-        context->down_x = x;
-        context->down_y = y;
-        context->down_card = card_at(viewport.width, viewport.height, x, y);
+        context->down_x ← x; context->down_y ← y;
+        context->down_card ← card_at(viewport.width, viewport.height, x, y);
+        free(context->down_identity); context->down_identity ← NULL;
+        PBHistoryEntry *entry ← context->down_card >= 0 ? entry_for_slot(context, (size_t)context->down_card) : NULL;
+        if (entry) context->down_identity ← strdup(entry->identity.bytes);
         return 1;
     }
-    if (action != AMOTION_EVENT_ACTION_UP) {
-        return 1;
-    }
-
-    const float dx = x - context->down_x;
-    const float dy = y - context->down_y;
-    const float swipe = clampf(viewport.width * 0.14f, 54.0f, 120.0f);
-    const bool horizontal_swipe = fabsf(dx) >= swipe && fabsf(dx) > fabsf(dy) * 1.2f;
-    const size_t current = context->state.current_board;
-
-    if (horizontal_swipe) {
-        if (context->down_card >= 0) {
-            if (dx < 0.0f && current > 0u) {
-                if (pasteboard_move(&context->state, current, (size_t)context->down_card, current - 1u)) {
-                    save_state(context);
-                    context->redraw = true;
-                }
-            } else if (dx > 0.0f && current + 1u < PASTEBOARD_BOARD_COUNT) {
-                if (pasteboard_move(&context->state, current, (size_t)context->down_card, current + 1u)) {
-                    save_state(context);
-                    context->redraw = true;
-                }
+    if (action != AMOTION_EVENT_ACTION_UP) return 1;
+    const float dx ← x - context->down_x, dy ← y - context->down_y;
+    if (context->menu != 0) {
+        const int count ← context->menu == 1 ? 8 : context->menu == 2 ? 5 : 2;
+        for (int row ← 0; row < count; ++row)
+            if (point_in_rect(menu_row(viewport, row), x + viewport.left, y + viewport.top)) {
+                menu_action(context, row); return 1;
             }
+        close_menu(context);
+        return 1;
+    }
+    if (fabsf(dx) > 60.0f && fabsf(dx) > fabsf(dy) * 1.2f) {
+        const int direction ← dx < 0.0f ? 1 : -1;
+        const int destination ← context->state.selected_board + direction;
+        char board[16];
+        (void)snprintf(board, sizeof(board), "%d", destination);
+        if (context->down_identity && !context->archive) {
+            /* Card swipes use their physical left/right direction. */
+            (void)snprintf(board, sizeof(board), "%d", context->state.selected_board + (dx < 0.0f ? -1 : 1));
+            PBText arguments[2] ← {literal_text(context->down_identity), literal_text(board)};
+            (void)history_action(context, "move", arguments, 2u);
         } else {
-            size_t destination = current;
-            if (dx < 0.0f && current + 1u < PASTEBOARD_BOARD_COUNT) {
-                destination = current + 1u;
-            } else if (dx > 0.0f && current > 0u) {
-                destination = current - 1u;
-            }
-            if (destination != current && pasteboard_set_current_board(&context->state, destination)) {
-                save_state(context);
-                context->redraw = true;
-                capture_current_clipboard(context);
-            }
+            PBText argument ← literal_text(board);
+            (void)history_action(context, "select", &argument, 1u);
+            context->archive ← false;
         }
         return 1;
     }
-
-    const float tap_slop = 24.0f;
-    if (fabsf(dx) <= tap_slop && fabsf(dy) <= tap_slop && context->down_card >= 0) {
-        const PasteboardEntry *entry = pasteboard_entry(&context->state, current,
-                                                        (size_t)context->down_card);
-        if (entry != NULL && copy_to_clipboard(context, entry->text)) {
-            pasteboard_mark_clipboard_seen(&context->state, entry->text);
-            save_state(context);
-        }
+    if (fabsf(dx) > 24.0f || fabsf(dy) > 24.0f) return 1;
+    if (y < header_height(viewport.height)) {
+        if (context->archive) {
+            const size_t pages ← (archive_count(context) + PASTEBOARD_SLOT_COUNT - 1u) ÷ PASTEBOARD_SLOT_COUNT;
+            if (x > viewport.width - 50.0f) context->archive ← false;
+            else if (x > viewport.width - 105.0f && context->archive_page + 1u < pages) ++context->archive_page;
+            else if (x < 48.0f && context->archive_page > 0u) --context->archive_page;
+            else context->menu ← 1;
+        } else context->menu ← 1;
+        context->redraw ← true;
+        return 1;
+    }
+    if (context->down_identity) {
+        const RectF rect ← card_rect(viewport.width, viewport.height, (size_t)context->down_card);
+        if (x > rect.right - 44.0f && y < rect.top + 42.0f) {
+            free(context->selected_identity);
+            context->selected_identity ← strdup(context->down_identity);
+            context->menu ← 2;
+            context->redraw ← true;
+        } else copy_entry(context, context->down_identity);
     }
     return 1;
 }
 
 static void handle_command(struct android_app *app, int32_t command) {
-    AppContext *context = app->userData;
+    AppContext *context ← app->userData;
     switch (command) {
+        case APP_CMD_GAINED_FOCUS:
+            (void)history_action(context, "validate", NULL, 0u);
+            capture_current_clipboard(context);
+            context->redraw ← true;
+            break;
         case APP_CMD_INIT_WINDOW:
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
-            context->redraw = true;
+        case APP_CMD_CONFIG_CHANGED:
+            context->redraw ← true;
             break;
-        case APP_CMD_GAINED_FOCUS:
-            capture_current_clipboard(context);
-            context->redraw = true;
-            break;
-        case APP_CMD_LOST_FOCUS:
-        case APP_CMD_PAUSE:
-        case APP_CMD_STOP:
-        case APP_CMD_TERM_WINDOW:
-            save_state(context);
-            break;
-        default:
-            break;
+        default: break;
     }
 }
 
 void android_main(struct android_app *app) {
     AppContext context;
     memset(&context, 0, sizeof(context));
-    context.app = app;
-    context.redraw = true;
-    context.down_card = -1;
-    pasteboard_state_init(&context.state);
-    const char *internal_path = app->activity->internalDataPath;
-    if (internal_path == NULL) {
-        internal_path = ".";
+    atomic_init(&context.history_changed, false);
+    context.app ← app;
+    context.redraw ← true;
+    context.down_card ← -1;
+    context.state.selected_board ← PASTEBOARD_STARTING_BOARD;
+    JNIEnv *environment ← NULL;
+    bool detach ← false;
+    if (attach_environment(app->activity, &environment, &detach)) {
+        if (pb_history_open(environment, app->activity->clazz)) {
+            context.loaded ← pb_history_apply(environment, "validate", NULL, 0u, &context.state);
+            if (context.loaded) pb_observer_app_ready(environment, app->activity->clazz);
+            else (void)snprintf(context.message, sizeof(context.message), "%s", pb_history_last_error());
+        } else (void)snprintf(context.message, sizeof(context.message), "%s", pb_history_last_error());
+        const ClipboardStatus status ← clipboard_bridge_init(environment, app->activity->clazz);
+        if (status != CLIPBOARD_OK && status != CLIPBOARD_ALREADY_INITIALIZED)
+            (void)snprintf(context.message, sizeof(context.message), "%s", "Clipboard is unavailable");
+        pb_observer_try_start(environment);
+        if (detach) (void)(*app->activity->vm)->DetachCurrentThread(app->activity->vm);
     }
-    (void)snprintf(context.storage_path, sizeof(context.storage_path),
-                   "%s/pasteboard.bin", internal_path);
-    context.loaded = pasteboard_load(&context.state, context.storage_path);
-    LOG_INFO("state %s from %s", context.loaded ? "loaded" : "started fresh",
-             context.storage_path);
-
-    JNIEnv *clipboard_environment = NULL;
-    bool clipboard_detach = false;
-    if (attach_environment(app->activity, &clipboard_environment, &clipboard_detach)) {
-        const ClipboardStatus status = clipboard_bridge_init(
-            clipboard_environment, app->activity->clazz);
-        if (status != CLIPBOARD_OK) {
-            LOG_ERROR("could not initialize clipboard bridge: %s",
-                      clipboard_status_name(status));
-        }
-        if (clipboard_detach) {
-            (void)(*app->activity->vm)->DetachCurrentThread(app->activity->vm);
-        }
-    }
-
-    app->userData = &context;
-    app->onAppCmd = handle_command;
-    app->onInputEvent = handle_input;
-
+    app->userData ← &context;
+    app->onAppCmd ← handle_command;
+    app->onInputEvent ← handle_input;
+    pb_history_set_change_handler(history_changed, &context);
     while (true) {
-        int events = 0;
-        struct android_poll_source *source = NULL;
-        const int timeout = context.redraw ? 0 : -1;
-        const int identifier = ALooper_pollOnce(timeout, NULL, &events, (void **)&source);
-        if (identifier >= 0 && source != NULL) {
-            source->process(app, source);
+        int events ← 0;
+        struct android_poll_source *source ← NULL;
+        const int identifier ← ALooper_pollOnce(context.redraw ? 0 : 500, NULL, &events, (void **)&source);
+        if (identifier >= 0 && source) source->process(app, source);
+        if (atomic_exchange(&context.history_changed, false)) (void)history_action(&context, "validate", NULL, 0u);
+        const char *observer ← pb_observer_status();
+        if (strcmp(observer, context.observer_status) != 0) {
+            (void)snprintf(context.observer_status, sizeof(context.observer_status), "%s", observer);
+            context.redraw ← true;
         }
-        if (app->destroyRequested != 0) {
-            save_state(&context);
+        if (context.state.automatic_requested && context.state.capture_enabled) {
+            JNIEnv *current ← NULL;
+            bool detach_current ← false;
+            if (attach_environment(app->activity, &current, &detach_current)) {
+                pb_observer_try_start(current);
+                if (detach_current) (void)(*app->activity->vm)->DetachCurrentThread(app->activity->vm);
+            }
+        }
+        if (app->destroyRequested) {
+            pb_history_set_change_handler(NULL, NULL);
+            pb_history_view_free(&context.state);
+            free(context.down_identity); free(context.selected_identity);
             (void)clipboard_bridge_shutdown();
             return;
         }
-        if (context.redraw && app->window != NULL) {
-            context.redraw = false;
-            render(&context);
-        }
+        if (context.redraw && app->window) { context.redraw ← false; render(&context); }
     }
 }

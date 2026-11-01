@@ -1,0 +1,123 @@
+module PasteboardBehaviorChecks
+
+import PasteboardBehavior
+import Data.Text
+import Data.List
+import System
+
+ensure : Text → Bool → IO ()
+ensure label True = putStrLn ("PASS " ++ label)
+ensure label False = do
+  putStrLn ("FAIL " ++ label)
+  exitFailure
+
+perform : Text → Text → List Text → Text → IO Text
+perform previous action arguments expected =
+  case decode_fields (pasteboard_transition (encode_fields (action :: previous :: arguments))) of
+    Just [outcome, next] ⇒ do
+      ensure (action ++ " outcome") (outcome ≟ expected)
+      ensure (action ++ " snapshot valid") (case decode_history next of
+        Just _ ⇒ True
+        Nothing ⇒ False)
+      pure next
+    _ ⇒ do ensure "framed transition result" False; pure previous
+
+inspect : Text → (History → Bool) → Bool
+inspect serialized predicate = case decode_history serialized of
+  Nothing ⇒ False
+  Just history ⇒ predicate history
+
+board_contents : Int32 → History → List Text
+board_contents board history = map contents (filter (\entry ⇒ entry.board ≟ board) history.entries)
+
+capture_protected : Text → List Int32 → IO Text
+capture_protected previous [] = pure previous
+capture_protected previous (number :: rest) = do
+  let identity = "protected-" ++ show number
+  captured ← perform previous "capture" [identity, "fixture", "text-" ++ show number] "captured"
+  protected ← perform captured "protect" [identity] "protected"
+  capture_protected protected rest
+
+capture_ordinary : Text → List Int32 → IO Text
+capture_ordinary previous [] = pure previous
+capture_ordinary previous (number :: rest) = do
+  captured ← perform previous "capture"
+    ["ordinary-" ++ show number, show number, "ordinary text " ++ show number] "captured"
+  capture_ordinary captured rest
+
+main : IO ()
+main = do
+  let start = encode_history initial_history
+  ensure "middle board initially" (inspect start (\history ⇒ history.selected_board ≟ 1))
+  first ← perform start "capture" ["a", "1", "A"] "captured"
+  second ← perform first "capture" ["b", "2", "B"] "captured"
+  third ← perform second "capture" ["c", "3", "C"] "captured"
+  ensure "three captures newest first" (inspect third (\history ⇒ board_contents 1 history ≟ ["C", "B", "A"]))
+  automatic ← perform third "request_automatic" [] "automatic_requested"
+  foreground_refused ← perform automatic "capture_foreground" ["f", "4", "foreground sample"] "automatic_pending"
+  ensure "foreground sampling cannot overtake observer queue" (foreground_refused ≟ automatic)
+  observed ← perform automatic "capture_observer" ["observed", "4", "observer text"] "captured"
+  foreground ← perform observed "foreground_only" [] "foreground_only"
+  background_refused ← perform foreground "capture_observer" ["stopped", "5", "must not be retained"] "background_disabled"
+  ensure "foreground-only mode rejects background delivery" (background_refused ≟ foreground)
+  replayed ← perform third "capture" ["b", "2", "B"] "replayed"
+  ensure "delivery replay does not reorder" (replayed ≟ third)
+  repeated ← perform third "capture" ["again-a", "4", "A"] "captured"
+  ensure "exact text duplicate promotes one record" (inspect repeated
+    (\history ⇒ board_contents 1 history ≟ ["A", "C", "B"]))
+  moved ← perform repeated "move" ["a", "0"] "moved"
+  refused ← perform moved "move" ["a", "2"] "invalid_move"
+  ensure "nonadjacent move leaves history intact" (refused ≟ moved)
+  protected ← perform moved "protect" ["a"] "protected"
+  refused_delete ← perform protected "delete" ["a"] "entry_protected"
+  ensure "protected delete leaves history intact" (refused_delete ≟ protected)
+  unprotected ← perform protected "protect" ["a"] "unprotected"
+  deleted ← perform unprotected "delete" ["a"] "deleted"
+  ensure "explicit delete removes retained text" (inspect deleted
+    (\history ⇒ not (elem "A" (map contents history.entries))))
+  marked ← perform deleted "seen" ["b"] "seen"
+  own_copy ← perform marked "capture" ["own-copy", "5", "B"] "duplicate"
+  ensure "own copy preserves card order" (inspect own_copy
+    (\history ⇒ board_contents 1 history ≟ ["C", "B"]))
+  failed_copy ← perform marked "copy_failed" ["b"] "copy_failed"
+  ensure "failed copy clears its prepared marker" (inspect failed_copy (\history ⇒ history.last_seen ≟ ""))
+  paused ← perform own_copy "pause" [] "paused"
+  refused_capture ← perform paused "capture" ["paused", "6", "not retained"] "paused"
+  ensure "paused capture preserves snapshot" (refused_capture ≟ paused)
+  resumed ← perform paused "resume" [] "resumed"
+  let exact = " \tλ𝄞🙂\r\n```\n    indented\n```\n "
+  unicode ← perform resumed "capture" ["unicode", "7", exact] "captured"
+  ensure "Unicode whitespace and line endings preserved" (inspect unicode
+    (\history ⇒ elem exact (map contents history.entries)))
+  let long_text = pack (replicate 20000 'λ') ++ "𝄞\r\n"
+  long ← perform unicode "capture" ["long", "8", long_text] "captured"
+  ensure "long text is retained without truncation" (inspect long
+    (\history ⇒ elem long_text (map contents history.entries)))
+  invalid ← perform long "capture" ["nul", "9", "before\0after"] "unsupported_text"
+  ensure "embedded NUL is refused atomically" (invalid ≟ long)
+  overflowed ← capture_ordinary start [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+  ensure "ordinary overflow retains all eighteen texts" (inspect overflowed
+    (\history ⇒ length history.entries ≟ 18 && length (board_contents 1 history) ≟ 16 &&
+      head' (board_contents 1 history) ≟ Just "ordinary text 17" &&
+      last' (board_contents 1 history) ≟ Just "ordinary text 2" &&
+      board_contents (-1) history ≟ ["ordinary text 1", "ordinary text 0"]))
+  full ← capture_protected start [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+  archived ← perform full "capture" ["overflow", "17", "retained in archive"] "archived"
+  ensure "all protected cards and overflow survive" (inspect archived
+    (\history ⇒ length history.entries ≟ 17 &&
+      length (board_contents 1 history) ≟ 16 &&
+      board_contents (-1) history ≟ ["retained in archive"]))
+  vacant ← perform archived "select" ["2"] "selected"
+  restored ← perform vacant "restore" ["overflow"] "moved"
+  refused_full ← perform restored "move" ["overflow", "1"] "protected_board_full"
+  ensure "full protected destination preserves source" (refused_full ≟ restored)
+  ensure "malformed length refuses decoding" (case decode_fields "2147483648:x" of
+    Nothing ⇒ True
+    Just _ ⇒ False)
+  ensure "truncated field refuses decoding" (case decode_fields "3:ab" of
+    Nothing ⇒ True
+    Just _ ⇒ False)
+  ensure "bad snapshot is refused without erasing it"
+    (decode_fields (pasteboard_transition (encode_fields ["validate", "bad original"]))
+      ≟ Just ["invalid_history", "bad original"])
+  putStrLn "pasteboard_behavior: all checks passed"

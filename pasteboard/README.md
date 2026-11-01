@@ -1,69 +1,127 @@
-# Pasteboard
+# Fixed Pasteboard
 
-A small Android pasteboard built as a native phone utility, with the board shape owned by Idriç and the current Android runtime boundary implemented in C/JNI.
+The retained NativeActivity shows three unlabeled spatial boards, starting in
+the middle. Each portrait board has sixteen rounded positions in two columns
+and eight rows. Tap a card to copy its exact text. Swipe a card horizontally to
+move it to the adjacent board; swipe header or unused space to change boards.
+Three dots show the selected board. Each occupied card has a visible menu for
+protection and confirmed deletion. The header menu exposes capture mode,
+pause/resume, archive access, archive clearing and Shizuku setup.
 
-## First useful version
+This is an **unqualified candidate**, continued in
+[utilities-android-phone-user PR #90 — Recover fixed Pasteboard on current main and reuse checked UTF-8 clipboard JNI](https://github.com/Ashtray-Archer/utilities-android-phone-user/pull/90),
+tracking [issue #89 — Finish Fixed Pasteboard](https://github.com/Ashtray-Archer/utilities-android-phone-user/issues/89).
+Keep the PR in draft until the complete acceptance contract is satisfied.
 
-- three spatially distinct pasteboards;
-- boards are **unlabeled by default** and begin on the middle board;
-- 16 slots per board, arranged as two columns × eight rows in portrait mode;
-- newest captured text enters slot 1 and older entries trickle forward through the 16 slots;
-- all 16 positions remain visible as rounded cards, including empty slots;
-- tap a card to copy it back to Android's clipboard;
-- swipe a card left or right to move it to the neighboring board, where it enters at slot 1 and the destination board trickles down;
-- swipe the empty/header area horizontally to change boards;
-- the current board is shown only by three small position dots, avoiding permanent labels and toolbar chrome;
-- short text is drawn larger; longer text is reduced and visibly ellipsized rather than shrinking to unreadable type;
-- state persists in the app's private storage.
+## Source ownership
 
-There is deliberately no delete, trash, pin, search, or board-label editor in this slice. Those can be added after the basic spatial behavior is useful on the phone.
+`idric/Pasteboard.idric` retains the original layout contract. The build checks
+its generated header and its three-board, sixteen-slot assertions.
+`idric/PasteboardBehavior.idric` owns capture, exact-text deduplication, ordering,
+movement, selection, protection, deletion, visible eviction, archived retention,
+capture mode and checked snapshot decoding. Its `Text → Text` export compiles
+through the pinned current Idriç frontend and canonical android-NDK DEX writer.
 
-## User story: spatial boards without prescribed meanings
+The native history adapter frames requests, invokes that actual export through
+JNI, projects the returned state for rendering, and commits opaque snapshots.
+It contains no second application model. The old bounded C model survives only
+under `app/src/test-c/legacy-v1` as an unchanged v1 migration fixture.
 
-As a phone user, I want a few pasteboards that I can learn by position rather than having the app permanently name them for me. I may decide that one board is for school and the kids, where a standard parent/signature text should remain easy to reach; I may use another for mathematical characters or programming fragments; or I may use all three for something completely different. The product should preserve that flexibility instead of spending screen space on labels I may not need. Optional user-supplied labels can be considered later without making labels part of the basic model.
+The canonical NativeActivity packager receives the typed platform-declaration
+DEX as `classes.dex`. The checked reducer DEX is an immutable packaged asset,
+`assets/pasteboard-behavior.dex`, loaded by the public API-26
+`InMemoryDexClassLoader` and executed by ART. Both inputs and the APK are
+digest-bound. A successful source compile or DEX decode is not installed-loader
+or Android execution evidence. No Java/Kotlin source, javac, d8, Gradle, RefC,
+native interpreter, arbitrary DEX patching or generated replacement app is used.
 
-## Clipboard boundary
+## History policy
 
-A normal Android application cannot retrospectively read the operating system or Gboard clipboard history, and modern Android restricts background clipboard reads. This app therefore owns history only after it has seen an item. In this first version it reads the current clipboard when the app gains focus and stores new clipboard text into the currently visible board. It cannot recover everything pasted before installation, nor every intermediate clipboard value copied while the app remained in the background.
+New text enters the selected board first. An exact-text duplicate is globally
+unique; recopying an older record promotes the same record on its current board
+and preserves protection. Repeating the immediately seen value leaves order
+unchanged. Copying a card prepares a checked marker before the Android clipboard
+effect so its observer callback does not promote it. Failed copies clear that
+marker only if no intervening capture has superseded it.
 
-The stored pasteboard itself is persistent: entries remain across app restarts until they are displaced by newer entries or later deletion functionality is implemented.
+When a board is full, its oldest unprotected card moves to the archive. Its full
+text remains retained. If all sixteen cards are protected, a new capture goes
+directly to the archive; a move into that board is refused without modifying the
+source. Deletion requires confirmation and refuses protected records. Archive
+clearing removes only unprotected archived records. There is no automatic
+archive expiry; the user controls deletion and capture pause.
 
-## Idriç boundary
+Single plain-text clipboard items preserve significant whitespace, CR/LF,
+indentation, fences and supplementary Unicode. Previews may collapse whitespace
+and ellipsize; stored and copied bytes are unchanged. Embedded NUL is explicitly
+refused, never truncated. Non-text and multiple-item clipboard values are not
+captured. Sensitive-marked values are skipped. No history content is logged,
+uploaded or sent over a network. Android clipboard expiration does not expire
+previously retained history.
 
-`idric/Pasteboard.idric` owns the first structural contract: 3 boards, 16 slots per board, 2 columns, 8 rows, middle board first. `GenerateConfig.idric` emits the C header consumed by the Android runtime, and CI rejects a checked-in generated header that no longer matches the Idriç source.
+Private `history.v2` records have a versioned 40-byte length/checksum header and
+length-delimited UTF-8 payload. An independently opened file lock serializes
+observer and UI updates. Writes use a private synced sibling and atomic rename,
+with a validated previous generation for recovery. Corrupt or unreadable history
+fails closed rather than becoming an empty history. Full storage and uncertain
+final directory sync remain explicit errors. The previous generation can contain
+recently deleted text until the next successful write; deletion-backup semantics
+remain an acceptance obligation for this candidate.
 
-This is intentionally not a claim that the Android app is already direct Idriç → ARM/DEX. The existing buildable route is NativeActivity + NDK + JNI; using it gets an installable APK now while keeping a real Idriç-owned boundary that can move downward as the backend grows.
+Valid original `pasteboard.bin` v1 records are imported through the checked
+reducer when no new-format history exists. The original file is preserved. An
+incompatible or damaged legacy record stops migration rather than overwriting
+it. The stable package is `com.isomorphisms.pasteboard`; candidate version code 3
+uses the persistent Wegert public test certificate
+`de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
+An installation with another legacy signer cannot be replaced by Android;
+preserve/export its data before any explicit uninstall. The build never
+uninstalls to bypass a signer mismatch.
 
-## Recovery and acceptance status (2026-11-01)
+## Automatic capture candidate
 
-The source is restored unchanged in purpose from the historical `pasteboard`
-branch to current utility-main integration. The JNI clipboard read/write path
-now calls the merged `../android-clipboard/` bridge with explicit standard
-UTF-8 lengths. The model refuses an input that exceeds its 8191-byte text
-capacity instead of storing a silently truncated string; **this is not full-size
-clipboard archival**, and its user-facing error handling remains to be built.
-State writes use a synced private temporary sibling and atomic rename rather
-than opening the committed state for truncation. APK builds require the stable,
-verified shared test signer; a prior APK signed with an ad-hoc key cannot
-silently upgrade under that new identity.
+The user explicitly selects automatic mode and authorizes Pasteboard in
+Shizuku. Gboard remains the selected keyboard. A Shizuku API-13 daemon user
+service requests public `ClipboardManager` callbacks as UID 2000 with package
+identity `com.android.shell`. The private clipboard payload never goes through
+Shizuku manager RPC. Callback text enters a FIFO; SDK `ContentProvider.call`
+delivers it to the application's private history writer. An acknowledgement
+requires a synced checked-state commit. Durable delivery identities prevent
+reordering on an acknowledgement retry.
 
-**This does not finish fixed Pasteboard.** Automatic capture of the *intermediate*
-values copied while another app is focused remains unimplemented. Android 10+
-only allows ordinary clipboard reads to the focused app or selected default IME.
-The checked direct-DEX/JNI backend has advanced but has not qualified an
-InputMethodService lifecycle or background listener. A separately authorized
-Shizuku shell-UID listener is a candidate that could preserve an existing
-keyboard, but it must pass device-level Binder, identity, event-delivery,
-restart and revocation tests before being relied upon.
+The provider requires Android's cross-user permission, actual shell caller UID,
+a private random capability, selected automatic mode and fresh Shizuku
+authorization. Paused, foreground-only and revoked states reject delivery.
+Heartbeats expose connection loss and permit authorized reconnection. Pending
+unacknowledged events remain in companion memory; a companion crash can lose
+that pending queue and clipboard values copied during downtime. History already
+acknowledged remains local and durable. Reconnection cannot reconstruct missed
+system clipboard history.
 
-Deletion, pinning, deterministic pinned eviction, durable overflow/archival,
-long-text storage, multi-process writer synchronization and the user-visible
-capture-status indicator are still outstanding. The source requirements and
-non-negotiable background-capture acceptance are recorded in
-[issue #89](https://github.com/Ashtray-Archer/utilities-android-phone-user/issues/89).
+The manager attachment and user-service Binder protocols are bounded to API 13
+and the pinned Shizuku 13.6 source; platform callbacks and clipboard access use
+public SDK methods. The actual shell Context, clipboard listener delivery,
+permissions, companion lifetime, revocation and reconnection all require fresh
+API 29/34 and physical-device qualification. Until that evidence exists this
+route must not be described as working automatic history. Foreground-only mode
+captures the current value on focus and cannot recover intermediate copies.
 
-For the recovery branch, `run-host-tests.sh` exercises the bounded C model.
-The source workflow `.github/workflows/pasteboard-apk.yml` builds the shared
-JNI bridge and APK against Android API 36, verifies stable signing, and invokes
-API 29/34 emulator launch checks. Those checks cannot substitute for testing
-three distinct clipboard copies made while Pasteboard lacks focus.
+## Build and acceptance
+
+Use `build-checked.grease` with explicit absolute repository, frontend, backend
+and fresh output paths. It checks the original layout, runs current model tests,
+compiles direct DEX twice for byte determinism, independently decodes it, and
+compiles a wrong-order source mutant which must fail the ordering oracle.
+`build-apk.grease` consumes those exact outputs, qualified ABI-specific ICK
+stages and NDK 27.2.12479018, then calls the canonical Android APK producer.
+It emits separate ARM64, ARM32 and x86_64 candidates with signer and packaging
+receipts. The former DEX-free `build-apk.sh`/`check-apk.sh` entry points are
+retired because they cannot represent the completed checked-model architecture.
+
+The workflow retains source/build receipts and candidates, then separately
+tests installed loader initialization, process restart and replacement on API
+29 and 34. These are not the decisive cross-application test. Independent ai-ci
+qualification, actual A/B/C copies in another application, long text, observer
+negative controls, complete UI interaction and physical C67/TAB_P10 acceptance
+remain separately reported obligations. No emulator result counts as a physical
+test. No partially qualified APK is a finished release.

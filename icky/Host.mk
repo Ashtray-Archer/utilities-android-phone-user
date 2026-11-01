@@ -55,13 +55,13 @@ $(BUILD)/clipboard_jni.o: $(ROOT)/android-clipboard/clipboard_jni.c $(ROOT)/andr
 	mkdir -p "$(@D)"
 	$(ICK) $(ICK_FLAGS) -std=c11 -Wall -Wextra -Werror -pedantic -I"$(ROOT)/android-clipboard" -I"$(JAVA_HOME)/include" -I"$(JAVA_HOME)/include/$(JNI_PLATFORM)" -c "$<" -o "$@"
 
-# Native Pasteboard state model: source is compiled by the owned ICK frontend.
+# Frozen v1 model verifies the migration fixture, never the production reducer.
 pasteboard-tests: $(BUILD)/pasteboard_model_test
 	"$(BUILD)/pasteboard_model_test"
 
-$(BUILD)/pasteboard_model_test: $(ROOT)/pasteboard/app/src/main/c/pasteboard_model.c $(ROOT)/pasteboard/app/src/test-c/pasteboard_model_test.c $(ROOT)/pasteboard/app/src/main/c/pasteboard_model.h $(ROOT)/pasteboard/app/src/main/c/pasteboard_config.generated.h
+$(BUILD)/pasteboard_model_test: $(ROOT)/pasteboard/app/src/test-c/legacy-v1/pasteboard_model.c $(ROOT)/pasteboard/app/src/test-c/pasteboard_model_test.c $(ROOT)/pasteboard/app/src/test-c/legacy-v1/pasteboard_model.h $(ROOT)/pasteboard/app/src/main/c/pasteboard_config.generated.h
 	mkdir -p "$(@D)"
-	$(ICK) $(ICK_FLAGS) -D_XOPEN_SOURCE=700 -std=c17 -Wall -Wextra -Werror -Wpedantic -I"$(ROOT)/pasteboard/app/src/main/c" $(filter %.c,$^) -o "$@"
+	$(ICK) $(ICK_FLAGS) -D_XOPEN_SOURCE=700 -std=c17 -Wall -Wextra -Werror -Wpedantic -I"$(ROOT)/pasteboard/app/src/test-c/legacy-v1" -I"$(ROOT)/pasteboard/app/src/main/c" $(filter %.c,$^) -o "$@"
 
 .PHONY: pasteboard-store-tests
 pasteboard-store-tests: $(BUILD)/pasteboard_store_test $(BUILD)/pasteboard_wire_test
