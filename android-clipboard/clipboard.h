@@ -3,6 +3,7 @@
 
 #include <jni.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,6 +27,7 @@ typedef struct {
     int sensitive;
     char *origin_utf8;
     size_t origin_length;
+    int64_t copied_at_millis; /* SDK copy timestamp; zero before API 26. */
 } ClipboardDetails;
 
 /*

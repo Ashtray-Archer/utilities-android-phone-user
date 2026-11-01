@@ -68,6 +68,18 @@ static void run_smoke(ANativeActivity *activity) {
     }
     clipboard_free(actual);
 
+    ClipboardDetails details = {0};
+    actual = NULL;
+    actual_len = 0;
+    if (expect_ok("read copy timestamp", clipboard_get_utf8_details(&actual, &actual_len, &details))) {
+        if ((activity->sdkVersion >= 26 && details.copied_at_millis <= 0) ||
+            (activity->sdkVersion < 26 && details.copied_at_millis != 0)) fail_text("SDK copy timestamp boundary");
+        if (actual_len != sizeof(sample) || memcmp(actual, sample, sizeof(sample)) != 0)
+            fail_text("timestamp metadata preserves full UTF-8");
+    }
+    clipboard_free(actual);
+    clipboard_free(details.origin_utf8);
+
     /* This proves the sensitive write path executes on Android. The system
      * preview treatment itself remains a separate API-33+ acceptance check. */
     expect_ok(

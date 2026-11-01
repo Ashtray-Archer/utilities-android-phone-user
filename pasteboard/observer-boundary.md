@@ -63,9 +63,12 @@ its identity from the actual shell LoadedApk. This does not alter package
 ownership, UID, permissions or app-op settings.
 
 The user-service control protocol retains tag `pasteboard-observer-v1` and
-descriptor `com.isomorphisms.pasteboard.ClipboardObserver.v2`. Configuration
+descriptor `com.isomorphisms.pasteboard.ClipboardObserver.v3`. Configuration
 requires the app owner's actual Binder UID, a bounded Parcel with no file
-descriptors and exactly one credential field. Shizuku's normal version-code
+descriptors, exactly one credential String and one positive capture-since Long.
+The capture-since value is the synced private credential file's creation/write
+time, retained across ordinary app restart and renewed before explicit Resume.
+Shizuku's normal version-code
 replacement restarts an old companion after an application upgrade. ARM32 APKs
 request a 32-bit app_process; ARM64 and x86-64 APKs request a 64-bit process.
 
@@ -73,6 +76,14 @@ Pausing or selecting foreground capture rejects observer writes immediately in
 the checked model. Explicitly resuming automatic capture saves a fresh private
 credential before enabling writes; older queued credentials are discarded.
 Ordinary app process restart keeps the credential and acknowledged history.
+Callbacks older than the renewed session boundary are excluded. Public SDK
+`ClipDescription.getTimestamp()` identifies the original copy time: Android's
+later classification callbacks retain that same timestamp. The delivery ID
+combines the companion session, this timestamp and a SHA-256 digest of the
+length-delimited exact UTF-8 text and advisory origin. Neither the digest nor
+the delivery ID is logged. The checked Idriç replay gate therefore accepts one
+delivery for repeated metadata callbacks, while distinct texts copied in the
+same millisecond remain distinct. Missing SDK timestamps fail closed.
 Shizuku revocation/server death stops or disconnects capture. Pending companion
 memory can be lost on a companion crash, and copies made during downtime cannot
 be reconstructed. Shizuku may require user restart after a device reboot.
@@ -82,4 +93,9 @@ exact contents before Pasteboard gains focus. It must also reject actual wrong
 caller/credential/permission controls and source-compiled mutants, exercise
 pause, revocation, process death, reconnection and restart, and bind receipts to
 the exact source, compiler, APK digest and environment. Until those receipts
-pass, this transport is NOT VERIFIED rather than working automatic history.
+pass, the corresponding controls remain NOT VERIFIED. At source
+`6b359f2ffd83b9a3fb67f343406c291e0c96f900`, run
+[41347388884](https://github.com/Ashtray-Archer/utilities-android-phone-user/actions/runs/41347388884)
+proves actual shell-UID callback/content delivery and exact A/B/C retention
+before refocus on both API 29 and 34. That run does not qualify the changed v3
+transport, all lifecycle/privacy controls or either physical target.

@@ -303,6 +303,15 @@ static ClipboardStatus clip_sensitive(JNIEnv *environment, jobject clip,
         ? (*environment)->CallObjectMethod(environment, clip, get_description) : NULL;
     if (take_exception(environment) || description == NULL) goto details_finished;
     jclass description_class ← (*environment)->GetObjectClass(environment, description);
+    jint api_level ← 0;
+    if (get_api_level(environment, &api_level) != CLIPBOARD_OK) goto details_finished;
+    if (api_level >= 26) {
+        const jmethodID timestamp ← description_class ? (*environment)->GetMethodID(environment,
+            description_class, "getTimestamp", "()J") : NULL;
+        if (timestamp == NULL || take_exception(environment)) goto details_finished;
+        details->copied_at_millis ← (*environment)->CallLongMethod(environment, description, timestamp);
+        if (take_exception(environment)) goto details_finished;
+    }
     const jmethodID get_extras ← description_class ? (*environment)->GetMethodID(environment,
         description_class, "getExtras", "()Landroid/os/PersistableBundle;") : NULL;
     jobject extras ← get_extras
@@ -545,6 +554,7 @@ ClipboardStatus clipboard_get_utf8_details(char **out_bytes, size_t *out_len,
     out_details->sensitive ← 0;
     out_details->origin_utf8 ← NULL;
     out_details->origin_length ← 0u;
+    out_details->copied_at_millis ← 0;
     return get_utf8_snapshot(out_bytes, out_len, out_details);
 }
 

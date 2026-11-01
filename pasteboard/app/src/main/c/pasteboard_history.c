@@ -1,6 +1,7 @@
 #include "pasteboard_history.h"
 #include "pasteboard_behavior_loader.h"
 #include "utf8.h"
+#include <android/log.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
@@ -164,7 +165,18 @@ static bool reduce(JNIEnv *environment, const char *action, PBText serialized,
         pb_wire_decode(returned.bytes, returned.length, result);
     free(returned.bytes);
     if ((*environment)->ExceptionCheck(environment)) {
+        jthrowable failure ← (*environment)->ExceptionOccurred(environment);
         (*environment)->ExceptionClear(environment);
+        jclass type ← failure ? (*environment)->GetObjectClass(environment, failure) : NULL;
+        jclass class_type ← type ? (*environment)->FindClass(environment, "java/lang/Class") : NULL;
+        jmethodID name ← class_type ? (*environment)->GetMethodID(environment, class_type, "getName", "()Ljava/lang/String;") : NULL;
+        jstring named ← name ? (*environment)->CallObjectMethod(environment, type, name) : NULL;
+        const char *description ← named && !(*environment)->ExceptionCheck(environment)
+            ? (*environment)->GetStringUTFChars(environment, named, NULL) : NULL;
+        __android_log_print(ANDROID_LOG_ERROR, "PasteboardHistory", "checked transition exception_class=%s",
+            description ? description : "unavailable");
+        if (description) (*environment)->ReleaseStringUTFChars(environment, named, description);
+        if ((*environment)->ExceptionCheck(environment)) (*environment)->ExceptionClear(environment);
         success ← false;
     }
     (*environment)->PopLocalFrame(environment, NULL);

@@ -19,6 +19,7 @@
 static pthread_mutex_t app_mutex ← PTHREAD_MUTEX_INITIALIZER;
 static JavaVM *app_vm ← NULL;
 static char app_token[65];
+static int64_t app_capture_since ← 0;
 static char app_status[128] ← "Foreground capture only";
 static int connecting ← 0;
 static int connected ← 0;
@@ -100,7 +101,8 @@ static void hex_bytes(char *text, const unsigned char *bytes, size_t length) {
 /* A capability key is created only by the visible Enable action. It is never
  * written into clipboard history, logs, shared storage, or a network request. */
 /* create: 0 reads, 1 creates if absent, 2 begins a fresh capture session. */
-static int load_capability(int create, char output[65]) {
+static int load_capability(int create, char output[65], int64_t *capture_since) {
+    *capture_since ← 0;
     const char *directory ← pb_history_private_directory();
     if (directory == NULL) return 0;
     const int folder ← open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
@@ -153,7 +155,9 @@ static int load_capability(int create, char output[65]) {
         valid ← (output[index] >= '0' && output[index] <= '9') ||
             (output[index] >= 'a' && output[index] <= 'f');
     output[64] ← '\0';
-    return valid && offset == 64u;
+    if (valid && offset == 64u && information.st_mtim.tv_sec > 0)
+        *capture_since ← (int64_t)information.st_mtim.tv_sec * INT64_C(1000) + information.st_mtim.tv_nsec ÷ INT64_C(1000000);
+    return valid && offset == 64u && *capture_since > 0;
 }
 
 const char *pb_observer_status(void) {
@@ -200,10 +204,11 @@ static void *connect_thread(void *unused) {
     JavaVM *vm ← app_vm;
     char token[65];
     memcpy(token, app_token, sizeof(token));
+    const int64_t capture_since ← app_capture_since;
     (void)pthread_mutex_unlock(&app_mutex);
     JNIEnv *environment ← NULL;
     if (vm && attach_vm(vm, &environment)) {
-        (void)pb_shizuku_observer_connect(environment, token);
+        (void)pb_shizuku_observer_connect(environment, token, capture_since);
         (void)(*vm)->DetachCurrentThread(vm);
     } else pb_observer_connected(0);
     (void)pthread_mutex_lock(&app_mutex);
@@ -222,10 +227,11 @@ void pb_observer_app_ready(JNIEnv *e, jobject context) {
     JavaVM *vm ← NULL;
     if ((*e)->GetJavaVM(e, &vm) != JNI_OK) return;
     char token[65];
-    const int enabled ← load_capability(0, token);
+    int64_t capture_since ← 0;
+    const int enabled ← load_capability(0, token, &capture_since);
     (void)pthread_mutex_lock(&app_mutex);
     app_vm ← vm;
-    if (enabled) memcpy(app_token, token, sizeof(token));
+    if (enabled) { memcpy(app_token, token, sizeof(token)); app_capture_since ← capture_since; }
     (void)pthread_mutex_unlock(&app_mutex);
 }
 
@@ -252,9 +258,11 @@ void pb_observer_try_start(JNIEnv *e) {
  * capture inactive. Earlier queued values cannot authenticate after resume. */
 bool pb_observer_begin_capture_session(void) {
     char token[65];
-    if (!load_capability(2, token)) return false;
+    int64_t capture_since ← 0;
+    if (!load_capability(2, token, &capture_since)) return false;
     (void)pthread_mutex_lock(&app_mutex);
     memcpy(app_token, token, sizeof(token));
+    app_capture_since ← capture_since;
     connected ← 0;
     (void)pthread_mutex_unlock(&app_mutex);
     return true;
@@ -263,9 +271,11 @@ bool pb_observer_begin_capture_session(void) {
 int pb_observer_enable(JNIEnv *e) {
     if (!qualified_platform(e)) return -2;
     char token[65];
-    if (!load_capability(1, token)) return -1;
+    int64_t capture_since ← 0;
+    if (!load_capability(1, token, &capture_since)) return -1;
     (void)pthread_mutex_lock(&app_mutex);
     memcpy(app_token, token, sizeof(token));
+    app_capture_since ← capture_since;
     (void)pthread_mutex_unlock(&app_mutex);
     const pb_shizuku_capability_state state ← pb_shizuku_client_authorization(e, NULL, NULL);
     if (state == PB_SHIZUKU_AUTHORIZED) { pb_observer_try_start(e); return 0; }
@@ -357,8 +367,8 @@ struct ClipboardEvent {
     ClipboardEvent *next;
     PBText text;
     PBText origin;
-    char delivery[96];
-    char timestamp[32];
+    char delivery[128];
+    char timestamp[24];
     char token[65];
 };
 
@@ -374,7 +384,7 @@ static struct {
     uid_t owner;
     char token[65];
     char session[33];
-    uint64_t sequence;
+    int64_t capture_since;
     uint64_t epoch;
     int initialized;
     int registered;
@@ -395,6 +405,46 @@ static void free_event(ClipboardEvent *event) {
     free(event->text.bytes);
     free(event->origin.bytes);
     free(event);
+}
+
+/* Platform event identity only. The checked reducer owns replay and text
+ * deduplication. Metadata/classification callbacks share the SDK copy time and
+ * exact text/origin digest; distinct same-millisecond texts have distinct IDs. */
+static int event_fingerprint(JNIEnv *e, PBText text, PBText origin, char output[65]) {
+    if (text.length > INT32_MAX || origin.length > INT32_MAX ||
+        (*e)->PushLocalFrame(e, 24) != JNI_OK) return 0;
+    jclass type ← (*e)->FindClass(e, "java/security/MessageDigest");
+    jmethodID create ← type ? (*e)->GetStaticMethodID(e, type, "getInstance", "(Ljava/lang/String;)Ljava/security/MessageDigest;") : NULL;
+    jstring algorithm ← create ? (*e)->NewStringUTF(e, "SHA-256") : NULL;
+    jobject digest ← algorithm ? (*e)->CallStaticObjectMethod(e, type, create, algorithm) : NULL;
+    jmethodID update ← sdk_method(e, "java/security/MessageDigest", "update", "([B)V");
+    jmethodID finish ← sdk_method(e, "java/security/MessageDigest", "digest", "()[B");
+    unsigned char lengths[16];
+    const uint64_t sizes[2] ← {(uint64_t)text.length, (uint64_t)origin.length};
+    for (size_t field ← 0u; field < 2u; ++field)
+        for (unsigned index ← 0u; index < 8u; ++index)
+            lengths[field * 8u + index] ← (unsigned char)(sizes[field] >> (index * 8u));
+    PBText pieces[3] ← {{(char *)lengths, sizeof(lengths)}, text, origin};
+    int valid ← digest && update && finish && !(*e)->ExceptionCheck(e);
+    for (size_t index ← 0u; valid && index < 3u; ++index) {
+        jbyteArray bytes ← (*e)->NewByteArray(e, (jsize)pieces[index].length);
+        if (bytes && pieces[index].length != 0u)
+            (*e)->SetByteArrayRegion(e, bytes, 0, (jsize)pieces[index].length, (const jbyte *)pieces[index].bytes);
+        valid ← bytes && !(*e)->ExceptionCheck(e);
+        if (valid) (*e)->CallVoidMethod(e, digest, update, bytes);
+        valid ← valid && !(*e)->ExceptionCheck(e);
+        if (bytes) (*e)->DeleteLocalRef(e, bytes);
+    }
+    jbyteArray value ← valid ? (*e)->CallObjectMethod(e, digest, finish) : NULL;
+    valid ← value && !(*e)->ExceptionCheck(e) && (*e)->GetArrayLength(e, value) == 32;
+    unsigned char bytes[32];
+    if (valid) {
+        (*e)->GetByteArrayRegion(e, value, 0, 32, (jbyte *)bytes);
+        valid ← !(*e)->ExceptionCheck(e);
+        if (valid) hex_bytes(output, bytes, sizeof(bytes));
+    }
+    (*e)->PopLocalFrame(e, NULL);
+    return valid;
 }
 
 static void stop_listener_at(JNIEnv *e, uint64_t expected_epoch) {
@@ -642,7 +692,7 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_initialize(JNIEnv *e, jobject
     valid ← valid && held_context && held_manager && held_self && !(*e)->ExceptionCheck(e);
     if (valid) {
         jmethodID attach ← sdk_method(e, "android/os/Binder", "attachInterface", "(Landroid/os/IInterface;Ljava/lang/String;)V");
-        jstring descriptor ← attach ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v2") : NULL;
+        jstring descriptor ← attach ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v3") : NULL;
         if (descriptor) (*e)->CallVoidMethod(e, self, attach, NULL, descriptor);
         valid ← descriptor && !(*e)->ExceptionCheck(e);
     }
@@ -668,9 +718,9 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_initialize(JNIEnv *e, jobject
     (*e)->PopLocalFrame(e, NULL);
 }
 
-static int start_listener(JNIEnv *e, jstring token) {
+static int start_listener(JNIEnv *e, jstring token, jlong capture_since) {
     PBText capability ← {0};
-    if (!service.initialized || !pb_history_native_text(e, token, &capability) || capability.length != 64u) {
+    if (!service.initialized || capture_since <= 0 || !pb_history_native_text(e, token, &capability) || capability.length != 64u) {
         free(capability.bytes);
         return 0;
     }
@@ -686,6 +736,7 @@ static int start_listener(JNIEnv *e, jstring token) {
         (void)pthread_mutex_lock(&service.mutex);
         memcpy(service.token, capability.bytes, 64u);
         service.token[64] ← '\0';
+        service.capture_since ← capture_since;
         service.listener ← held;
         service.stopping ← 0;
         service.registered ← 1;
@@ -719,7 +770,7 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_onTransact(JNIEnv *e, jobject
     int valid ← 0;
     if (code == 0x5f4e5446 && reply) {
         jmethodID write ← sdk_method(e, "android/os/Parcel", "writeString", "(Ljava/lang/String;)V");
-        jstring descriptor ← write ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v2") : NULL;
+        jstring descriptor ← write ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v3") : NULL;
         if (descriptor) (*e)->CallVoidMethod(e, reply, write, descriptor);
         valid ← descriptor && !(*e)->ExceptionCheck(e);
     } else if (code == 16777115 && caller_uid(e) == 2000 && (flags & ~0x12) == 0) {
@@ -737,19 +788,21 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_onTransact(JNIEnv *e, jobject
             return JNI_FALSE;
         }
         jmethodID enforce ← sdk_method(e, "android/os/Parcel", "enforceInterface", "(Ljava/lang/String;)V");
-        jstring descriptor ← enforce ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v2") : NULL;
+        jstring descriptor ← enforce ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v3") : NULL;
         if (descriptor) (*e)->CallVoidMethod(e, data, enforce, descriptor);
         jmethodID read ← sdk_method(e, "android/os/Parcel", "readString", "()Ljava/lang/String;");
         jstring token ← descriptor && read && !(*e)->ExceptionCheck(e) ? (*e)->CallObjectMethod(e, data, read) : NULL;
+        jmethodID read_time ← sdk_method(e, "android/os/Parcel", "readLong", "()J");
+        const jlong capture_since ← token && read_time ? (*e)->CallLongMethod(e, data, read_time) : 0;
         jmethodID available ← sdk_method(e, "android/os/Parcel", "dataAvail", "()I");
-        valid ← token && available && (*e)->CallIntMethod(e, data, available) == 0 && !(*e)->ExceptionCheck(e);
+        valid ← token && read_time && capture_since > 0 && available && (*e)->CallIntMethod(e, data, available) == 0 && !(*e)->ExceptionCheck(e);
         jclass binder ← (*e)->FindClass(e, "android/os/Binder");
         jmethodID clear ← binder ? (*e)->GetStaticMethodID(e, binder, "clearCallingIdentity", "()J") : NULL;
         jmethodID restore ← binder ? (*e)->GetStaticMethodID(e, binder, "restoreCallingIdentity", "(J)V") : NULL;
         valid ← valid && clear && restore && !(*e)->ExceptionCheck(e);
         const jlong identity ← valid ? (*e)->CallStaticLongMethod(e, binder, clear) : 0;
         const int cleared ← valid && !(*e)->ExceptionCheck(e);
-        int started ← cleared && start_listener(e, token);
+        int started ← cleared && start_listener(e, token, capture_since);
         if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
         if (cleared) (*e)->CallStaticVoidMethod(e, binder, restore, identity);
         if ((*e)->ExceptionCheck(e)) started ← 0;
@@ -778,7 +831,8 @@ Java_com_isomorphisms_pasteboard_ClipboardListener_onPrimaryClipChanged(JNIEnv *
     const uint64_t epoch ← service.epoch;
     const int registered ← service.registered;
     const int same ← service.listener && (*e)->IsSameObject(e, self, service.listener);
-    const int current ← registered && same && service.sequence != UINT64_MAX;
+    const int64_t capture_since ← service.capture_since;
+    const int current ← registered && same;
     (void)pthread_mutex_unlock(&service.mutex);
     __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard callback entry registered=%d current_listener=%d", registered, same);
     if (!current) return;
@@ -791,25 +845,30 @@ Java_com_isomorphisms_pasteboard_ClipboardListener_onPrimaryClipChanged(JNIEnv *
     if (read != CLIPBOARD_OK || details.sensitive) {
         clipboard_free(text); clipboard_free(details.origin_utf8); return;
     }
+    if (details.copied_at_millis <= 0 || details.copied_at_millis < capture_since) {
+        clipboard_free(text); clipboard_free(details.origin_utf8);
+        if (details.copied_at_millis <= 0) stop_listener(e);
+        return;
+    }
     ClipboardEvent *event ← calloc(1u, sizeof(*event));
     if (event == NULL) {
         clipboard_free(text); clipboard_free(details.origin_utf8); stop_listener(e); return;
     }
     event->text ← (PBText){text, length};
     event->origin ← (PBText){details.origin_utf8, details.origin_length};
-    struct timespec now ← {0};
-    if (clock_gettime(CLOCK_REALTIME, &now) == 0)
-        (void)snprintf(event->timestamp, sizeof(event->timestamp), "%llu",
-            (unsigned long long)((uint64_t)now.tv_sec * UINT64_C(1000) + (uint64_t)now.tv_nsec ÷ UINT64_C(1000000)));
+    char fingerprint[65];
+    if (!event_fingerprint(e, event->text, event->origin, fingerprint)) {
+        if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+        free_event(event); stop_listener(e); return;
+    }
+    (void)snprintf(event->timestamp, sizeof(event->timestamp), "%llu", (unsigned long long)details.copied_at_millis);
     (void)pthread_mutex_lock(&service.mutex);
-    if (!service.registered || service.epoch != epoch || service.sequence == UINT64_MAX) {
+    if (!service.registered || service.epoch != epoch) {
         (void)pthread_mutex_unlock(&service.mutex);
         free_event(event);
         return;
     }
-    ++service.sequence;
-    (void)snprintf(event->delivery, sizeof(event->delivery), "%s:%llu", service.session,
-        (unsigned long long)service.sequence);
+    (void)snprintf(event->delivery, sizeof(event->delivery), "%s:%s:%s", service.session, event->timestamp, fingerprint);
     memcpy(event->token, service.token, sizeof(event->token));
     if (service.tail) service.tail->next ← event;
     else service.head ← event;

@@ -80,7 +80,7 @@ Valid original `pasteboard.bin` v1 records are imported through the checked
 reducer when no new-format history exists. The original file remains until two
 independently synced modern copies exist, then is retired. An incompatible or
 damaged legacy record stops migration and preserves the original. The stable
-package is `com.isomorphisms.pasteboard`; candidate version code 10
+package is `com.isomorphisms.pasteboard`; candidate version code 11
 uses the persistent Wegert public test certificate
 `de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
 An installation with another legacy signer cannot be replaced by Android;

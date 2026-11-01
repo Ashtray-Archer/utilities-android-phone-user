@@ -24,7 +24,7 @@
 #define REQUEST_PERMISSION_CODE 151
 #define INTERFACE_TRANSACTION 0x5f4e5446
 #define WORKER_CONNECTION_DESCRIPTOR "moe.shizuku.server.IShizukuServiceConnection"
-#define WORKER_DESCRIPTOR "com.isomorphisms.pasteboard.ClipboardObserver.v2"
+#define WORKER_DESCRIPTOR "com.isomorphisms.pasteboard.ClipboardObserver.v3"
 
 static struct {
     pthread_mutex_t mutex;
@@ -891,8 +891,8 @@ Java_com_isomorphisms_pasteboard_ShizukuWorkerConnection_onTransact(JNIEnv *e, j
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
-int pb_shizuku_observer_connect(JNIEnv *e, const char *token) {
-    if (e == NULL || token == NULL || strlen(token) != 64u ||
+int pb_shizuku_observer_connect(JNIEnv *e, const char *token, int64_t capture_since) {
+    if (e == NULL || token == NULL || strlen(token) != 64u || capture_since <= 0 ||
         pthread_mutex_trylock(&worker_request_mutex) != 0) return -1;
     if ((*e)->PushLocalFrame(e, 128) != 0) {
         pthread_mutex_unlock(&worker_request_mutex);
@@ -946,9 +946,11 @@ int pb_shizuku_observer_connect(JNIEnv *e, const char *token) {
         now_uid == uid && now_epoch == epoch && has_descriptor(e, service, WORKER_DESCRIPTOR);
     jobject data = ok ? parcel(e) : NULL, reply = ok ? parcel(e) : NULL;
     jmethodID write = method(e, "android/os/Parcel", "writeString", "(Ljava/lang/String;)V");
+    jmethodID write_time = method(e, "android/os/Parcel", "writeLong", "(J)V");
     jstring capability = ok && write ? (*e)->NewStringUTF(e, token) : NULL;
-    ok = ok && data && reply && capability && interface_token(e, data, WORKER_DESCRIPTOR);
+    ok = ok && data && reply && capability && write_time && interface_token(e, data, WORKER_DESCRIPTOR);
     if (ok) (*e)->CallVoidMethod(e, data, write, capability);
+    if (ok && !(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, data, write_time, (jlong)capture_since);
     ok = ok && !(*e)->ExceptionCheck(e) && transact(e, service, 2, data, reply);
     jmethodID read = method(e, "android/os/Parcel", "readInt", "()I");
     const jint result = ok && read ? (*e)->CallIntMethod(e, reply, read) : -1;

@@ -236,3 +236,32 @@ full-storage/error controls and concurrent transactions. The independent Android
 UI test also seeds an abandoned snapshot from already captured SDK history and
 requires confirmed deletion to retire it. These are filesystem controls, not
 synthetic capture evidence.
+
+At 6b359f2ffd83b9a3fb67f343406c291e0c96f900 / run 41347388884,
+API 29 and 34 both retain real separate-application A/B/C copies in exact C/B/A
+order before Pasteboard is focused. The actual shell context, public listener,
+public clipboard read and private app-UID writer all execute. Both APIs also
+pass migration and all 26 ART responses with the compiled ordering mutant
+rejected. API 29 additionally passes the exact 20 KB text and sensitive/NUL/
+multiple/non-text/clear policies. Its next lifecycle test fails because the
+run-as kill command cannot address the previously reported PID. API 34's fixed
+four-second long-text snapshot is premature or exposes a remaining failure;
+the retained logs do not distinguish those explanations. Neither run reaches
+the complete permission, lifecycle or UI suite.
+
+Android emits two callbacks for individual A/B/C copies, including later text
+classification. Candidate 11 carries the public SDK copy timestamp and a
+length-delimited UTF-8 text/origin digest as platform event identity, leaving
+all replay and content-deduplication decisions in checked Idriç. The v3 control
+Parcel also supplies the synced credential timestamp; callbacks predating an
+explicit capture resumption are excluded. This does not poll the clipboard or
+introduce a second application model. The shared JNI smoke now checks the
+public copy timestamp as well as exact Unicode content.
+
+The independent long-text check now waits up to 30 seconds for the unchanged
+exact-content assertion and collects content-free transition exception classes
+on failure. Ordinary background process death uses ActivityManager am kill
+and requires the original PID to disappear before restart. Source assertions
+are preserved. Local owned-ICK native linking, JNI compilation, Unicode, wire
+and store fault/crash/concurrency tests pass. Fresh Android execution must
+qualify every changed boundary; physical acceptance remains unavailable.
