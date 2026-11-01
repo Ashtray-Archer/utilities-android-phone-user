@@ -16,6 +16,8 @@ Each utility lives in its own folder and should remain independently buildable w
 
 The replay is reconstructed from a recorded retained-Float16 X/Y/Z sample sequence; it is a visualization of recorded sensor values, not a screen recording.
 
+[`pasteboard`](pasteboard) is the recovered fixed three-board clipboard history utility. Its initial foreground-only capture is incomplete; [issue #89](https://github.com/Ashtray-Archer/utilities-android-phone-user/issues/89) tracks durable cross-app capture and retention acceptance.
+
 [`math-characters`](math-characters) is **Programmer's Unicode Picker**: an Idriç-owned, standalone copy/paste picker whose Android APK remains native, DEX-free, and separate from the system keyboard.
 
 [`text-pad`](text-pad) records the product direction and phone user stories for a deliberately small plain-text editor. It is a design note rather than an implementation today.
