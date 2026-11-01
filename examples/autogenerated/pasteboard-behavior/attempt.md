@@ -138,3 +138,11 @@ assertions because the artifact ZIP dropped its executable mode. The next run
 restores the oracle from a mode-preserving inner archive and preflights it.
 No migration assertion is weakened; privileged A/B/C and physical acceptance
 are still unverified.
+
+At 9b85f5bae3cdd7db5b76925a6046567ec08f9b09, run 41334889688,
+the new clean-source check refuses the build because four declared dependency
+checkouts appear as untracked directories: ai-ci, ICK host source, the public
+test-signing checkout and tools. No application source changed. Those exact
+dependency directories are now ignored at the consumer root; their identities
+remain separately recorded. The clean-source assertion is retained. Feature
+branch pushes no longer duplicate the existing pull-request qualification run.

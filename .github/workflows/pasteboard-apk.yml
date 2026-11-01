@@ -3,7 +3,7 @@ name: Pasteboard Android
 on:
   pull_request:
   push:
-    branches: [recover-pasteboard-20261101, main]
+    branches: [main]
   workflow_dispatch:
     inputs:
       rebuild_compilers:
