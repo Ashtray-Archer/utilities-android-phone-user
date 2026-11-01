@@ -10,7 +10,7 @@ MODEL_FLAGS = -std=c17 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow
 PICKER_FLAGS = -std=c17 -Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -g -fsanitize=address,undefined -fno-omit-frame-pointer
 MODEL_HEADERS = $(wildcard $(ROOT)/accelerometer/model/*.h $(ROOT)/accelerometer/command/*.h $(ROOT)/geometry/*.h)
 PICKER_HEADERS = $(wildcard $(ROOT)/math-characters/app/src/main/c/*.h $(ROOT)/math-characters/app/src/main/c/*.inc)
-.PHONY: model-tests picker-tests clipboard-tests
+.PHONY: model-tests picker-tests clipboard-tests pasteboard-tests
 model-tests: $(BUILD)/compact_unit_direction_test $(addprefix $(BUILD)/,$(MODEL_TESTS))
 	"$(BUILD)/compact_unit_direction_test"
 	"$(BUILD)/compact_acceleration_test"
@@ -54,3 +54,11 @@ $(BUILD)/clipboard_jni.o: $(ROOT)/android-clipboard/clipboard_jni.c $(ROOT)/andr
 	test -f "$(JAVA_HOME)/include/$(JNI_PLATFORM)/jni_md.h"
 	mkdir -p "$(@D)"
 	$(ICK) $(ICK_FLAGS) -std=c11 -Wall -Wextra -Werror -pedantic -I"$(ROOT)/android-clipboard" -I"$(JAVA_HOME)/include" -I"$(JAVA_HOME)/include/$(JNI_PLATFORM)" -c "$<" -o "$@"
+
+# Native Pasteboard state model: source is compiled by the owned ICK frontend.
+pasteboard-tests: $(BUILD)/pasteboard_model_test
+	"$(BUILD)/pasteboard_model_test"
+
+$(BUILD)/pasteboard_model_test: $(ROOT)/pasteboard/app/src/main/c/pasteboard_model.c $(ROOT)/pasteboard/app/src/test-c/pasteboard_model_test.c $(ROOT)/pasteboard/app/src/main/c/pasteboard_model.h $(ROOT)/pasteboard/app/src/main/c/pasteboard_config.generated.h
+	mkdir -p "$(@D)"
+	$(ICK) $(ICK_FLAGS) -D_XOPEN_SOURCE=700 -std=c17 -Wall -Wextra -Werror -Wpedantic -I"$(ROOT)/pasteboard/app/src/main/c" $(filter %.c,$^) -o "$@"
