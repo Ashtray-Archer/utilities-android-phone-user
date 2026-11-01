@@ -118,3 +118,12 @@ pass locally. Private companion protocol v2 carries this hint; the stable user
 service tag is retained, and candidate version code 5 requests replacement.
 PB3 storage is unchanged. Installed loader, actual callbacks and physical-device
 acceptance remain separate evidence obligations.
+
+The integration heads were re-read during qualification. Idriç, ai-ci main,
+Cat Food and android-NDK main remain at their initial inspected commits.
+android-NDK PR #41 advanced from 035452331c0f2b98391a551e0797418da5793eae
+to 6e1c9619a96f28494ad891a32a06edfb72f3e25b. Its code change saturates
+optimized IO Unit command World closures; this application exports a pure
+Text-to-Text reducer and does not use that command entry. The consumer keeps its
+explicit 0354523 compiler pin while qualification proceeds, rather than
+silently changing the executable boundary during a run.
