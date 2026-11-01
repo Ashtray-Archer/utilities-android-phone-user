@@ -33,3 +33,37 @@ The stored pasteboard itself is persistent: entries remain across app restarts u
 `idric/Pasteboard.idric` owns the first structural contract: 3 boards, 16 slots per board, 2 columns, 8 rows, middle board first. `GenerateConfig.idric` emits the C header consumed by the Android runtime, and CI rejects a checked-in generated header that no longer matches the Idriç source.
 
 This is intentionally not a claim that the Android app is already direct Idriç → ARM/DEX. The existing buildable route is NativeActivity + NDK + JNI; using it gets an installable APK now while keeping a real Idriç-owned boundary that can move downward as the backend grows.
+
+## Recovery and acceptance status (2026-11-01)
+
+The source is restored unchanged in purpose from the historical `pasteboard`
+branch to current utility-main integration. The JNI clipboard read/write path
+now calls the merged `../android-clipboard/` bridge with explicit standard
+UTF-8 lengths. The model refuses an input that exceeds its 8191-byte text
+capacity instead of storing a silently truncated string; **this is not full-size
+clipboard archival**, and its user-facing error handling remains to be built.
+State writes use a synced private temporary sibling and atomic rename rather
+than opening the committed state for truncation. APK builds require the stable,
+verified shared test signer; a prior APK signed with an ad-hoc key cannot
+silently upgrade under that new identity.
+
+**This does not finish fixed Pasteboard.** Automatic capture of the *intermediate*
+values copied while another app is focused remains unimplemented. Android 10+
+only allows ordinary clipboard reads to the focused app or selected default IME.
+The checked direct-DEX/JNI backend has advanced but has not qualified an
+InputMethodService lifecycle or background listener. A separately authorized
+Shizuku shell-UID listener is a candidate that could preserve an existing
+keyboard, but it must pass device-level Binder, identity, event-delivery,
+restart and revocation tests before being relied upon.
+
+Deletion, pinning, deterministic pinned eviction, durable overflow/archival,
+long-text storage, multi-process writer synchronization and the user-visible
+capture-status indicator are still outstanding. The source requirements and
+non-negotiable background-capture acceptance are recorded in
+[issue #89](https://github.com/Ashtray-Archer/utilities-android-phone-user/issues/89).
+
+For the recovery branch, `run-host-tests.sh` exercises the bounded C model.
+The source workflow `.github/workflows/pasteboard-apk.yml` builds the shared
+JNI bridge and APK against Android API 36, verifies stable signing, and invokes
+API 29/34 emulator launch checks. Those checks cannot substitute for testing
+three distinct clipboard copies made while Pasteboard lacks focus.
