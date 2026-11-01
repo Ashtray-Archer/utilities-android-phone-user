@@ -734,7 +734,7 @@ static void menu_action(AppContext *context, int row) {
     __android_log_print(ANDROID_LOG_INFO, "PasteboardDiagnostic", "menu=%d row=%d", context->menu, row);
     if (context->menu == 1) {
         if (row == 0) {
-            (void)history_action(context, "request_automatic", NULL, 0u);
+            if (!history_action(context, "request_automatic", NULL, 0u)) return;
             JNIEnv *e ← NULL; bool detach ← false;
             if (attach_environment(context->app->activity, &e, &detach)) {
                 if (pb_observer_enable(e) != 0)

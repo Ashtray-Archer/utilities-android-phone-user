@@ -225,12 +225,12 @@ static void record_header(unsigned char header[PB_HEADER_BYTES], unsigned versio
     put_number(header + 36u, checksum(header, 36u), 4u);
 }
 
-/* This is an independent inode, not a hard link to current: damage to current
- * must not damage the recovery copy. A v3 header requires retry before read. */
-static PBStoreStatus checkpoint_payload(PBStoreTransaction *transaction, const char *utf8, size_t length) {
-    if (PB_FAIL(PB_FAULT_CHECKPOINT)) return system_error();
+/* Android untrusted_app SELinux denies hard links, including private files.
+ * Write an independent synced inode, then atomically replace recovery. */
+static PBStoreStatus replace_previous(PBStoreTransaction *transaction, const char *utf8,
+                                       size_t length, unsigned version) {
     unsigned char header[PB_HEADER_BYTES];
-    record_header(header, PB_CHECKPOINT_VERSION, transaction->generation, utf8, length);
+    record_header(header, version, transaction->generation, utf8, length);
     char temporary[96];
     const int descriptor ← create_temporary(transaction->directory, temporary, sizeof(temporary));
     if (descriptor < 0) return system_error();
@@ -242,6 +242,12 @@ static PBStoreStatus checkpoint_payload(PBStoreTransaction *transaction, const c
         transaction->directory, previous_name) != 0 || !sync_descriptor(transaction->directory))) status ← system_error();
     (void)unlinkat(transaction->directory, temporary, 0);
     return status;
+}
+
+/* A v3 header requires a validated checkpoint before the next read succeeds. */
+static PBStoreStatus checkpoint_payload(PBStoreTransaction *transaction, const char *utf8, size_t length) {
+    if (PB_FAIL(PB_FAULT_CHECKPOINT)) return system_error();
+    return replace_previous(transaction, utf8, length, PB_CHECKPOINT_VERSION);
 }
 
 static PBStoreStatus commit_snapshot(PBStoreTransaction *transaction, const char *utf8,
@@ -267,20 +273,9 @@ static PBStoreStatus commit_snapshot(PBStoreTransaction *transaction, const char
     /* Preserve only a known-valid current image. If recovery used the previous
      * image, leave that good recovery point intact until the new commit lands. */
     if (status == PB_STORE_OK && transaction->current_valid) {
-        char backup[112];
-        const int count ← snprintf(backup, sizeof(backup), "%s.previous", temporary);
-        if (count <= 0 || (size_t)count >= sizeof(backup)) {
-            errno ← ENAMETOOLONG;
-            status ← system_error();
-        } else if (PB_FAIL(PB_FAULT_BACKUP) ||
-                   linkat(transaction->directory, current_name, transaction->directory, backup, 0) != 0) {
-            status ← system_error();
-        } else {
-            if (renameat(transaction->directory, backup,
-                         transaction->directory, previous_name) != 0 ||
-                !sync_descriptor(transaction->directory)) status ← system_error();
-            (void)unlinkat(transaction->directory, backup, 0);
-        }
+        status ← PB_FAIL(PB_FAULT_BACKUP) ? system_error() :
+            replace_previous(transaction, transaction->bytes, transaction->length,
+                transaction->needs_checkpoint ? PB_CHECKPOINT_VERSION : PB_FORMAT_VERSION);
     }
     if (status == PB_STORE_OK) {
         if (PB_FAIL(PB_FAULT_REPLACE) || renameat(transaction->directory, temporary,

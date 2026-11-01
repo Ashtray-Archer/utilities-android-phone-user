@@ -157,3 +157,20 @@ only lifecycle/touch/menu and foreground-read status diagnostics; no entry
 identity or content is logged. UI screenshots are taken around the actual menu
 action. API 29's independent run-as absence check is repaired separately using
 the system ls executable with an explicit ENOENT requirement.
+
+At c31afd5a660352ce40f616d82304436a7b706414 / run 41340603986,
+independent migration passes on fresh API 29 and 34 environments. Both workflow
+jobs execute all 26 ART responses and reject the compiled ordering mutant, then
+fail the actual automatic-mode action. Native touch traces show the intended
+menu row was invoked. Both Android SELinux audit logs deny `link` for the
+private history backup and observer-key installation. This is a platform I/O
+failure, not a touch-coordinate failure or a missing Shizuku authorization.
+
+Candidate version 7 replaces history backup hard links with independently
+written, synced files followed by atomic rename, and atomically renames a synced
+private observer key. Host storage fault/crash/concurrency checks pass with the
+new backup path. A failed mode write now preserves its error instead of trying
+to enable an observer afterward. The companion process also follows the actual
+APK native pointer width, so an ARM32 APK requests a 32-bit app_process. The
+next Android run must re-establish every affected acceptance result; neither
+these repairs nor the historical receipts establish privileged capture yet.

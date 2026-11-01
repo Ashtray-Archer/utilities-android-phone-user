@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: d67101ea1909984bc45754aed3c6a7c9df54e320
+          ref: c2b60b53c0ec18f9243bd8afa0d3d40e665adba6
           path: .ai-ci-independent
           persist-credentials: false
       - name: Restore pinned Grease runtime

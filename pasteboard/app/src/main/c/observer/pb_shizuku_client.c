@@ -810,7 +810,7 @@ static jobject worker_options(JNIEnv *e, jobject context) {
         bundle_text(e, options, "shizuku:user-service-arg-process-name", "pasteboard_observer") &&
         bundle_boolean(e, options, "shizuku:user-service-arg-debuggable", JNI_FALSE) &&
         bundle_boolean(e, options, "shizuku:user-service-arg-daemon", JNI_TRUE) &&
-        bundle_boolean(e, options, "shizuku:user-service-arg-use-32-bit-app-process", JNI_FALSE) &&
+        bundle_boolean(e, options, "shizuku:user-service-arg-use-32-bit-app-process", sizeof(void *) == 4u ? JNI_TRUE : JNI_FALSE) &&
         bundle_boolean(e, options, "shizuku:user-service-remove", JNI_FALSE);
     return ok ? options : NULL;
 }

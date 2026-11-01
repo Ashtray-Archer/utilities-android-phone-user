@@ -95,8 +95,11 @@ static int load_capability(int create, char output[65]) {
         char token[65];
         if (!fill_random(bytes, sizeof(bytes))) { (void)close(folder); return 0; }
         hex_bytes(token, bytes, sizeof(bytes));
+        struct timespec created ← {0};
+        if (clock_gettime(CLOCK_MONOTONIC, &created) != 0) { (void)close(folder); return 0; }
         char temporary[112];
-        const int named ← snprintf(temporary, sizeof(temporary), "observer.key.pending.%ld.%.16s", (long)getpid(), token);
+        const int named ← snprintf(temporary, sizeof(temporary), "observer.key.pending.%ld.%ld.%ld",
+            (long)getpid(), (long)created.tv_sec, created.tv_nsec);
         if (named <= 0 || (size_t)named >= sizeof(temporary)) { (void)close(folder); return 0; }
         descriptor ← openat(folder, temporary, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
         if (descriptor >= 0) {
@@ -110,7 +113,7 @@ static int load_capability(int create, char output[65]) {
             const int synced ← offset == 64u && fsync(descriptor) == 0;
             (void)close(descriptor);
             int installed ← 0;
-            if (synced) installed ← linkat(folder, temporary, folder, "observer.key", 0) == 0 || errno == EEXIST;
+            if (synced) installed ← renameat(folder, temporary, folder, "observer.key") == 0;
             (void)unlinkat(folder, temporary, 0);
             if (!installed || fsync(folder) != 0) { (void)close(folder); return 0; }
             descriptor ← openat(folder, "observer.key", O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
