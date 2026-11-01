@@ -35,42 +35,14 @@ mkdir -p "$staging_dir" "$output_dir"
 
 compile_abi() {
     abi=$1
-    compiler_name=$2
-    compiler="$toolchain/bin/$compiler_name"
-    object_dir="$work_dir/objects/$abi"
-    library_dir="$staging_dir/lib/$abi"
-    mkdir -p "$object_dir" "$library_dir"
-
-    common_flags="-std=c17 -O2 -g -fPIC -ffunction-sections -fdata-sections"
-    warnings="-Wall -Wextra -Werror -Wpedantic"
-    includes="-I$project_dir/app/src/main/c -I$project_dir/../android-clipboard -isystem $glue_dir"
-
-    "$compiler" $common_flags $warnings -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
-        $includes -c "$project_dir/app/src/main/c/native_main.c" \
-        -o "$object_dir/native_main.o"
-    "$compiler" $common_flags $warnings -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
-        $includes -c "$project_dir/app/src/main/c/pasteboard_model.c" \
-        -o "$object_dir/pasteboard_model.o"
-    "$compiler" $common_flags $warnings -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
-        $includes -c "$project_dir/../android-clipboard/clipboard_jni.c" \
-        -o "$object_dir/clipboard_jni.o"
-    "$compiler" $common_flags $warnings -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
-        $includes -c "$project_dir/../android-clipboard/utf8.c" \
-        -o "$object_dir/clipboard_utf8.o"
-    "$compiler" $common_flags -isystem "$glue_dir" \
-        -c "$glue_dir/android_native_app_glue.c" \
-        -o "$object_dir/native_app_glue.o"
-
-    "$compiler" -shared -Wl,--no-undefined -Wl,--gc-sections -Wl,-z,relro,-z,now \
-        "$object_dir/native_main.o" "$object_dir/pasteboard_model.o" \
-        "$object_dir/native_app_glue.o" "$object_dir/clipboard_jni.o" \
-        "$object_dir/clipboard_utf8.o" -landroid -llog -lm \
-        -o "$library_dir/libpasteboard.so"
+    make -f "$project_dir/../icky/Android.mk" native \
+        PROFILE=pasteboard ABI="$abi" NDK="$ndk_root" \
+        BUILD="$work_dir/objects/$abi" OUT="$staging_dir/lib/$abi/libpasteboard.so"
 }
 
-compile_abi arm64-v8a aarch64-linux-android26-clang
-compile_abi armeabi-v7a armv7a-linux-androideabi26-clang
-compile_abi x86_64 x86_64-linux-android26-clang
+compile_abi arm64-v8a
+compile_abi armeabi-v7a
+compile_abi x86_64
 
 base_apk="$work_dir/base.apk"
 unsigned_apk="$work_dir/unsigned.apk"
