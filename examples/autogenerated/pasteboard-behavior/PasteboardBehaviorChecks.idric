@@ -74,7 +74,7 @@ main = do
   unprotected ← perform protected "protect" ["a"] "unprotected"
   deleted ← perform unprotected "delete" ["a"] "deleted"
   ensure "explicit delete removes retained text" (inspect deleted
-    (\history ⇒ not (elem "A" (map contents history.entries))))
+    (\history ⇒ not (elem "A" (map contents history.entries)) && history.last_seen ≟ ""))
   marked ← perform deleted "seen" ["b"] "seen"
   own_copy ← perform marked "capture" ["own-copy", "5", "B"] "duplicate"
   ensure "own copy preserves card order" (inspect own_copy
@@ -107,6 +107,13 @@ main = do
     (\history ⇒ length history.entries ≟ 17 &&
       length (board_contents 1 history) ≟ 16 &&
       board_contents (-1) history ≟ ["retained in archive"]))
+  cleared ← perform archived "clear_archive" [] "archive_cleared"
+  ensure "archive clear removes text and raw seen marker" (inspect cleared
+    (\history ⇒ length history.entries ≟ 16 && history.last_seen ≟ "" &&
+      all (\entry ⇒ entry.protected) history.entries))
+  protected_archive ← perform archived "protect" ["overflow"] "protected"
+  protected_clear ← perform protected_archive "clear_archive" [] "archive_cleared"
+  ensure "archive clear retains protected archived text" (protected_clear ≟ protected_archive)
   vacant ← perform archived "select" ["2"] "selected"
   restored ← perform vacant "restore" ["overflow"] "moved"
   refused_full ← perform restored "move" ["overflow", "1"] "protected_board_full"

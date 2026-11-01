@@ -290,7 +290,8 @@ delete_entry history identity = case find_identity identity history.entries of
   Nothing ⇒ TransitionTo "missing_entry" history
   Just entry ⇒ if entry.protected then TransitionTo "entry_protected" history
     else TransitionTo "deleted"
-      ({ entries := without_identity identity history.entries } history)
+      ({ entries := without_identity identity history.entries,
+         last_seen := if history.last_seen ≟ entry.contents then "" else history.last_seen } history)
 
 dispatch : History → Text → List Text → Transition
 dispatch history "capture" [delivery, timestamp, contents] =
@@ -325,8 +326,12 @@ dispatch history "copy_failed" [identity] = case find_identity identity history.
     (if history.last_seen ≟ entry.contents then { last_seen := "" } history else history)
 dispatch history "pause" [] = TransitionTo "paused" ({ capture_enabled := False } history)
 dispatch history "resume" [] = TransitionTo "resumed" ({ capture_enabled := True } history)
-dispatch history "clear_archive" [] = TransitionTo "archive_cleared"
-  ({ entries := filter (\entry ⇒ entry.board >= 0 || entry.protected) history.entries } history)
+dispatch history "clear_archive" [] =
+  let removing_seen = any (\entry ⇒ entry.board < 0 && not entry.protected &&
+        entry.contents ≟ history.last_seen) history.entries in
+  TransitionTo "archive_cleared"
+    ({ entries := filter (\entry ⇒ entry.board >= 0 || entry.protected) history.entries,
+       last_seen := if removing_seen then "" else history.last_seen } history)
 dispatch history "validate" [] = TransitionTo "valid" history
 dispatch history action arguments = TransitionTo "invalid_action" history
 

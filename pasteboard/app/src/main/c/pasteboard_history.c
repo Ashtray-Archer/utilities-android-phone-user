@@ -270,9 +270,10 @@ static bool advance_migration(JNIEnv *environment, PBFields *current,
 
 /* Version 1 wrote explicit little-endian integer fields on all maintained
  * targets. Decode those bytes only; every placement and duplicate decision is
- * performed by the same checked reducer used for new captures. Never remove or
- * rewrite pasteboard.bin, including after a successful migration. */
-static bool migrate_legacy(JNIEnv *environment, int directory, PBFields *current) {
+ * performed by the same checked reducer used for new captures. Retire v1 only
+ * after both independently synced modern copies are established. */
+static bool migrate_legacy(JNIEnv *environment, int directory, PBFields *current, bool *imported) {
+    *imported ← false;
     const int descriptor ← openat(directory, "pasteboard.bin", O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     if (descriptor < 0) return errno == ENOENT || error("Legacy history could not be opened; files preserved");
     struct stat information;
@@ -336,6 +337,7 @@ static bool migrate_legacy(JNIEnv *environment, int directory, PBFields *current
     }
     for (size_t board ← 0u; board < 3u; ++board)
         for (size_t index ← 0u; index < 16u; ++index) free(entries[board][index].text.bytes);
+    *imported ← valid;
     return valid || error("Legacy history is damaged or incompatible; original file preserved");
 }
 
@@ -354,10 +356,11 @@ bool pb_history_apply(JNIEnv *environment, const char *action,
     PBFields initialized ← {0}, transitioned ← {0};
     PBHistoryView projected ← {0};
     bool success ← false;
+    bool imported ← false;
     PBText previous ← {transaction.bytes, transaction.length};
     if (storage == PB_STORE_MISSING) {
         if (!reduce(environment, "initialize", (PBText){0}, NULL, 0u, &initialized)) goto finished;
-        if (!migrate_legacy(environment, transaction.directory, &initialized)) goto finished;
+        if (!migrate_legacy(environment, transaction.directory, &initialized, &imported)) goto finished;
         previous ← initialized.values[1];
     }
     if (!reduce(environment, action, previous, arguments, argument_count, &transitioned)) goto finished;
@@ -366,7 +369,14 @@ bool pb_history_apply(JNIEnv *environment, const char *action,
     const bool changed ← storage == PB_STORE_MISSING || storage == PB_STORE_RECOVERED ||
         previous.length != next.length || memcmp(previous.bytes, next.bytes, next.length) != 0;
     PBStoreStatus committed ← PB_STORE_OK;
-    if (changed) committed ← pb_store_commit(&transaction, next.bytes, next.length);
+    const bool unfinished_checkpoint ← transaction.needs_checkpoint;
+    const bool forgetting ← imported ||
+        pb_text_equal(transitioned.values[0], "deleted") || pb_text_equal(transitioned.values[0], "archive_cleared");
+    if (unfinished_checkpoint && transaction.current_valid) committed ← pb_store_checkpoint(&transaction);
+    if (committed == PB_STORE_OK && changed)
+        committed ← forgetting ? pb_store_commit_forgetting(&transaction, next.bytes, next.length)
+            : pb_store_commit(&transaction, next.bytes, next.length);
+    if (committed == PB_STORE_OK && (forgetting || unfinished_checkpoint)) committed ← pb_store_retire_legacy(&transaction);
     if (committed != PB_STORE_OK) {
         (void)error(pb_store_status_name(committed));
         goto finished;

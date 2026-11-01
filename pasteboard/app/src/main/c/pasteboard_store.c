@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-enum { PB_HEADER_BYTES = 40, PB_FORMAT_VERSION = 2 };
+enum { PB_HEADER_BYTES = 40, PB_FORMAT_VERSION = 2, PB_CHECKPOINT_VERSION = 3 };
 static const unsigned char magic[8] ← {'P', 'B', 'H', 'I', 'S', 'T', '2', 0};
 static const char current_name[] ← "history.v2";
 static const char previous_name[] ← "history.previous";
@@ -115,7 +115,8 @@ static PBStoreStatus valid_utf8(const char *bytes, size_t length) {
 }
 
 static PBStoreStatus read_snapshot(int directory, const char *name,
-                                    char **output, size_t *length, uint64_t *generation) {
+                                    char **output, size_t *length, uint64_t *generation,
+                                    bool *needs_checkpoint) {
     const int descriptor ← openat(directory, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     if (descriptor < 0) return errno == ENOENT ? PB_STORE_MISSING : system_error();
     struct stat information;
@@ -129,7 +130,8 @@ static PBStoreStatus read_snapshot(int directory, const char *name,
     if (!S_ISREG(information.st_mode) || information.st_size < PB_HEADER_BYTES ||
         !read_all(descriptor, header, sizeof(header)) ||
         memcmp(header, magic, sizeof(magic)) != 0 ||
-        get_number(header + 8u, 4u) != PB_FORMAT_VERSION ||
+        (get_number(header + 8u, 4u) != PB_FORMAT_VERSION &&
+         get_number(header + 8u, 4u) != PB_CHECKPOINT_VERSION) ||
         get_number(header + 12u, 4u) != PB_HEADER_BYTES ||
         get_number(header + 36u, 4u) != checksum(header, 36u)) goto finished;
     const uint64_t bytes ← get_number(header + 24u, 8u);
@@ -151,6 +153,7 @@ static PBStoreStatus read_snapshot(int directory, const char *name,
         *output ← payload;
         *length ← (size_t)bytes;
         *generation ← revision;
+        *needs_checkpoint ← get_number(header + 8u, 4u) == PB_CHECKPOINT_VERSION;
         payload ← NULL;
     }
 finished:
@@ -178,7 +181,7 @@ PBStoreStatus pb_store_begin(PBStoreTransaction *transaction, const char *privat
     if (acquired != 0) return system_error();
 
     const PBStoreStatus current ← read_snapshot(transaction->directory, current_name,
-        &transaction->bytes, &transaction->length, &transaction->generation);
+        &transaction->bytes, &transaction->length, &transaction->generation, &transaction->needs_checkpoint);
     if (current == PB_STORE_OK) {
         transaction->current_valid ← true;
         transaction->writable ← true;
@@ -187,7 +190,7 @@ PBStoreStatus pb_store_begin(PBStoreTransaction *transaction, const char *privat
     /* Never disguise a read/permission/allocation failure as corrupt history. */
     if (current != PB_STORE_CORRUPT && current != PB_STORE_MISSING) return current;
     const PBStoreStatus previous ← read_snapshot(transaction->directory, previous_name,
-        &transaction->bytes, &transaction->length, &transaction->generation);
+        &transaction->bytes, &transaction->length, &transaction->generation, &transaction->needs_checkpoint);
     if (previous == PB_STORE_OK) {
         transaction->writable ← true;
         return PB_STORE_RECOVERED;
@@ -210,20 +213,47 @@ static int create_temporary(int directory, char *name, size_t capacity) {
     return -1;
 }
 
-PBStoreStatus pb_store_commit(PBStoreTransaction *transaction, const char *utf8, size_t length) {
+static void record_header(unsigned char header[PB_HEADER_BYTES], unsigned version,
+                           uint64_t generation, const char *utf8, size_t length) {
+    memset(header, 0, PB_HEADER_BYTES);
+    memcpy(header, magic, sizeof(magic));
+    put_number(header + 8u, version, 4u);
+    put_number(header + 12u, PB_HEADER_BYTES, 4u);
+    put_number(header + 16u, generation, 8u);
+    put_number(header + 24u, length, 8u);
+    put_number(header + 32u, checksum((const unsigned char *)utf8, length), 4u);
+    put_number(header + 36u, checksum(header, 36u), 4u);
+}
+
+/* This is an independent inode, not a hard link to current: damage to current
+ * must not damage the recovery copy. A v3 header requires retry before read. */
+static PBStoreStatus checkpoint_payload(PBStoreTransaction *transaction, const char *utf8, size_t length) {
+    if (PB_FAIL(PB_FAULT_CHECKPOINT)) return system_error();
+    unsigned char header[PB_HEADER_BYTES];
+    record_header(header, PB_CHECKPOINT_VERSION, transaction->generation, utf8, length);
+    char temporary[96];
+    const int descriptor ← create_temporary(transaction->directory, temporary, sizeof(temporary));
+    if (descriptor < 0) return system_error();
+    PBStoreStatus status ← PB_STORE_OK;
+    if (!write_all(descriptor, header, sizeof(header)) || !write_all(descriptor, utf8, length) ||
+        !sync_descriptor(descriptor)) status ← system_error();
+    if (close(descriptor) != 0 && status == PB_STORE_OK) status ← system_error();
+    if (status == PB_STORE_OK && (renameat(transaction->directory, temporary,
+        transaction->directory, previous_name) != 0 || !sync_descriptor(transaction->directory))) status ← system_error();
+    (void)unlinkat(transaction->directory, temporary, 0);
+    return status;
+}
+
+static PBStoreStatus commit_snapshot(PBStoreTransaction *transaction, const char *utf8,
+                                      size_t length, bool forgetting) {
     if (transaction == NULL || transaction->directory < 0 || transaction->lock < 0 ||
         !transaction->writable || transaction->committed ||
         transaction->generation == UINT64_MAX) return PB_STORE_IO_ERROR;
     PBStoreStatus status ← valid_utf8(utf8, length);
     if (status != PB_STORE_OK) return status;
-    unsigned char header[PB_HEADER_BYTES] ← {0};
-    memcpy(header, magic, sizeof(magic));
-    put_number(header + 8u, PB_FORMAT_VERSION, 4u);
-    put_number(header + 12u, PB_HEADER_BYTES, 4u);
-    put_number(header + 16u, transaction->generation + 1u, 8u);
-    put_number(header + 24u, length, 8u);
-    put_number(header + 32u, checksum((const unsigned char *)utf8, length), 4u);
-    put_number(header + 36u, checksum(header, 36u), 4u);
+    unsigned char header[PB_HEADER_BYTES];
+    record_header(header, forgetting ? PB_CHECKPOINT_VERSION : PB_FORMAT_VERSION,
+        transaction->generation + 1u, utf8, length);
 
     char temporary[96];
     const int descriptor ← create_temporary(transaction->directory, temporary, sizeof(temporary));
@@ -257,13 +287,38 @@ PBStoreStatus pb_store_commit(PBStoreTransaction *transaction, const char *utf8,
             transaction->directory, current_name) != 0) status ← system_error();
         else {
             transaction->committed ← true;
+            transaction->needs_checkpoint ← forgetting;
             ++transaction->generation;
             if (PB_FAIL(PB_FAULT_SYNC_DIRECTORY) || !sync_descriptor(transaction->directory))
                 status ← PB_STORE_COMMIT_UNCERTAIN;
         }
     }
+    if (status == PB_STORE_OK && forgetting && checkpoint_payload(transaction, utf8, length) != PB_STORE_OK)
+        status ← PB_STORE_COMMIT_UNCERTAIN;
     if (!transaction->committed) (void)unlinkat(transaction->directory, temporary, 0);
     return status;
+}
+
+PBStoreStatus pb_store_commit(PBStoreTransaction *transaction, const char *utf8, size_t length) {
+    return commit_snapshot(transaction, utf8, length, false);
+}
+
+PBStoreStatus pb_store_commit_forgetting(PBStoreTransaction *transaction, const char *utf8, size_t length) {
+    return commit_snapshot(transaction, utf8, length, true);
+}
+
+PBStoreStatus pb_store_checkpoint(PBStoreTransaction *transaction) {
+    if (transaction == NULL || !transaction->writable || !transaction->current_valid ||
+        transaction->committed || transaction->directory < 0 || transaction->lock < 0) return PB_STORE_IO_ERROR;
+    return transaction->needs_checkpoint
+        ? checkpoint_payload(transaction, transaction->bytes, transaction->length) : PB_STORE_OK;
+}
+
+PBStoreStatus pb_store_retire_legacy(PBStoreTransaction *transaction) {
+    if (transaction == NULL || !transaction->writable || transaction->directory < 0 || transaction->lock < 0)
+        return PB_STORE_IO_ERROR;
+    if (unlinkat(transaction->directory, "pasteboard.bin", 0) != 0 && errno != ENOENT) return system_error();
+    return sync_descriptor(transaction->directory) ? PB_STORE_OK : PB_STORE_COMMIT_UNCERTAIN;
 }
 
 void pb_store_end(PBStoreTransaction *transaction) {

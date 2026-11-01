@@ -64,14 +64,19 @@ length-delimited UTF-8 payload. An independently opened file lock serializes
 observer and UI updates. Writes use a private synced sibling and atomic rename,
 with a validated previous generation for recovery. Corrupt or unreadable history
 fails closed rather than becoming an empty history. Full storage and uncertain
-final directory sync remain explicit errors. The previous generation can contain
-recently deleted text until the next successful write; deletion-backup semantics
-remain an acceptance obligation for this candidate.
+final directory sync remain explicit errors. A deletion or archive clear also
+replaces the recovery image with an independently synced copy of the checked
+result before acknowledgement. Its version-3 marker survives an interrupted
+checkpoint; the next validated read must finish that checkpoint before showing
+success. Deletion also clears a matching raw seen marker. Older version-2
+records remain readable. Current host tests cover both formats, interrupted
+checkpoints and recovery without resurrecting acknowledged deleted text.
 
 Valid original `pasteboard.bin` v1 records are imported through the checked
-reducer when no new-format history exists. The original file is preserved. An
-incompatible or damaged legacy record stops migration rather than overwriting
-it. The stable package is `com.isomorphisms.pasteboard`; candidate version code 3
+reducer when no new-format history exists. The original file remains until two
+independently synced modern copies exist, then is retired. An incompatible or
+damaged legacy record stops migration and preserves the original. The stable
+package is `com.isomorphisms.pasteboard`; candidate version code 4
 uses the persistent Wegert public test certificate
 `de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
 An installation with another legacy signer cannot be replaced by Android;

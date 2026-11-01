@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: dc490a98bed3d8a1f57b5d7c55ee285a0f6324d6
+          ref: 4a052ca8cf812fcc42f8d8fb145002a62d13badc
           path: .ai-ci-ick
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -41,18 +41,19 @@ jobs:
         if: ${{ !inputs.rebuild }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: ick-${{ matrix.abi }}
-          run-id: 41315218239
+          name: ick-android-compiler-${{ matrix.abi }}-edb615dcca30863b19a61318f6d365c25cc2ebdf
+          repository: isomorphisms/ai-ci
+          run-id: 41322683283
           github-token: ${{ github.token }}
           path: retained-compiler
       - name: Restore retained compiler and qualify current exact Fortify profile
         if: ${{ !inputs.rebuild }}
         run: |
-          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI='${{ matrix.abi }}' ICK_STAGE="$RUNNER_TEMP/ick-android-${{ matrix.abi }}-stage" ICK_ARCHIVE="$GITHUB_WORKSPACE/retained-compiler/ick-${{ matrix.abi }}.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI='${{ matrix.abi }}' ICK_STAGE="$RUNNER_TEMP/ick-android-${{ matrix.abi }}-stage" ICK_ARCHIVE="$GITHUB_WORKSPACE/retained-compiler/ick-android-${{ matrix.abi }}-stage.tar.gz"
           make -f .ai-ci-ick/ick-android/Makefile qualify ABI='${{ matrix.abi }}' NDK="$ANDROID_HOME/ndk/27.2.12479018" FORTIFY_SOURCE=2 ICK_SOURCE="$GITHUB_WORKSPACE/.ick-source" ICK_STAGE="$RUNNER_TEMP/ick-android-${{ matrix.abi }}-stage" QUALIFY_BUILD="$RUNNER_TEMP/ick-android-${{ matrix.abi }}-stage/qualification-current"
       - name: Rebuild the same pinned compiler from source when explicitly selected
         if: ${{ inputs.rebuild }}
-        uses: isomorphisms/ai-ci/ick-android@dc490a98bed3d8a1f57b5d7c55ee285a0f6324d6
+        uses: isomorphisms/ai-ci/ick-android@4a052ca8cf812fcc42f8d8fb145002a62d13badc
         with:
           abi: ${{ matrix.abi }}
           ndk: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018

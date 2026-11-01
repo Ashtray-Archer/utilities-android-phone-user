@@ -171,6 +171,59 @@ static void test_concurrent_transactions(void) {
     clear_directory();
 }
 
+static void test_destructive_checkpoint_and_recovery(void) {
+    save("text to delete");
+    PBStoreTransaction transaction;
+    assert(pb_store_begin(&transaction, directory) == PB_STORE_OK);
+    assert(pb_store_commit_forgetting(&transaction, "retained", 8u) == PB_STORE_OK);
+    assert(transaction.needs_checkpoint && transaction.committed);
+    pb_store_end(&transaction);
+    const int folder ← open(directory, O_RDONLY | O_DIRECTORY);
+    struct stat current, previous;
+    assert(folder >= 0 && fstatat(folder, "history.v2", &current, 0) == 0 &&
+        fstatat(folder, "history.previous", &previous, 0) == 0);
+    assert(current.st_ino != previous.st_ino);
+    assert(close(folder) == 0);
+    damage("history.v2");
+    expect("retained", 2u, PB_STORE_RECOVERED);
+    clear_directory();
+
+    save("deleted after interrupted checkpoint");
+    assert(pb_store_begin(&transaction, directory) == PB_STORE_OK);
+    pb_store_test_fault(PB_FAULT_CHECKPOINT, ENOSPC);
+    assert(pb_store_commit_forgetting(&transaction, "retained", 8u) == PB_STORE_COMMIT_UNCERTAIN);
+    pb_store_end(&transaction);
+    assert(pb_store_begin(&transaction, directory) == PB_STORE_OK);
+    assert(transaction.needs_checkpoint && transaction.length == 8u && memcmp(transaction.bytes, "retained", 8u) == 0);
+    pb_store_test_fault(PB_FAULT_CHECKPOINT, ENOSPC);
+    assert(pb_store_checkpoint(&transaction) == PB_STORE_NO_SPACE);
+    assert(pb_store_checkpoint(&transaction) == PB_STORE_OK);
+    pb_store_end(&transaction);
+    damage("history.v2");
+    expect("retained", 2u, PB_STORE_RECOVERED);
+    clear_directory();
+
+    save("deleted before process death");
+    const pid_t child ← fork();
+    assert(child >= 0);
+    if (child == 0) {
+        PBStoreTransaction interrupted;
+        assert(pb_store_begin(&interrupted, directory) == PB_STORE_OK);
+        pb_store_test_fault(PB_FAULT_CHECKPOINT, 0);
+        (void)pb_store_commit_forgetting(&interrupted, "retained", 8u);
+        _exit(99);
+    }
+    int status;
+    assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 81);
+    assert(pb_store_begin(&transaction, directory) == PB_STORE_OK);
+    assert(transaction.needs_checkpoint);
+    assert(pb_store_checkpoint(&transaction) == PB_STORE_OK);
+    pb_store_end(&transaction);
+    damage("history.v2");
+    expect("retained", 2u, PB_STORE_RECOVERED);
+    clear_directory();
+}
+
 int main(void) {
     assert(mkdtemp(directory) != NULL);
     test_long_unicode_and_permissions();
@@ -178,6 +231,7 @@ int main(void) {
     test_failed_commit_preserves_previous();
     test_process_dies_before_replacement();
     test_concurrent_transactions();
+    test_destructive_checkpoint_and_recovery();
     assert(rmdir(directory) == 0);
     puts("pasteboard_store_test: all checks passed");
     return 0;

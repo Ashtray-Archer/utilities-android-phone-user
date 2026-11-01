@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: dc490a98bed3d8a1f57b5d7c55ee285a0f6324d6
+          ref: 4a052ca8cf812fcc42f8d8fb145002a62d13badc
           path: .ai-ci-ick
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -101,7 +101,7 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018'
       - name: Qualify owned host ICK compiler
         id: ick
-        uses: isomorphisms/ai-ci/ick-host@4ea071a96239f3a29ca6d98454feb59947d87cfe
+        uses: isomorphisms/ai-ci/ick-host@4a052ca8cf812fcc42f8d8fb145002a62d13badc
       - name: Build pinned Grease through its existing Cat Food bootstrap
         shell: sh
         env:
@@ -118,7 +118,7 @@ jobs:
             .tools/Idric/_/.tools
             .tools/Idric/_/bootstrap-build
             .tools/Idric/_/build
-          key: pasteboard-idric-0e8cfdd1106ebdeffd01b6c519880ea3afc7dc35-ick-fbe86e23d55cfec2000c08e61deea2a407fd7175-ubuntu24-x86_64-v1
+          key: pasteboard-idric-0e8cfdd1106ebdeffd01b6c519880ea3afc7dc35-ick-fbe86e23d55cfec2000c08e61deea2a407fd7175-ubuntu24-x86_64-v2
       - name: Bootstrap pinned current Idriç with qualified ICK
         if: steps.frontend-cache.outputs.cache-hit != 'true'
         env:
@@ -204,7 +204,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: dc490a98bed3d8a1f57b5d7c55ee285a0f6324d6
+          ref: 4a052ca8cf812fcc42f8d8fb145002a62d13badc
           path: .ai-ci-independent
           persist-credentials: false
       - name: Restore pinned Grease runtime

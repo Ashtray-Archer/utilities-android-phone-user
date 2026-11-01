@@ -28,6 +28,7 @@ typedef struct {
     bool current_valid;
     bool writable;
     bool committed;
+    bool needs_checkpoint;
 } PBStoreTransaction;
 
 /* Each transaction opens its own lock description, so flock serializes both
@@ -36,6 +37,14 @@ PBStoreStatus pb_store_begin(PBStoreTransaction *transaction,
                              const char *private_directory);
 PBStoreStatus pb_store_commit(PBStoreTransaction *transaction,
                               const char *utf8, size_t length);
+/* A destructive checked result must also replace its recovery copy before
+ * acknowledgement. The marker survives interruption and is retried on read. */
+PBStoreStatus pb_store_commit_forgetting(PBStoreTransaction *transaction,
+                                         const char *utf8, size_t length);
+/* After checked-model validation, finish an interrupted destructive checkpoint
+ * before exposing a read snapshot. This preserves a prior copy on bad models. */
+PBStoreStatus pb_store_checkpoint(PBStoreTransaction *transaction);
+PBStoreStatus pb_store_retire_legacy(PBStoreTransaction *transaction);
 void pb_store_end(PBStoreTransaction *transaction);
 const char *pb_store_status_name(PBStoreStatus status);
 
@@ -46,7 +55,8 @@ typedef enum {
     PB_FAULT_SYNC_FILE,
     PB_FAULT_BACKUP,
     PB_FAULT_REPLACE,
-    PB_FAULT_SYNC_DIRECTORY
+    PB_FAULT_SYNC_DIRECTORY,
+    PB_FAULT_CHECKPOINT
 } PBStoreFault;
 void pb_store_test_fault(PBStoreFault fault, int error_number);
 #endif
