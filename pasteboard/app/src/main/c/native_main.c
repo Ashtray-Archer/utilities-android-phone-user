@@ -523,6 +523,13 @@ static void render(AppContext *context) {
  * so refuse such values instead of recording an altered copy of the clip.
  * The full-size persisted archive and error UI are separate acceptance work.
  */
+static bool has_embedded_nul(const char *text, size_t length) {
+    for (size_t index = 0u; index < length; ++index) {
+        if (text[index] == '\0') return true;
+    }
+    return false;
+}
+
 static bool read_current_clipboard(AppContext *context, char *output, size_t capacity) {
     (void)context;
     if (capacity < 2u) {
@@ -539,7 +546,7 @@ static bool read_current_clipboard(AppContext *context, char *output, size_t cap
         return false;
     }
     const bool admissible = length > 0u && length < capacity &&
-                            memchr(text, '\0', length) == NULL;
+                            !has_embedded_nul(text, length);
     if (!admissible && length > 0u) {
         LOG_ERROR("clipboard text is not representable in the fixed model (%zu bytes)",
                   length);
