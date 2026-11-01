@@ -49,7 +49,7 @@ $(BUILD)/test_utf8: $(ROOT)/android-clipboard/utf8.c $(ROOT)/android-clipboard/t
 	mkdir -p "$(@D)"
 	$(ICK) $(ICK_FLAGS) -std=c11 -Wall -Wextra -Werror -pedantic -I"$(ROOT)/android-clipboard" $(filter %.c,$^) -o "$@"
 
-$(BUILD)/clipboard_jni.o: $(ROOT)/android-clipboard/clipboard_jni.c $(ROOT)/android-clipboard/clipboard.h
+$(BUILD)/clipboard_jni.o: $(ROOT)/android-clipboard/clipboard_jni.c $(ROOT)/android-clipboard/clipboard.h $(ROOT)/android-clipboard/clipboard_jni_impl.inc
 	test -f "$(JAVA_HOME)/include/jni.h"
 	test -f "$(JAVA_HOME)/include/$(JNI_PLATFORM)/jni_md.h"
 	mkdir -p "$(@D)"

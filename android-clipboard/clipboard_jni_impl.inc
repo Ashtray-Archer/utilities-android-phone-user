@@ -317,6 +317,12 @@ static ClipboardStatus clip_sensitive(JNIEnv *environment, jobject clip,
     jobject extras ← get_extras
         ? (*environment)->CallObjectMethod(environment, description, get_extras) : NULL;
     if (take_exception(environment) || get_extras == NULL) goto details_finished;
+    /* No extras is an ordinary plain-text clip. Sensitive/origin metadata is
+     * optional, so its absence cannot reject otherwise valid copied text. */
+    if (extras == NULL) {
+        status ← CLIPBOARD_OK;
+        goto details_finished;
+    }
     if (extras != NULL) {
         jclass bundle_class ← (*environment)->GetObjectClass(environment, extras);
         const jmethodID get_boolean ← bundle_class ? (*environment)->GetMethodID(environment,

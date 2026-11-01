@@ -265,3 +265,13 @@ and requires the original PID to disappear before restart. Source assertions
 are preserved. Local owned-ICK native linking, JNI compilation, Unicode, wire
 and store fault/crash/concurrency tests pass. Fresh Android execution must
 qualify every changed boundary; physical acceptance remains unavailable.
+
+Subsequent shared-reader inspection finds that an absent optional extras Bundle
+returns a generic JNI error. Real plain SDK ClipData need not contain extras;
+depending on system classification to add them is invalid. Candidate 12 accepts
+the documented absent metadata case while keeping sensitive=false and origin
+empty. The DEX-free SDK smoke copies a fresh newPlainText clip without extras,
+then checks exact Unicode/NUL bytes, metadata defaults and the copy timestamp.
+The independent focused fixture also asserts extras are absent before its real
+A/B/C/long/numbered clipboard effects. These checks must execute on Android;
+source inspection and native compilation do not establish runtime success.
