@@ -59,7 +59,8 @@ for abi in arm64-v8a armeabi-v7a x86_64 {
       "$output/native/$abi/libpasteboard.so" "$abi" "$output/pasteboard-$abi.apk" > "$output/package-$abi.txt" 2>&1
   }
   if (_error.code !== 0) { cat "$output/package-$abi.txt"; exit 1 }
-  sha256sum "$output/pasteboard-$abi.apk" > "$output/pasteboard-$abi.apk.sha256"
+  var apk_digest = $(sha256sum "$output/pasteboard-$abi.apk" | cut -d ' ' -f 1)
+  printf '%s  pasteboard-%s.apk\n' "$apk_digest" "$abi" > "$output/pasteboard-$abi.apk.sha256"
   var apk_bytes = $(wc -c < "$output/pasteboard-$abi.apk" | tr -d '[:space:]')
   printf 'abi\t%s\npre_strip_native_bytes\t%s\npost_strip_native_bytes\t%s\napk_bytes\t%s\n' \
     "$abi" "$before_bytes" "$after_bytes" "$apk_bytes" > "$output/size-$abi.tsv"

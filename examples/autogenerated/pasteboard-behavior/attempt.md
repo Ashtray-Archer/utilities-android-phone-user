@@ -360,3 +360,23 @@ needed for that timing. The qualifier now awaits the exact durable effects of
 native UI commands, including one focus capture, one explicit manual capture,
 real SDK card-copy readback and all saved pin/move/delete/archive states.
 Assertions remain exact and bounded; product clipboard acquisition is unchanged.
+
+Independent qualification also adds an actual shell-UID call with a synthetic
+wrong private credential and an independently compiled credential-comparison
+bypass mutant. Android permission, caller UID and live Shizuku authorization
+remain intact in that mutant. Exact provider refusal/acceptance, unchanged
+history and restored real callback delivery must distinguish the candidate
+from it. No actual credential or clipboard text enters a shell argument.
+
+Candidate checksum sidecars now name their adjacent APK rather than a CI-only
+absolute path. This is delivery metadata only; the signed APK producer and
+application version are unchanged. Downloaded bundles can be checked directly
+with the ordinary checksum verifier after selecting their explicit directory.
+
+Run 41359814484 at 2da8967cde5ee5433577f00f65f470958ed15d58 passes the
+complete API 34/35 workflows, expiration, reboot and visible/archive controls.
+API 29 passes all observer/lifecycle controls through reboot, then its UI setup
+fails because reboot reset the test display to 1080x1920. Actual fixture logs
+show the unchanged 480x960 points copied A/A/B rather than A/B/C. Independent UI
+qualification now restores its own declared geometry and checks actual SDK
+effects plus three durable acknowledgements before exercising the cards.

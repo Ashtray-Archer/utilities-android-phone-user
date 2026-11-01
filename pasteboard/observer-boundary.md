@@ -107,8 +107,14 @@ caller/credential/permission controls and source-compiled mutants, exercise
 pause, revocation, process death, reconnection and restart, and bind receipts to
 the exact source, compiler, APK digest and environment. Until those receipts
 pass, the corresponding controls remain NOT VERIFIED. At source
-`6b359f2ffd83b9a3fb67f343406c291e0c96f900`, run
-[41347388884](https://github.com/Ashtray-Archer/utilities-android-phone-user/actions/runs/41347388884)
-proves actual shell-UID callback/content delivery and exact A/B/C retention
-before refocus on both API 29 and 34. That run does not qualify the changed v3
-transport, all lifecycle/privacy controls or either physical target.
+`2da8967cde5ee5433577f00f65f470958ed15d58`, run
+[41359814484](https://github.com/Ashtray-Archer/utilities-android-phone-user/actions/runs/41359814484)
+proves exact real A/B/C capture before refocus, permission/UID mutant controls,
+pause, revocation, companion/server reconnection, foreground/manual fallback
+and restart on API 29, 34 and 35. API 34/35 also pass actual framework expiration
+and the complete visible/archive workflow. API 29's post-reboot UI setup fails
+because its display override reset, so its spatial qualification remains failed
+at that source. The next qualifier restores geometry and adds a real-shell
+wrong-credential control with a separate compiled comparison-bypass mutant.
+Those changed controls require fresh receipts. Neither physical target has
+authenticated execution evidence.
