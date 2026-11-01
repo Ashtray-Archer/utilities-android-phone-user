@@ -437,6 +437,29 @@ static jint platform_api(JNIEnv *e) {
     return sdk ? (*e)->GetStaticIntField(e, version, sdk) : -1;
 }
 
+/* createPackageContext carries its container's operation package. Recreate
+ * this genuine shell LoadedApk without a container, as AOSP createAppContext
+ * does, so both public clipboard package arguments match actual UID 2000. */
+static jobject shell_application_context(JNIEnv *e, jobject context) {
+    const jint api ← platform_api(e);
+    if (getuid() != 2000u || (api != 29 && api != 34) || (*e)->ExceptionCheck(e)) return NULL;
+    jmethodID create ← sdk_method(e, "android/content/Context", "createPackageContext", "(Ljava/lang/String;I)Landroid/content/Context;");
+    jstring shell ← create ? (*e)->NewStringUTF(e, "com.android.shell") : NULL;
+    jobject carried ← shell ? (*e)->CallObjectMethod(e, context, create, shell, 0) : NULL;
+    if (!carried || (*e)->ExceptionCheck(e)) return NULL;
+    jclass implementation ← (*e)->FindClass(e, "android/app/ContextImpl");
+    jfieldID field ← implementation ? (*e)->GetFieldID(e, implementation, "mPackageInfo", "Landroid/app/LoadedApk;") : NULL;
+    jobject loaded ← field ? (*e)->GetObjectField(e, carried, field) : NULL;
+    if (!loaded || (*e)->ExceptionCheck(e)) return NULL;
+    jclass thread_type ← (*e)->FindClass(e, "android/app/ActivityThread");
+    jmethodID current ← thread_type ? (*e)->GetStaticMethodID(e, thread_type, "currentActivityThread", "()Landroid/app/ActivityThread;") : NULL;
+    jobject thread ← current ? (*e)->CallStaticObjectMethod(e, thread_type, current) : NULL;
+    if (!thread || (*e)->ExceptionCheck(e)) return NULL;
+    jmethodID fresh ← (*e)->GetStaticMethodID(e, implementation, "createAppContext",
+        "(Landroid/app/ActivityThread;Landroid/app/LoadedApk;)Landroid/app/ContextImpl;");
+    return fresh ? (*e)->CallStaticObjectMethod(e, implementation, fresh, thread, loaded) : NULL;
+}
+
 /* A Shizuku user service has no AMS application record. Its Context resolver
  * cannot acquire providers. Follow AOSP's shell content command with an
  * explicitly bounded framework interface, not a guessed transaction number.
@@ -590,16 +613,18 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_initialize(JNIEnv *e, jobject
     jclass info_type ← application ? (*e)->GetObjectClass(e, application) : NULL;
     jfieldID uid ← info_type ? (*e)->GetFieldID(e, info_type, "uid", "I") : NULL;
     const jint owner ← uid ? (*e)->GetIntField(e, application, uid) : -1;
-    jmethodID create ← sdk_method(e, "android/content/Context", "createPackageContext", "(Ljava/lang/String;I)Landroid/content/Context;");
-    jstring shell ← create ? (*e)->NewStringUTF(e, "com.android.shell") : NULL;
-    jobject shell_context ← valid && shell ? (*e)->CallObjectMethod(e, context, create, shell, 0) : NULL;
+    jobject shell_context ← valid ? shell_application_context(e, context) : NULL;
     jstring shell_package ← shell_context && package ? (*e)->CallObjectMethod(e, shell_context, package) : NULL;
     jmethodID operation ← sdk_method(e, "android/content/Context", "getOpPackageName", "()Ljava/lang/String;");
     jstring operation_package ← shell_context && operation ? (*e)->CallObjectMethod(e, shell_context, operation) : NULL;
+    jobject shell_application ← shell_context && info ? (*e)->CallObjectMethod(e, shell_context, info) : NULL;
+    const jint shell_uid ← shell_application && uid ? (*e)->GetIntField(e, shell_application, uid) : -1;
+    const int package_matches ← ascii_equals(e, shell_package, "com.android.shell");
+    const int operation_matches ← ascii_equals(e, operation_package, "com.android.shell");
     jmethodID check ← sdk_method(e, "android/content/Context", "checkSelfPermission", "(Ljava/lang/String;)I");
     jstring permission ← check ? (*e)->NewStringUTF(e, "android.permission.READ_CLIPBOARD_IN_BACKGROUND") : NULL;
-    valid ← valid && owner >= 10000 && owner < 100000 && shell_context && permission &&
-        ascii_equals(e, shell_package, "com.android.shell") && ascii_equals(e, operation_package, "com.android.shell") &&
+    valid ← valid && owner >= 10000 && owner < 100000 && shell_context && permission && shell_uid == 2000 &&
+        package_matches && operation_matches &&
         (*e)->CallIntMethod(e, shell_context, check, permission) == 0 && !(*e)->ExceptionCheck(e);
     jmethodID get ← sdk_method(e, "android/content/Context", "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
     jstring clipboard ← valid && get ? (*e)->NewStringUTF(e, "clipboard") : NULL;
@@ -636,8 +661,9 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_initialize(JNIEnv *e, jobject
         if (held_manager) (*e)->DeleteGlobalRef(e, held_manager);
         if (held_self) (*e)->DeleteGlobalRef(e, held_self);
     }
-    __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "companion initialize uid=%ld owner=%d bridge=%d accepted=%d",
-        (long)getuid(), owner, (int)bridge, valid);
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "companion initialize uid=%ld owner=%d shell_uid=%d package=%d operation=%d bridge=%d exception=%d accepted=%d",
+        (long)getuid(), owner, shell_uid, package_matches, operation_matches, (int)bridge,
+        (*e)->ExceptionCheck(e) ? 1 : 0, valid);
     if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     (*e)->PopLocalFrame(e, NULL);
 }

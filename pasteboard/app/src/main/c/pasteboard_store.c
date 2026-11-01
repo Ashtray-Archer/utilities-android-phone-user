@@ -2,6 +2,7 @@
 #include "utf8.h"
 
 #include <errno.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdatomic.h>
@@ -244,10 +245,51 @@ static PBStoreStatus replace_previous(PBStoreTransaction *transaction, const cha
     return status;
 }
 
+static bool pending_name(const char *name) {
+    static const char prefix[] ← "history.pending.";
+    if (strncmp(name, prefix, sizeof(prefix) - 1u) != 0) return false;
+    const char *cursor ← name + sizeof(prefix) - 1u;
+    if (*cursor < '0' || *cursor > '9') return false;
+    while (*cursor >= '0' && *cursor <= '9') ++cursor;
+    if (*cursor++ != '.' || *cursor < '0' || *cursor > '9') return false;
+    while (*cursor >= '0' && *cursor <= '9') ++cursor;
+    return *cursor == '\0' || strcmp(cursor, ".previous") == 0;
+}
+
+/* Exclusive transaction lock is held. Both committed copies now contain the
+ * checked deletion result, so abandoned writes from earlier crashes can be
+ * retired without losing a recovery point or retaining deleted text. */
+static PBStoreStatus retire_pending(PBStoreTransaction *transaction) {
+    const int folder ← openat(transaction->directory, ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (folder < 0) return system_error();
+    DIR *stream ← fdopendir(folder);
+    if (stream == NULL) { (void)close(folder); return system_error(); }
+    PBStoreStatus status ← PB_STORE_OK;
+    bool changed ← false;
+    for (;;) {
+        errno ← 0;
+        struct dirent *entry ← readdir(stream);
+        if (entry == NULL) { if (errno != 0) status ← system_error(); break; }
+        if (!pending_name(entry->d_name)) continue;
+        struct stat information;
+        if (fstatat(transaction->directory, entry->d_name, &information, AT_SYMLINK_NOFOLLOW) != 0) {
+            status ← system_error(); break;
+        }
+        if (!S_ISREG(information.st_mode) || information.st_uid != geteuid() ||
+            (information.st_mode & 0777) != 0600) { errno ← EINVAL; status ← system_error(); break; }
+        if (unlinkat(transaction->directory, entry->d_name, 0) != 0) { status ← system_error(); break; }
+        changed ← true;
+    }
+    if (closedir(stream) != 0 && status == PB_STORE_OK) status ← system_error();
+    if (changed && !sync_descriptor(transaction->directory) && status == PB_STORE_OK) status ← system_error();
+    return status;
+}
+
 /* A v3 header requires a validated checkpoint before the next read succeeds. */
 static PBStoreStatus checkpoint_payload(PBStoreTransaction *transaction, const char *utf8, size_t length) {
     if (PB_FAIL(PB_FAULT_CHECKPOINT)) return system_error();
-    return replace_previous(transaction, utf8, length, PB_CHECKPOINT_VERSION);
+    const PBStoreStatus status ← replace_previous(transaction, utf8, length, PB_CHECKPOINT_VERSION);
+    return status == PB_STORE_OK ? retire_pending(transaction) : status;
 }
 
 static PBStoreStatus commit_snapshot(PBStoreTransaction *transaction, const char *utf8,

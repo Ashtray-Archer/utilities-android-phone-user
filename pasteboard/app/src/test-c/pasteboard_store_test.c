@@ -224,6 +224,49 @@ static void test_destructive_checkpoint_and_recovery(void) {
     clear_directory();
 }
 
+static size_t pending_files(void) {
+    DIR *stream ← opendir(directory);
+    assert(stream != NULL);
+    size_t count ← 0u;
+    struct dirent *entry;
+    while ((entry ← readdir(stream)) != NULL)
+        if (strncmp(entry->d_name, "history.pending.", 16u) == 0) ++count;
+    assert(closedir(stream) == 0);
+    return count;
+}
+
+static void test_forgetting_removes_interrupted_snapshots(void) {
+    save("synthetic deleted text");
+    const pid_t child ← fork();
+    assert(child >= 0);
+    if (child == 0) {
+        PBStoreTransaction interrupted;
+        assert(pb_store_begin(&interrupted, directory) == PB_STORE_OK);
+        pb_store_test_fault(PB_FAULT_REPLACE, 0);
+        (void)pb_store_commit(&interrupted, "synthetic interrupted text", 26u);
+        _exit(99);
+    }
+    int status;
+    assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 81);
+    assert(pending_files() > 0u);
+    const int folder ← open(directory, O_RDONLY | O_DIRECTORY);
+    assert(folder >= 0);
+    const int unrelated ← openat(folder, "history.pending.notes", O_WRONLY | O_CREAT | O_EXCL, 0600);
+    assert(unrelated >= 0 && write(unrelated, "unrelated", 9u) == 9);
+    assert(close(unrelated) == 0);
+    PBStoreTransaction transaction;
+    assert(pb_store_begin(&transaction, directory) == PB_STORE_OK);
+    assert(pb_store_commit_forgetting(&transaction, "retained", 8u) == PB_STORE_OK);
+    pb_store_end(&transaction);
+    assert(pending_files() == 1u);
+    struct stat preserved;
+    assert(fstatat(folder, "history.pending.notes", &preserved, 0) == 0 && preserved.st_size == 9);
+    assert(close(folder) == 0);
+    damage("history.v2");
+    expect("retained", 2u, PB_STORE_RECOVERED);
+    clear_directory();
+}
+
 int main(void) {
     assert(mkdtemp(directory) != NULL);
     test_long_unicode_and_permissions();
@@ -232,6 +275,7 @@ int main(void) {
     test_process_dies_before_replacement();
     test_concurrent_transactions();
     test_destructive_checkpoint_and_recovery();
+    test_forgetting_removes_interrupted_snapshots();
     assert(rmdir(directory) == 0);
     puts("pasteboard_store_test: all checks passed");
     return 0;

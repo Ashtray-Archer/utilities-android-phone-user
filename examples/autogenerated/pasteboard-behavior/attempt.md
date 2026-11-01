@@ -215,3 +215,24 @@ clipboard listener as itself. These current sources compile/link through owned
 ICK and NDK locally. Android observation and physical acceptance remain
 unverified until fresh exact-head execution; the historical registration
 success does not establish content delivery for these changes.
+
+At d50b9917d9296ec97f0366697b341536b46a2905 / run 41345425096,
+both APIs pass migration, installed restart/replacement and all exact ART/mutant
+controls. Both decisive capture workflows still fail. API 34's new explicit
+shell identity check refuses initialization before bridge setup. AOSP's exact
+API 29/34 ContextImpl constructor carries its container's operation-package
+identity through createPackageContext. Candidate 10 rebuilds a genuine shell
+LoadedApk context through the bounded createAppContext factory and verifies its
+UID, package and operation-package identities before public SDK registration.
+Fresh Android receipts must establish callback read and private writer delivery.
+
+A separate real-fork crash test proves that a pre-replacement pending snapshot
+survives a later acknowledged deletion in the prior store. The new checkpoint
+retires only owned, regular 0600 files matching the actual pending filename
+protocol, under the exclusive writer lock after both committed copies are
+synced. Directory cleanup is synced before success. The regression now passes,
+including preservation of an unrelated similarly named file, crash recovery,
+full-storage/error controls and concurrent transactions. The independent Android
+UI test also seeds an abandoned snapshot from already captured SDK history and
+requires confirmed deletion to retire it. These are filesystem controls, not
+synthetic capture evidence.

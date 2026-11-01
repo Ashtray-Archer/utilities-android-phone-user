@@ -33,6 +33,7 @@ writer after ordinary process death.
 
 | API | Framework call shape |
 | --- | --- |
+| 29 and 34 | Build a fresh shell context from `ContextImpl.mPackageInfo` using `ActivityThread.currentActivityThread()` and `ContextImpl.createAppContext(ActivityThread, LoadedApk)`; verify its ApplicationInfo UID 2000, package and operation package |
 | 29 and 34 | `ActivityManager.getService()`; `IActivityManager.getContentProviderExternal(String authority, int userId, IBinder lifetime, String tag)`; `ContentProviderHolder.provider` |
 | 29 | `IContentProvider.call(String callingPackage, String authority, String method, String credential, Bundle extras)` |
 | 34 | `IContentProvider.call(AttributionSource source, String authority, String method, String credential, Bundle extras)`; source UID is the actual shell UID 2000 and package is `com.android.shell` |
@@ -51,6 +52,15 @@ blob `f0ac53014bd37640cd8d80d8a9c1c989346437c6`, supplies the acquisition,
 attribution and cleanup pattern. Clipboard payloads never enter a command
 argument, manager RPC, network request or log. Diagnostic traces contain only
 numeric stages, flags and exception class names; exception messages are excluded.
+
+[ContextImpl on API 29](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-10.0.0_r47/core/java/android/app/ContextImpl.java),
+blob `41a4fba0434cd2322e15d5bf92aa1a5cd67e290f`, and
+[API 34](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-14.0.0_r1/core/java/android/app/ContextImpl.java),
+blob `82f4315d033e4486624baae02f17e9d900e30ad1`, define the same factory and
+LoadedApk field. A package context created from a container retains that
+container's operation package. The fresh factory has no container and derives
+its identity from the actual shell LoadedApk. This does not alter package
+ownership, UID, permissions or app-op settings.
 
 The user-service control protocol retains tag `pasteboard-observer-v1` and
 descriptor `com.isomorphisms.pasteboard.ClipboardObserver.v2`. Configuration
