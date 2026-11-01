@@ -569,8 +569,10 @@ static void capture_current_clipboard(AppContext *context) {
     if (!context->loaded || !context->state.capture_enabled || context->state.automatic_requested) return;
     char *bytes ← NULL;
     size_t length ← 0u;
-    ClipboardDetails details;
+    ClipboardDetails details ← {0};
     const ClipboardStatus status ← clipboard_get_utf8_details(&bytes, &length, &details);
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardDiagnostic",
+        "foreground_read status=%d sensitive=%d items=%d", (int)status, details.sensitive, details.item_count);
     if (status != CLIPBOARD_OK || details.sensitive) {
         const char *message ← status == CLIPBOARD_OK ? "Sensitive clipboard text is not saved" :
             status == CLIPBOARD_UNSUPPORTED_ITEMS ? "Multiple clipboard items are not captured" :
@@ -729,6 +731,7 @@ static void open_shizuku(AppContext *context) {
 }
 
 static void menu_action(AppContext *context, int row) {
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardDiagnostic", "menu=%d row=%d", context->menu, row);
     if (context->menu == 1) {
         if (row == 0) {
             (void)history_action(context, "request_automatic", NULL, 0u);
@@ -791,6 +794,11 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         return 1;
     }
     if (action != AMOTION_EVENT_ACTION_UP) return 1;
+    /* Qualification metadata only: never log entry identities or contents. */
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardDiagnostic",
+        "touch_up x=%.1f y=%.1f viewport=%.1f,%.1f,%.1f,%.1f menu=%d loaded=%d",
+        (double)x, (double)y, (double)viewport.left, (double)viewport.top,
+        (double)viewport.width, (double)viewport.height, context->menu, context->loaded ? 1 : 0);
     const float dx ← x - context->down_x, dy ← y - context->down_y;
     if (context->menu != 0) {
         const int count ← context->menu == 1 ? 8 : context->menu == 2 ? 5 : 2;
@@ -844,6 +852,8 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
 
 static void handle_command(struct android_app *app, int32_t command) {
     AppContext *context ← app->userData;
+    if (command == APP_CMD_GAINED_FOCUS || command == APP_CMD_LOST_FOCUS)
+        __android_log_print(ANDROID_LOG_INFO, "PasteboardDiagnostic", "window_focus=%d", command == APP_CMD_GAINED_FOCUS);
     switch (command) {
         case APP_CMD_GAINED_FOCUS:
             (void)history_action(context, "validate", NULL, 0u);

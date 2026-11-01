@@ -146,3 +146,14 @@ test-signing checkout and tools. No application source changed. Those exact
 dependency directories are now ignored at the consumer root; their identities
 remain separately recorded. The clean-source assertion is retained. Feature
 branch pushes no longer duplicate the existing pull-request qualification run.
+
+At 819108c319477056d4490e937fded1ba3561fe1c / run 41336882942,
+both ART jobs pass all 26 exact responses and reject the compiled mutant.
+API 34 also passes migration, corrupt-legacy refusal, installed loader and
+restart/replacement. The first automatic-mode UI action leaves its snapshot
+unchanged (generation 1, capture enabled, automatic disabled), so the independent
+mode assertion fails rather than claiming observation. Candidate version 6 adds
+only lifecycle/touch/menu and foreground-read status diagnostics; no entry
+identity or content is logged. UI screenshots are taken around the actual menu
+action. API 29's independent run-as absence check is repaired separately using
+the system ls executable with an explicit ENOENT requirement.
