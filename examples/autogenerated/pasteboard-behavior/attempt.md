@@ -196,3 +196,22 @@ source IDs and SHA-256 manifests. Local seed and verified reuse both compile the
 current consumer, pass host controls and yield identical behavior/platform DEX.
 This reuse does not skip consumer compilation, deterministic output comparisons,
 source mutants, installed Android tests or current acceptance receipts.
+
+At 882a4c2d8e2f8df1cbef09120499324e5d5394c8 / run 41343815598,
+API 34 records actual companion UID 2000, app owner 10192, successful bridge
+initialization and listener registration. Every heartbeat fails at the Context
+resolver IPC with SecurityException, before a reply Bundle. No callback content
+or successful history delivery is established. This matches Shizuku's explicit
+user-service Context limitation. Candidate 9 replaces that invalid application
+resolver boundary with the external-provider path in AOSP's own shell command,
+using explicit API 29/34 framework signatures, balanced lifetime references and
+the existing actual-UID/capability/mode/fresh-authorization gates. No global
+hidden-API policy, keyboard or permission is changed to make it work.
+
+The worker also verifies the shell package and operation-package identities,
+checks bounded FD-free configuration Parcels and clears/restores only the
+already authenticated incoming Binder identity while registering its public
+clipboard listener as itself. These current sources compile/link through owned
+ICK and NDK locally. Android observation and physical acceptance remain
+unverified until fresh exact-head execution; the historical registration
+success does not establish content delivery for these changes.

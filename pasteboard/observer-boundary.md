@@ -1,0 +1,75 @@
+# Clipboard observer executable boundary
+
+The candidate attempts automatic capture through a user-authorized Shizuku
+API-13 shell process. Source compilation and DEX emission do not establish
+listener delivery or access to clipboard content. Exact Android receipts must
+separately establish each boundary below. Physical C67 and TAB_P10 execution
+remains unverified without an authenticated endpoint.
+
+| Boundary | Required identity and executable behavior |
+| --- | --- |
+| Acquisition | Actual Linux UID 2000; Context package `com.android.shell`; public `ClipboardManager.addPrimaryClipChangedListener` and immediate public clipboard read in its callback |
+| System permissions | Shell holds `READ_CLIPBOARD_IN_BACKGROUND`, `ACCESS_CONTENT_PROVIDERS_EXTERNALLY` and `INTERACT_ACROSS_USERS_FULL`; successful method lookup alone does not establish permission |
+| Private writer | App UID owns its private files and invokes the sole checked Idriç reducer; no shell access to app data files |
+| Delivery authorization | Android provider permission, actual Binder caller UID 2000, private 256-bit credential, checked active automatic mode and fresh Shizuku authorization |
+| Acknowledgement | Checked transition and synced atomic history commit complete before accepting a delivery; retry identities prevent duplicate insertion |
+
+Shizuku's [pinned developer guide](https://github.com/RikkaApps/Shizuku-API/blob/a27f6e4151ba7b39965ca47edb2bf0aeed7102e5/README.md#userservice)
+states that its user service is not a valid Android application process and
+that Context content resolution does not work normally there. The companion
+therefore uses the external-provider acquisition path in Android's own shell
+`content` command. This path is confined to UID 2000, API 29 or API 34 and the
+primary Android user. Other versions and user profiles expose unavailable
+automatic capture; the explicit foreground mode remains available. This is an
+implementation/qualification boundary, not evidence that another Android
+version makes the feature impossible.
+
+The adapter invokes framework methods through explicit JNI class/member
+signatures. It never guesses Binder transaction numbers or changes hidden-API
+policy in the app process. It acquires a fresh external reference for each
+delivery, uses the app UID writer, then releases
+the reference even when a call throws. Provider acquisition can start that
+writer after ordinary process death.
+
+| API | Framework call shape |
+| --- | --- |
+| 29 and 34 | `ActivityManager.getService()`; `IActivityManager.getContentProviderExternal(String authority, int userId, IBinder lifetime, String tag)`; `ContentProviderHolder.provider` |
+| 29 | `IContentProvider.call(String callingPackage, String authority, String method, String credential, Bundle extras)` |
+| 34 | `IContentProvider.call(AttributionSource source, String authority, String method, String credential, Bundle extras)`; source UID is the actual shell UID 2000 and package is `com.android.shell` |
+| 29 and 34 | `IActivityManager.removeContentProviderExternalAsUser(String authority, IBinder lifetime, int userId)` in cleanup |
+
+Primary source definitions are pinned to Android release tags:
+
+| Source | API 29 blob | API 34 blob |
+| --- | --- | --- |
+| [IContentProvider, Android 10](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-10.0.0_r47/core/java/android/content/IContentProvider.java) / [Android 14](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-14.0.0_r1/core/java/android/content/IContentProvider.java) | `0427c2f52415c4c41b1f5b0e80b929555ba4a4a0` | `ef8d0f9e18c81ebdd5b533c6b2dc35d5c4e01a55` |
+| [IActivityManager, Android 10](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-10.0.0_r47/core/java/android/app/IActivityManager.aidl) / [Android 14](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-14.0.0_r1/core/java/android/app/IActivityManager.aidl) | `c0c63555b10a95e3452173c648bf2728821bccc4` | `46260ea5e658692a7c7487d7194a572b32675fcc` |
+| [Shell permissions, Android 10](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-10.0.0_r47/packages/Shell/AndroidManifest.xml) / [Android 14](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-14.0.0_r1/packages/Shell/AndroidManifest.xml) | `19eac7ccdb027a79221bb7bc0199f34f84d01a3b` | `ee9883b0b0afb6e19f74bb1a6b4c80aa890ce1b2` |
+
+The [Android 14 content command](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-14.0.0_r1/cmds/content/src/com/android/commands/content/Content.java),
+blob `f0ac53014bd37640cd8d80d8a9c1c989346437c6`, supplies the acquisition,
+attribution and cleanup pattern. Clipboard payloads never enter a command
+argument, manager RPC, network request or log. Diagnostic traces contain only
+numeric stages, flags and exception class names; exception messages are excluded.
+
+The user-service control protocol retains tag `pasteboard-observer-v1` and
+descriptor `com.isomorphisms.pasteboard.ClipboardObserver.v2`. Configuration
+requires the app owner's actual Binder UID, a bounded Parcel with no file
+descriptors and exactly one credential field. Shizuku's normal version-code
+replacement restarts an old companion after an application upgrade. ARM32 APKs
+request a 32-bit app_process; ARM64 and x86-64 APKs request a 64-bit process.
+
+Pausing or selecting foreground capture rejects observer writes immediately in
+the checked model. Explicitly resuming automatic capture saves a fresh private
+credential before enabling writes; older queued credentials are discarded.
+Ordinary app process restart keeps the credential and acknowledged history.
+Shizuku revocation/server death stops or disconnects capture. Pending companion
+memory can be lost on a companion crash, and copies made during downtime cannot
+be reconstructed. Shizuku may require user restart after a device reboot.
+
+Independent acceptance must use real cross-application A/B/C copies and inspect
+exact contents before Pasteboard gains focus. It must also reject actual wrong
+caller/credential/permission controls and source-compiled mutants, exercise
+pause, revocation, process death, reconnection and restart, and bind receipts to
+the exact source, compiler, APK digest and environment. Until those receipts
+pass, this transport is NOT VERIFIED rather than working automatic history.

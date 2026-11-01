@@ -744,8 +744,11 @@ static void menu_action(AppContext *context, int row) {
             if (!history_action(context, "request_automatic", NULL, 0u)) return;
             JNIEnv *e ← NULL; bool detach ← false;
             if (attach_environment(context->app->activity, &e, &detach)) {
-                if (pb_observer_enable(e) != 0)
-                    (void)snprintf(context->message, sizeof(context->message), "%s", "Start Shizuku and grant Pasteboard permission");
+                const int observer_result ← pb_observer_enable(e);
+                if (observer_result != 0)
+                    (void)snprintf(context->message, sizeof(context->message), "%s", observer_result == -2
+                        ? "Automatic capture unavailable here; choose foreground capture"
+                        : "Start Shizuku and grant Pasteboard permission");
                 if (detach) (void)(*context->app->activity->vm)->DetachCurrentThread(context->app->activity->vm);
             }
         } else if (row == 1) {

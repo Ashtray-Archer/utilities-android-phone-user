@@ -78,7 +78,7 @@ Valid original `pasteboard.bin` v1 records are imported through the checked
 reducer when no new-format history exists. The original file remains until two
 independently synced modern copies exist, then is retired. An incompatible or
 damaged legacy record stops migration and preserves the original. The stable
-package is `com.isomorphisms.pasteboard`; candidate version code 8
+package is `com.isomorphisms.pasteboard`; candidate version code 9
 uses the persistent Wegert public test certificate
 `de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
 An installation with another legacy signer cannot be replaced by Android;
@@ -91,8 +91,9 @@ The user explicitly selects automatic mode and authorizes Pasteboard in
 Shizuku. Gboard remains the selected keyboard. A Shizuku API-13 daemon user
 service requests public `ClipboardManager` callbacks as UID 2000 with package
 identity `com.android.shell`. The private clipboard payload never goes through
-Shizuku manager RPC. Callback text enters a FIFO; SDK `ContentProvider.call`
-delivers it to the application's private history writer. An acknowledgement
+Shizuku manager RPC. Callback text enters a FIFO; the version-bounded external
+provider call described in [observer-boundary.md](observer-boundary.md) delivers
+it to the application's private history writer. An acknowledgement
 requires a synced checked-state commit. Durable delivery identities prevent
 reordering on an acknowledgement retry.
 
@@ -110,8 +111,10 @@ acknowledged remains local and durable. Reconnection cannot reconstruct missed
 system clipboard history.
 
 The manager attachment and user-service Binder protocols are bounded to API 13
-and the pinned Shizuku 13.6 source; platform callbacks and clipboard access use
-public SDK methods. The actual shell Context, clipboard listener delivery,
+and the pinned Shizuku 13.6 source. Clipboard callbacks and acquisition use
+public SDK methods; external provider acquisition/call is bounded to the exact
+API 29/34 interfaces and the primary user. Other versions expose unavailable
+automatic capture and retain the explicit foreground mode. The actual shell Context, clipboard listener delivery,
 permissions, companion lifetime, revocation and reconnection all require fresh
 API 29/34 and physical-device qualification. Until that evidence exists this
 route must not be described as working automatic history. Foreground-only mode

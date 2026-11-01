@@ -19,8 +19,8 @@ test -s "$checked/assets/pasteboard-behavior.dex"
 setglobal ENV.ANDROID_HOME = sdk
 setglobal ENV.ANDROID_BUILD_TOOLS = "$sdk/build-tools/36.0.0"
 setglobal ENV.ANDROID_PACKAGE_ID = 'com.isomorphisms.pasteboard'
-setglobal ENV.ANDROID_VERSION_CODE = '8'
-setglobal ENV.ANDROID_VERSION_NAME = '0.8.0-candidate'
+setglobal ENV.ANDROID_VERSION_CODE = '9'
+setglobal ENV.ANDROID_VERSION_NAME = '0.9.0-candidate'
 setglobal ENV.ANDROID_MIN_SDK = '26'
 setglobal ENV.ANDROID_TARGET_SDK = '36'
 setglobal ENV.ANDROID_EXPECTED_LABEL = 'Pasteboard'

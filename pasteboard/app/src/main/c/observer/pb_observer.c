@@ -26,6 +26,20 @@ static time_t last_heartbeat ← 0;
 static pthread_once_t status_once ← PTHREAD_ONCE_INIT;
 static pthread_key_t status_key;
 static int status_key_ready ← 0;
+static jint platform_api(JNIEnv *environment);
+
+static int qualified_platform(JNIEnv *e) {
+    const jint api ← platform_api(e);
+    const int supported ← !(*e)->ExceptionCheck(e) && (api == 29 || api == 34) &&
+        getuid() >= 10000u && getuid() < 100000u;
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    if (!supported) {
+        (void)pthread_mutex_lock(&app_mutex);
+        (void)snprintf(app_status, sizeof(app_status), "%s", "Automatic capture unavailable on this Android version or user profile");
+        (void)pthread_mutex_unlock(&app_mutex);
+    }
+    return supported;
+}
 
 static void create_status_key(void) { status_key_ready ← pthread_key_create(&status_key, free) == 0; }
 
@@ -217,6 +231,7 @@ void pb_observer_app_ready(JNIEnv *e, jobject context) {
 
 void pb_observer_try_start(JNIEnv *e) {
     if (!pb_history_capture_enabled() || !pb_history_automatic_requested()) return;
+    if (!qualified_platform(e)) return;
     (void)pthread_mutex_lock(&app_mutex);
     const int eligible ← app_vm != NULL && app_token[0] != '\0' && !connecting && !connected;
     (void)pthread_mutex_unlock(&app_mutex);
@@ -246,6 +261,7 @@ bool pb_observer_begin_capture_session(void) {
 }
 
 int pb_observer_enable(JNIEnv *e) {
+    if (!qualified_platform(e)) return -2;
     char token[65];
     if (!load_capability(1, token)) return -1;
     (void)pthread_mutex_lock(&app_mutex);
@@ -415,38 +431,94 @@ static int put_text(JNIEnv *e, jobject bundle, const char *key, PBText text) {
     return value && !(*e)->ExceptionCheck(e);
 }
 
-/* ContentProvider.call is an actual SDK IPC into the app UID. A successful
+static jint platform_api(JNIEnv *e) {
+    jclass version ← (*e)->FindClass(e, "android/os/Build$VERSION");
+    jfieldID sdk ← version ? (*e)->GetStaticFieldID(e, version, "SDK_INT", "I") : NULL;
+    return sdk ? (*e)->GetStaticIntField(e, version, sdk) : -1;
+}
+
+/* A Shizuku user service has no AMS application record. Its Context resolver
+ * cannot acquire providers. Follow AOSP's shell content command with an
+ * explicitly bounded framework interface, not a guessed transaction number.
+ * See observer-boundary.md for exact API 29/34 source and ABI signatures. */
+static jobject shell_provider_call(JNIEnv *e, jstring method, jstring token, jobject extras) {
+    const jint api ← platform_api(e);
+    if (getuid() != 2000u || (api != 29 && api != 34) || (*e)->ExceptionCheck(e)) return NULL;
+    (void)pthread_mutex_lock(&service.mutex);
+    const uid_t owner ← service.owner;
+    (void)pthread_mutex_unlock(&service.mutex);
+    if (owner < 10000u || owner >= 100000u) return NULL;
+    jclass activity ← (*e)->FindClass(e, "android/app/ActivityManager");
+    jmethodID get ← activity ? (*e)->GetStaticMethodID(e, activity, "getService", "()Landroid/app/IActivityManager;") : NULL;
+    jobject manager ← get ? (*e)->CallStaticObjectMethod(e, activity, get) : NULL;
+    if (!manager || (*e)->ExceptionCheck(e)) return NULL;
+    jclass binder_type ← (*e)->FindClass(e, "android/os/Binder");
+    jmethodID construct ← binder_type ? (*e)->GetMethodID(e, binder_type, "<init>", "()V") : NULL;
+    jobject lifetime ← construct ? (*e)->NewObject(e, binder_type, construct) : NULL;
+    if (!lifetime || (*e)->ExceptionCheck(e)) return NULL;
+    jstring authority ← (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.shizuku");
+    if (!authority) return NULL;
+    jstring tag ← (*e)->NewStringUTF(e, "pasteboard-observer");
+    if (!tag) return NULL;
+    jmethodID acquire ← sdk_method(e, "android/app/IActivityManager", "getContentProviderExternal",
+        "(Ljava/lang/String;ILandroid/os/IBinder;Ljava/lang/String;)Landroid/app/ContentProviderHolder;");
+    jmethodID release ← sdk_method(e, "android/app/IActivityManager", "removeContentProviderExternalAsUser",
+        "(Ljava/lang/String;Landroid/os/IBinder;I)V");
+    jobject holder ← manager && lifetime && authority && tag && acquire && release && !(*e)->ExceptionCheck(e)
+        ? (*e)->CallObjectMethod(e, manager, acquire, authority, 0, lifetime, tag) : NULL;
+    jclass holder_type ← holder ? (*e)->FindClass(e, "android/app/ContentProviderHolder") : NULL;
+    jfieldID provider_field ← holder_type ? (*e)->GetFieldID(e, holder_type, "provider", "Landroid/content/IContentProvider;") : NULL;
+    jobject provider ← provider_field && !(*e)->ExceptionCheck(e) ? (*e)->GetObjectField(e, holder, provider_field) : NULL;
+    jstring package ← provider ? (*e)->NewStringUTF(e, "com.android.shell") : NULL;
+    jobject result ← NULL;
+    if (provider && package && !(*e)->ExceptionCheck(e) && api == 29) {
+        jmethodID call ← sdk_method(e, "android/content/IContentProvider", "call",
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/os/Bundle;)Landroid/os/Bundle;");
+        if (call) result ← (*e)->CallObjectMethod(e, provider, call, package, authority, method, token, extras);
+    } else if (provider && package && !(*e)->ExceptionCheck(e) && api == 34) {
+        jclass attribution ← (*e)->FindClass(e, "android/content/AttributionSource");
+        jmethodID create ← attribution ? (*e)->GetMethodID(e, attribution, "<init>", "(ILjava/lang/String;Ljava/lang/String;)V") : NULL;
+        jobject source ← create ? (*e)->NewObject(e, attribution, create, 2000, package, NULL) : NULL;
+        jmethodID call ← sdk_method(e, "android/content/IContentProvider", "call",
+            "(Landroid/content/AttributionSource;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/os/Bundle;)Landroid/os/Bundle;");
+        if (source && call && !(*e)->ExceptionCheck(e))
+            result ← (*e)->CallObjectMethod(e, provider, call, source, authority, method, token, extras);
+    }
+    /* Release the external reference even if the writer throws or dies.
+     * Preserve only the throwable class for the caller's content-free trace. */
+    jthrowable failure ← (*e)->ExceptionOccurred(e);
+    if (failure) (*e)->ExceptionClear(e);
+    if (holder && manager && release) (*e)->CallVoidMethod(e, manager, release, authority, lifetime, 0);
+    if (failure) {
+        if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+        (void)(*e)->Throw(e, failure);
+    }
+    return result;
+}
+
+/* The version-bounded provider call is actual IPC into the app UID. A successful
  * event reply means the checked result was synced and atomically committed. */
 static int deliver(JNIEnv *e, ClipboardEvent *event) {
     if ((*e)->PushLocalFrame(e, 48) != JNI_OK) return 0;
     (void)pthread_mutex_lock(&service.mutex);
-    jobject context ← service.context ? (*e)->NewLocalRef(e, service.context) : NULL;
     char token[65];
     memcpy(token, event ? event->token : service.token, sizeof(token));
     (void)pthread_mutex_unlock(&service.mutex);
-    jmethodID get ← sdk_method(e, "android/content/Context", "getContentResolver", "()Landroid/content/ContentResolver;");
-    jobject resolver ← context && get ? (*e)->CallObjectMethod(e, context, get) : NULL;
-    jclass uri_class ← (*e)->FindClass(e, "android/net/Uri");
-    jmethodID parse ← uri_class ? (*e)->GetStaticMethodID(e, uri_class, "parse", "(Ljava/lang/String;)Landroid/net/Uri;") : NULL;
-    jstring authority ← parse ? (*e)->NewStringUTF(e, "content://com.isomorphisms.pasteboard.shizuku") : NULL;
-    jobject uri ← authority ? (*e)->CallStaticObjectMethod(e, uri_class, parse, authority) : NULL;
     jobject extras ← sdk_bundle(e);
-    int valid ← resolver && uri && extras && !(*e)->ExceptionCheck(e);
+    int valid ← extras && !(*e)->ExceptionCheck(e);
     if (valid && event) valid ← put_text(e, extras, "delivery", (PBText){event->delivery, strlen(event->delivery)}) &&
         put_text(e, extras, "timestamp", (PBText){event->timestamp, strlen(event->timestamp)}) &&
         put_text(e, extras, "text", event->text) && put_text(e, extras, "origin", event->origin);
-    jmethodID call ← sdk_method(e, "android/content/ContentResolver", "call",
-        "(Landroid/net/Uri;Ljava/lang/String;Ljava/lang/String;Landroid/os/Bundle;)Landroid/os/Bundle;");
-    jstring name ← valid && call ? (*e)->NewStringUTF(e, event ? "observer_event" : "observer_heartbeat") : NULL;
+    jstring name ← valid ? (*e)->NewStringUTF(e, event ? "observer_event" : "observer_heartbeat") : NULL;
     jstring capability ← name ? (*e)->NewStringUTF(e, token) : NULL;
-    jobject reply ← capability ? (*e)->CallObjectMethod(e, resolver, call, uri, name, capability, extras) : NULL;
+    jobject reply ← capability ? shell_provider_call(e, name, capability, extras) : NULL;
     jmethodID read ← sdk_method(e, "android/os/Bundle", "getInt", "(Ljava/lang/String;I)I");
     jstring key ← reply && read ? (*e)->NewStringUTF(e, "accepted") : NULL;
     const jint result ← key ? (*e)->CallIntMethod(e, reply, read, key, 0) : 0;
     const int failed ← (*e)->ExceptionCheck(e);
     if (result != 1 || failed) {
-        const unsigned stages ← (context ? 1u : 0u) | (resolver ? 2u : 0u) | (uri ? 4u : 0u) |
-            (extras ? 8u : 0u) | (name ? 16u : 0u) | (capability ? 32u : 0u) | (reply ? 64u : 0u) | (key ? 128u : 0u);
+        const unsigned stages ← (extras ? 1u : 0u) | (name ? 2u : 0u) | (capability ? 4u : 0u) |
+            (reply ? 8u : 0u) | (key ? 16u : 0u);
         jthrowable failure ← failed ? (*e)->ExceptionOccurred(e) : NULL;
         if (failed) (*e)->ExceptionClear(e);
         jclass type ← failure ? (*e)->GetObjectClass(e, failure) : NULL;
@@ -521,9 +593,13 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_initialize(JNIEnv *e, jobject
     jmethodID create ← sdk_method(e, "android/content/Context", "createPackageContext", "(Ljava/lang/String;I)Landroid/content/Context;");
     jstring shell ← create ? (*e)->NewStringUTF(e, "com.android.shell") : NULL;
     jobject shell_context ← valid && shell ? (*e)->CallObjectMethod(e, context, create, shell, 0) : NULL;
+    jstring shell_package ← shell_context && package ? (*e)->CallObjectMethod(e, shell_context, package) : NULL;
+    jmethodID operation ← sdk_method(e, "android/content/Context", "getOpPackageName", "()Ljava/lang/String;");
+    jstring operation_package ← shell_context && operation ? (*e)->CallObjectMethod(e, shell_context, operation) : NULL;
     jmethodID check ← sdk_method(e, "android/content/Context", "checkSelfPermission", "(Ljava/lang/String;)I");
     jstring permission ← check ? (*e)->NewStringUTF(e, "android.permission.READ_CLIPBOARD_IN_BACKGROUND") : NULL;
-    valid ← valid && owner >= 10000 && shell_context && permission &&
+    valid ← valid && owner >= 10000 && owner < 100000 && shell_context && permission &&
+        ascii_equals(e, shell_package, "com.android.shell") && ascii_equals(e, operation_package, "com.android.shell") &&
         (*e)->CallIntMethod(e, shell_context, check, permission) == 0 && !(*e)->ExceptionCheck(e);
     jmethodID get ← sdk_method(e, "android/content/Context", "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
     jstring clipboard ← valid && get ? (*e)->NewStringUTF(e, "clipboard") : NULL;
@@ -605,7 +681,7 @@ static int start_listener(JNIEnv *e, jstring token) {
         if (!valid) stop_listener(e);
     } else if (held) (*e)->DeleteGlobalRef(e, held);
     free(capability.bytes);
-    __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard listener registration accepted=%d", valid);
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard listener registration accepted=%d caller_uid=%d", valid, caller_uid(e));
     return valid;
 }
 
@@ -625,6 +701,15 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_onTransact(JNIEnv *e, jobject
         _exit(0);
     } else if (code == 2 && service.initialized && caller_uid(e) == (jint)service.owner &&
                data && reply && (flags & ~0x12) == 0) {
+        jmethodID size ← sdk_method(e, "android/os/Parcel", "dataSize", "()I");
+        jmethodID descriptors ← sdk_method(e, "android/os/Parcel", "hasFileDescriptors", "()Z");
+        const jint bytes ← size ? (*e)->CallIntMethod(e, data, size) : -1;
+        if (!size || !descriptors || bytes <= 0 || bytes > 512 ||
+            (*e)->CallBooleanMethod(e, data, descriptors) || (*e)->ExceptionCheck(e)) {
+            if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+            (*e)->PopLocalFrame(e, NULL);
+            return JNI_FALSE;
+        }
         jmethodID enforce ← sdk_method(e, "android/os/Parcel", "enforceInterface", "(Ljava/lang/String;)V");
         jstring descriptor ← enforce ? (*e)->NewStringUTF(e, "com.isomorphisms.pasteboard.ClipboardObserver.v2") : NULL;
         if (descriptor) (*e)->CallVoidMethod(e, data, enforce, descriptor);
@@ -632,7 +717,16 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_onTransact(JNIEnv *e, jobject
         jstring token ← descriptor && read && !(*e)->ExceptionCheck(e) ? (*e)->CallObjectMethod(e, data, read) : NULL;
         jmethodID available ← sdk_method(e, "android/os/Parcel", "dataAvail", "()I");
         valid ← token && available && (*e)->CallIntMethod(e, data, available) == 0 && !(*e)->ExceptionCheck(e);
-        const int started ← valid && start_listener(e, token);
+        jclass binder ← (*e)->FindClass(e, "android/os/Binder");
+        jmethodID clear ← binder ? (*e)->GetStaticMethodID(e, binder, "clearCallingIdentity", "()J") : NULL;
+        jmethodID restore ← binder ? (*e)->GetStaticMethodID(e, binder, "restoreCallingIdentity", "(J)V") : NULL;
+        valid ← valid && clear && restore && !(*e)->ExceptionCheck(e);
+        const jlong identity ← valid ? (*e)->CallStaticLongMethod(e, binder, clear) : 0;
+        const int cleared ← valid && !(*e)->ExceptionCheck(e);
+        int started ← cleared && start_listener(e, token);
+        if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+        if (cleared) (*e)->CallStaticVoidMethod(e, binder, restore, identity);
+        if ((*e)->ExceptionCheck(e)) started ← 0;
         if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
         jmethodID okay ← sdk_method(e, "android/os/Parcel", "writeNoException", "()V");
         jmethodID write ← sdk_method(e, "android/os/Parcel", "writeInt", "(I)V");
@@ -656,9 +750,11 @@ JNIEXPORT void JNICALL
 Java_com_isomorphisms_pasteboard_ClipboardListener_onPrimaryClipChanged(JNIEnv *e, jobject self) {
     (void)pthread_mutex_lock(&service.mutex);
     const uint64_t epoch ← service.epoch;
-    const int current ← service.registered && service.listener &&
-        (*e)->IsSameObject(e, self, service.listener) && service.sequence != UINT64_MAX;
+    const int registered ← service.registered;
+    const int same ← service.listener && (*e)->IsSameObject(e, self, service.listener);
+    const int current ← registered && same && service.sequence != UINT64_MAX;
     (void)pthread_mutex_unlock(&service.mutex);
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard callback entry registered=%d current_listener=%d", registered, same);
     if (!current) return;
     char *text ← NULL;
     size_t length ← 0u;
