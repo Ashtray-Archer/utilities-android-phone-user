@@ -3,6 +3,7 @@
 #include "pb_shizuku_worker.h"
 #include "../pasteboard_history.h"
 #include "clipboard.h"
+#include <android/log.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -84,13 +85,14 @@ static void hex_bytes(char *text, const unsigned char *bytes, size_t length) {
 
 /* A capability key is created only by the visible Enable action. It is never
  * written into clipboard history, logs, shared storage, or a network request. */
+/* create: 0 reads, 1 creates if absent, 2 begins a fresh capture session. */
 static int load_capability(int create, char output[65]) {
     const char *directory ← pb_history_private_directory();
     if (directory == NULL) return 0;
     const int folder ← open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (folder < 0) return 0;
-    int descriptor ← openat(folder, "observer.key", O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
-    if (descriptor < 0 && errno == ENOENT && create) {
+    int descriptor ← create == 2 ? -1 : openat(folder, "observer.key", O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    if (create == 2 || (descriptor < 0 && errno == ENOENT && create)) {
         unsigned char bytes[32];
         char token[65];
         if (!fill_random(bytes, sizeof(bytes))) { (void)close(folder); return 0; }
@@ -192,6 +194,11 @@ static void *connect_thread(void *unused) {
     } else pb_observer_connected(0);
     (void)pthread_mutex_lock(&app_mutex);
     connecting ← 0;
+    if (memcmp(token, app_token, sizeof(token)) != 0 ||
+        !pb_history_capture_enabled() || !pb_history_automatic_requested()) {
+        connected ← 0;
+        (void)snprintf(app_status, sizeof(app_status), "%s", "Capture session changed; reconnecting observer");
+    }
     (void)pthread_mutex_unlock(&app_mutex);
     return NULL;
 }
@@ -223,6 +230,19 @@ void pb_observer_try_start(JNIEnv *e) {
     if (started == 0) (void)pthread_detach(thread);
     else connecting ← 0;
     (void)pthread_mutex_unlock(&app_mutex);
+}
+
+/* Called while the checked capture mode is still inactive, before resuming.
+ * A crash between this synced credential change and the model commit leaves
+ * capture inactive. Earlier queued values cannot authenticate after resume. */
+bool pb_observer_begin_capture_session(void) {
+    char token[65];
+    if (!load_capability(2, token)) return false;
+    (void)pthread_mutex_lock(&app_mutex);
+    memcpy(app_token, token, sizeof(token));
+    connected ← 0;
+    (void)pthread_mutex_unlock(&app_mutex);
+    return true;
 }
 
 int pb_observer_enable(JNIEnv *e) {
@@ -361,8 +381,12 @@ static void free_event(ClipboardEvent *event) {
     free(event);
 }
 
-static void stop_listener(JNIEnv *e) {
+static void stop_listener_at(JNIEnv *e, uint64_t expected_epoch) {
     (void)pthread_mutex_lock(&service.mutex);
+    if (expected_epoch != UINT64_MAX && service.epoch != expected_epoch) {
+        (void)pthread_mutex_unlock(&service.mutex);
+        return;
+    }
     service.registered ← 0;
     service.stopping ← 1;
     ++service.epoch;
@@ -380,6 +404,8 @@ static void stop_listener(JNIEnv *e) {
     if (listener) (*e)->DeleteGlobalRef(e, listener);
     if (manager) (*e)->DeleteLocalRef(e, manager);
 }
+
+static void stop_listener(JNIEnv *e) { stop_listener_at(e, UINT64_MAX); }
 
 static int put_text(JNIEnv *e, jobject bundle, const char *key, PBText text) {
     jmethodID put ← sdk_method(e, "android/os/Bundle", "putString", "(Ljava/lang/String;Ljava/lang/String;)V");
@@ -418,7 +444,20 @@ static int deliver(JNIEnv *e, ClipboardEvent *event) {
     jstring key ← reply && read ? (*e)->NewStringUTF(e, "accepted") : NULL;
     const jint result ← key ? (*e)->CallIntMethod(e, reply, read, key, 0) : 0;
     const int failed ← (*e)->ExceptionCheck(e);
-    if (failed) (*e)->ExceptionClear(e);
+    if (result != 1 || failed) {
+        const unsigned stages ← (context ? 1u : 0u) | (resolver ? 2u : 0u) | (uri ? 4u : 0u) |
+            (extras ? 8u : 0u) | (name ? 16u : 0u) | (capability ? 32u : 0u) | (reply ? 64u : 0u) | (key ? 128u : 0u);
+        jthrowable failure ← failed ? (*e)->ExceptionOccurred(e) : NULL;
+        if (failed) (*e)->ExceptionClear(e);
+        jclass type ← failure ? (*e)->GetObjectClass(e, failure) : NULL;
+        jmethodID class_name ← type ? sdk_method(e, "java/lang/Class", "getName", "()Ljava/lang/String;") : NULL;
+        jstring failure_name ← class_name ? (*e)->CallObjectMethod(e, type, class_name) : NULL;
+        const char *description ← failure_name && !(*e)->ExceptionCheck(e) ? (*e)->GetStringUTFChars(e, failure_name, NULL) : NULL;
+        __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "private delivery event=%d stages=%u result=%d exception_class=%s",
+            event ? 1 : 0, stages, result, description ? description : "none");
+        if (description) (*e)->ReleaseStringUTFChars(e, failure_name, description);
+    }
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     (*e)->PopLocalFrame(e, NULL);
     return failed ? 0 : result;
 }
@@ -426,14 +465,28 @@ static int deliver(JNIEnv *e, ClipboardEvent *event) {
 static void *delivery_thread(void *unused) {
     (void)unused;
     JNIEnv *e ← NULL;
-    if (!attach_vm(service.vm, &e)) return NULL;
+    if (!attach_vm(service.vm, &e)) {
+        __android_log_print(ANDROID_LOG_ERROR, "PasteboardObserver", "delivery thread VM attachment failed");
+        return NULL;
+    }
     for (;;) {
         (void)pthread_mutex_lock(&service.mutex);
         while (service.stopping) (void)pthread_cond_wait(&service.changed, &service.mutex);
         ClipboardEvent *event ← service.head;
+        const uint64_t delivery_epoch ← service.epoch;
+        /* Explicitly resuming capture creates a new private capability. Values
+         * queued in an earlier paused session must never cross that boundary.
+         * Only this delivery thread frees queue entries, including in flight. */
+        if (event && memcmp(event->token, service.token, sizeof(event->token)) != 0) {
+            service.head ← event->next;
+            if (service.head == NULL) service.tail ← NULL;
+            (void)pthread_mutex_unlock(&service.mutex);
+            free_event(event);
+            continue;
+        }
         (void)pthread_mutex_unlock(&service.mutex);
         const int accepted ← deliver(e, event);
-        if (accepted < 0) { stop_listener(e); continue; }
+        if (accepted < 0) { stop_listener_at(e, delivery_epoch); continue; }
         if (event && accepted == 1) {
             (void)pthread_mutex_lock(&service.mutex);
             if (service.head == event) {
@@ -507,6 +560,8 @@ Java_com_isomorphisms_pasteboard_ClipboardObserver_initialize(JNIEnv *e, jobject
         if (held_manager) (*e)->DeleteGlobalRef(e, held_manager);
         if (held_self) (*e)->DeleteGlobalRef(e, held_self);
     }
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "companion initialize uid=%ld owner=%d bridge=%d accepted=%d",
+        (long)getuid(), owner, (int)bridge, valid);
     if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     (*e)->PopLocalFrame(e, NULL);
 }
@@ -550,6 +605,7 @@ static int start_listener(JNIEnv *e, jstring token) {
         if (!valid) stop_listener(e);
     } else if (held) (*e)->DeleteGlobalRef(e, held);
     free(capability.bytes);
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard listener registration accepted=%d", valid);
     return valid;
 }
 
@@ -608,6 +664,8 @@ Java_com_isomorphisms_pasteboard_ClipboardListener_onPrimaryClipChanged(JNIEnv *
     size_t length ← 0u;
     ClipboardDetails details;
     const ClipboardStatus read ← clipboard_get_utf8_details(&text, &length, &details);
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard callback read=%d sensitive=%d items=%d",
+        (int)read, details.sensitive, details.item_count);
     if (read != CLIPBOARD_OK || details.sensitive) {
         clipboard_free(text); clipboard_free(details.origin_utf8); return;
     }

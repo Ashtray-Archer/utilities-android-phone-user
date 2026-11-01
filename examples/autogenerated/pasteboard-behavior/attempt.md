@@ -174,3 +174,25 @@ to enable an observer afterward. The companion process also follows the actual
 APK native pointer width, so an ARM32 APK requests a 32-bit app_process. The
 next Android run must re-establish every affected acceptance result; neither
 these repairs nor the historical receipts establish privileged capture yet.
+
+At 89dda5d07ab37621963ad8f507ebe9c7136d3b29 / run 41342118606,
+API 29/34 migration still passes. API 34 now persists automatic mode, refuses
+capture without Shizuku and after actual permission denial, then starts an
+actual shell-owned companion after the real grant. A/B/C retention still fails;
+the companion reconnects without successful heartbeats. Candidate 8 adds only
+content-free initialization, listener, callback and delivery-stage diagnostics
+to establish the failing SDK boundary. No clipboard content, capability or
+exception message is logged. API 29 separately exposes delivery bookkeeping for
+an empty text clipboard item on each foreground focus. The foreground adapter
+now ignores that empty SDK item before constructing a delivery identity.
+
+Explicit capture resumption prepares a freshly synced private credential while
+the checked mode is still inactive. The companion discards entries from an old
+credential and ignores late delivery failures from a replaced registration.
+Ordinary process restart preserves the existing credential. Independent actual
+Pause/copy/Resume and session-digest controls are added and remain unverified.
+The exact pinned backend executable and TTC cache is bound to frontend/backend
+source IDs and SHA-256 manifests. Local seed and verified reuse both compile the
+current consumer, pass host controls and yield identical behavior/platform DEX.
+This reuse does not skip consumer compilation, deterministic output comparisons,
+source mutants, installed Android tests or current acceptance receipts.

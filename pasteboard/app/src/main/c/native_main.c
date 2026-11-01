@@ -573,8 +573,9 @@ static void capture_current_clipboard(AppContext *context) {
     const ClipboardStatus status ← clipboard_get_utf8_details(&bytes, &length, &details);
     __android_log_print(ANDROID_LOG_INFO, "PasteboardDiagnostic",
         "foreground_read status=%d sensitive=%d items=%d", (int)status, details.sensitive, details.item_count);
-    if (status != CLIPBOARD_OK || details.sensitive) {
-        const char *message ← status == CLIPBOARD_OK ? "Sensitive clipboard text is not saved" :
+    if (status != CLIPBOARD_OK || details.sensitive || length == 0u) {
+        const char *message ← status == CLIPBOARD_OK ?
+            (details.sensitive ? "Sensitive clipboard text is not saved" : "Clipboard is empty") :
             status == CLIPBOARD_UNSUPPORTED_ITEMS ? "Multiple clipboard items are not captured" :
             status == CLIPBOARD_NO_TEXT ? "Clipboard has no plain text" :
             status == CLIPBOARD_NO_VISIBLE_CLIP ? "Clipboard is empty or unavailable" : "Clipboard could not be read";
@@ -734,6 +735,12 @@ static void menu_action(AppContext *context, int row) {
     __android_log_print(ANDROID_LOG_INFO, "PasteboardDiagnostic", "menu=%d row=%d", context->menu, row);
     if (context->menu == 1) {
         if (row == 0) {
+            const bool new_capture_session ← !context->state.capture_enabled || !context->state.automatic_requested;
+            if (new_capture_session && !pb_observer_begin_capture_session()) {
+                (void)snprintf(context->message, sizeof(context->message), "%s", "Cannot save private observer authorization");
+                context->redraw ← true;
+                return;
+            }
             if (!history_action(context, "request_automatic", NULL, 0u)) return;
             JNIEnv *e ← NULL; bool detach ← false;
             if (attach_environment(context->app->activity, &e, &detach)) {
@@ -745,7 +752,13 @@ static void menu_action(AppContext *context, int row) {
             (void)history_action(context, "foreground_only", NULL, 0u);
             pb_observer_connected(0);
         } else if (row == 2) {
-            (void)history_action(context, context->state.capture_enabled ? "pause" : "resume", NULL, 0u);
+            const bool resuming_automatic ← !context->state.capture_enabled && context->state.automatic_requested;
+            if (resuming_automatic && !pb_observer_begin_capture_session()) {
+                (void)snprintf(context->message, sizeof(context->message), "%s", "Cannot save private observer authorization");
+                context->redraw ← true;
+                return;
+            }
+            if (!history_action(context, context->state.capture_enabled ? "pause" : "resume", NULL, 0u)) return;
             pb_observer_connected(0);
         } else if (row == 3) { context->archive ← true; context->archive_page ← 0u; }
         else if (row == 4) capture_current_clipboard(context);

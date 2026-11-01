@@ -23,8 +23,27 @@ setglobal ENV.PATH = "$frontend/_/.tools/bin:" ++ ENV.PATH
 var grease = ENV.GREASE
 "$grease" "$backend/dex/idric/install-frontend.grease" "$frontend" > "$output/frontend-api.txt" 2>&1
 cd "$backend/dex/idric"
-"$compiler" --build backend.ipkg > "$output/backend-compile.txt" 2>&1
+git -C "$backend" rev-parse HEAD > "$output/backend-build-source.txt"
+git -C "$frontend" rev-parse HEAD > "$output/backend-build-frontend.txt"
+var reuse_backend = get(ENV, 'PASTEBOARD_REUSE_BACKEND', '0')
+if (reuse_backend === '1') {
+  cmp "$output/backend-build-source.txt" build/exec/pasteboard-backend-source.txt
+  cmp "$output/backend-build-frontend.txt" build/exec/pasteboard-frontend-source.txt
+} else {
+  "$compiler" --build backend.ipkg > "$output/backend-compile.txt" 2>&1
+}
 cp "$frontend/_/build/exec/idris2_app/libidris2_support.so" build/exec/idric-dex_app/
+if (reuse_backend === '1') {
+  sha256sum -c build/exec/pasteboard-backend-digests.txt > "$output/backend-cache-verification.txt"
+} else {
+  cp "$output/backend-build-source.txt" build/exec/pasteboard-backend-source.txt
+  cp "$output/backend-build-frontend.txt" build/exec/pasteboard-frontend-source.txt
+  sha256sum build/exec/idric-dex build/exec/idric-dex_app/idric-dex.ss \
+    build/exec/idric-dex_app/idric-dex.so build/exec/idric-dex_app/libidris2_support.so \
+    build/exec/idric-dex_app/compileChez > build/exec/pasteboard-backend-digests.txt
+  rg --files -0 build/ttc | sort -z | xargs -0 sha256sum >> build/exec/pasteboard-backend-digests.txt
+}
+cp build/exec/pasteboard-backend-digests.txt "$output/"
 make build/oracles/baksmali-3.0.10.jar build/oracles/smali-3.0.10.jar > "$output/oracles.txt" 2>&1
 var oracle = "$backend/dex/idric/build/oracles/baksmali-3.0.10.jar"
 printf '%s  %s\n' 37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f "$oracle" | sha256sum -c -
