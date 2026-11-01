@@ -108,6 +108,59 @@ static bool point_in_rect(RectF rect, float x, float y) {
     return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
+static bool attach_environment(ANativeActivity *activity, JNIEnv **environment, bool *detach);
+
+/* Android 15's enforced edge-to-edge layout gives NativeActivity a full-window
+ * contentRect. Intersect that rectangle with public root system-bar/cutout
+ * insets so the retained board geometry stays outside system controls. */
+static Viewport inset_viewport(const struct android_app *app, Viewport content) {
+    if (app->activity->sdkVersion < 35) return content;
+    JNIEnv *e ← NULL;
+    bool detach ← false;
+    if (!attach_environment(app->activity, &e, &detach)) return content;
+    if ((*e)->PushLocalFrame(e, 24) == JNI_OK) {
+        jclass activity ← (*e)->FindClass(e, "android/app/Activity");
+        jmethodID get_window ← activity ? (*e)->GetMethodID(e, activity, "getWindow", "()Landroid/view/Window;") : NULL;
+        jobject window ← get_window ? (*e)->CallObjectMethod(e, app->activity->clazz, get_window) : NULL;
+        jclass window_type ← window && !(*e)->ExceptionCheck(e) ? (*e)->FindClass(e, "android/view/Window") : NULL;
+        jmethodID decor ← window_type ? (*e)->GetMethodID(e, window_type, "getDecorView", "()Landroid/view/View;") : NULL;
+        jobject view ← decor ? (*e)->CallObjectMethod(e, window, decor) : NULL;
+        jclass view_type ← view && !(*e)->ExceptionCheck(e) ? (*e)->FindClass(e, "android/view/View") : NULL;
+        jmethodID root ← view_type ? (*e)->GetMethodID(e, view_type, "getRootWindowInsets", "()Landroid/view/WindowInsets;") : NULL;
+        jobject insets ← root ? (*e)->CallObjectMethod(e, view, root) : NULL;
+        jclass types ← insets && !(*e)->ExceptionCheck(e) ? (*e)->FindClass(e, "android/view/WindowInsets$Type") : NULL;
+        jmethodID bars ← types ? (*e)->GetStaticMethodID(e, types, "systemBars", "()I") : NULL;
+        const jint bar_mask ← bars ? (*e)->CallStaticIntMethod(e, types, bars) : 0;
+        jmethodID cutout ← bars && !(*e)->ExceptionCheck(e) ? (*e)->GetStaticMethodID(e, types, "displayCutout", "()I") : NULL;
+        const jint cutout_mask ← cutout ? (*e)->CallStaticIntMethod(e, types, cutout) : 0;
+        jclass inset_type ← cutout && !(*e)->ExceptionCheck(e) ? (*e)->FindClass(e, "android/view/WindowInsets") : NULL;
+        jmethodID safe ← inset_type ? (*e)->GetMethodID(e, inset_type, "getInsetsIgnoringVisibility", "(I)Landroid/graphics/Insets;") : NULL;
+        jobject bounds ← safe ? (*e)->CallObjectMethod(e, insets, safe, bar_mask | cutout_mask) : NULL;
+        jclass bounds_type ← bounds && !(*e)->ExceptionCheck(e) ? (*e)->FindClass(e, "android/graphics/Insets") : NULL;
+        const char *names[4] ← {"left", "top", "right", "bottom"};
+        jint values[4] ← {0};
+        bool valid ← bounds_type != NULL;
+        for (size_t index ← 0u; valid && index < 4u; ++index) {
+            jfieldID field ← (*e)->GetFieldID(e, bounds_type, names[index], "I");
+            if (field) values[index] ← (*e)->GetIntField(e, bounds, field);
+            valid ← field && values[index] >= 0 && !(*e)->ExceptionCheck(e);
+        }
+        if (valid) {
+            const float left ← maximum(content.left, (float)values[0]);
+            const float top ← maximum(content.top, (float)values[1]);
+            const float right ← minimum(content.left + content.width,
+                (float)ANativeWindow_getWidth(app->window) - (float)values[2]);
+            const float bottom ← minimum(content.top + content.height,
+                (float)ANativeWindow_getHeight(app->window) - (float)values[3]);
+            if (right > left && bottom > top) content ← (Viewport){left, top, right - left, bottom - top};
+        }
+        if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+        (*e)->PopLocalFrame(e, NULL);
+    } else if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    if (detach) (void)(*app->activity->vm)->DetachCurrentThread(app->activity->vm);
+    return content;
+}
+
 static Viewport content_viewport(const struct android_app *app) {
     const float window_width = (float)ANativeWindow_getWidth(app->window);
     const float window_height = (float)ANativeWindow_getHeight(app->window);
@@ -115,7 +168,7 @@ static Viewport content_viewport(const struct android_app *app) {
     const int32_t content_height = app->contentRect.bottom - app->contentRect.top;
     if (content_width <= 0 || content_height <= 0) {
         const Viewport full = {0.0f, 0.0f, window_width, window_height};
-        return full;
+        return inset_viewport(app, full);
     }
     const Viewport content = {
         (float)app->contentRect.left,
@@ -123,7 +176,7 @@ static Viewport content_viewport(const struct android_app *app) {
         (float)content_width,
         (float)content_height,
     };
-    return content;
+    return inset_viewport(app, content);
 }
 
 static float header_height(float height) {
@@ -177,7 +230,6 @@ static bool clear_exception(JNIEnv *environment, const char *operation) {
         return false;
     }
     LOG_ERROR("Android framework exception during %s", operation);
-    (*environment)->ExceptionDescribe(environment);
     (*environment)->ExceptionClear(environment);
     return true;
 }

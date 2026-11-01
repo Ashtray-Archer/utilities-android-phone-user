@@ -299,3 +299,34 @@ changed to the framework's exact-PID am crash command, with matching runtime
 crash and PID-disappearance receipts required before exact restart comparison.
 The Google API images' recorded default keyboard is Gboard on both APIs;
 this is emulator evidence and does not establish either physical keyboard state.
+
+At cfe03efcfa324c7cf75bd28d28e16bf104fc1e48 / run 41352294404,
+API 35 passes installed model loading/replacement, all 26 ART responses and
+compiled ordering-mutant rejection, and real legacy migration. Its automatic
+mode action fails before Shizuku startup. The actual trace reports a full
+480x960 viewport at origin 0,0; the screenshot places board controls inside the
+system bars. Android 15 edge-to-edge layout changes NativeActivity's content
+rectangle. This is a demonstrated UI/insets defect, not negative clipboard
+permission evidence.
+
+The next candidate intersects that rectangle with public root WindowInsets
+for system bars and display cutouts on API 35+. Earlier APIs retain their
+qualified viewport path. The exact Android 15 NativeActivity source blob
+`12d16049d1c3201e106d902fb8363d6de5951e80` reports the content view's full
+window-relative bounds; WindowInsets blob
+`561d979f2f9dc57ffae27756170d181d26d48b5b` defines the public typed query.
+The legacy renderer's ExceptionDescribe call is also removed so framework
+exception messages cannot enter product diagnostics. UI automation card-menu
+points are calibrated from actual API 29/34 screenshots; the old fixed pitch
+put API 34's last-row point in a gap. All behavioral assertions remain intact.
+
+API 34 at this same source additionally proves actual process-crash recovery,
+replacement with preserved UID/history, wrong-signer refusal and unchanged
+Gboard. The subsequent caller-control PASS labels are invalid: the independent
+Grease guard invoked a nonexistent `not` command and skipped output assertions;
+all four instrumentation outputs actually say Process crashed. The supporting
+qualifier repairs the assertion path and controller register initialization and
+requires exact result codes. Permission-mutant and UID-mutant acceptance must
+be established afresh, not inherited from those labels. The later manager UI
+launch also used an unresolvable implicit intent and is made explicit using
+the exact exported component in the pinned official APK.

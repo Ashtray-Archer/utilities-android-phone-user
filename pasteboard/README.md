@@ -80,7 +80,7 @@ Valid original `pasteboard.bin` v1 records are imported through the checked
 reducer when no new-format history exists. The original file remains until two
 independently synced modern copies exist, then is retired. An incompatible or
 damaged legacy record stops migration and preserves the original. The stable
-package is `com.isomorphisms.pasteboard`; candidate version code 13
+package is `com.isomorphisms.pasteboard`; candidate version code 14
 uses the persistent Wegert public test certificate
 `de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
 An installation with another legacy signer cannot be replaced by Android;
@@ -123,6 +123,13 @@ route must not be described as working automatic history. Foreground-only mode
 captures the current value on focus and cannot recover intermediate copies.
 
 ## Build and acceptance
+
+On Android 15+, the retained NativeActivity renderer intersects its full-window
+content rectangle with public root WindowInsets for system bars and display
+cutouts. This keeps the header and all sixteen cards outside system controls
+under enforced edge-to-edge layout. Android 14 and earlier retain the original
+content-rectangle path. Runtime layout and clipboard capture remain separate
+acceptance boundaries.
 
 Use `build-checked.grease` with explicit absolute repository, frontend, backend
 and fresh output paths. It checks the original layout, runs current model tests,
