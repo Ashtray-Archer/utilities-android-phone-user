@@ -1,0 +1,19 @@
+module GenerateConfig
+
+import Pasteboard
+
+%default total
+
+render_define : String → ℕ → String
+render_define name value = "#define " ++ name ++ " " ++ show value ++ "u\n"
+
+render_header : String
+render_header =
+  "/* Generated from idric/Pasteboard.idric by Idriç. Do not edit. */\n" ++
+  render_define "PASTEBOARD_BOARD_COUNT" board_count ++
+  render_define "PASTEBOARD_SLOT_COUNT" slot_count ++
+  render_define "PASTEBOARD_COLUMNS" columns ++
+  render_define "PASTEBOARD_STARTING_BOARD" starting_board
+
+main : IO ()
+main = putStr render_header
