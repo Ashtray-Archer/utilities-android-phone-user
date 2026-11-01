@@ -229,7 +229,7 @@ jobs:
       - name: Restore pinned Grease runtime
         run: tar -xzf downloaded-tools/pasteboard-grease.tar.gz
       - name: Restore and preflight the independent Idriç oracle with executable modes
-        run: ${{ env.GREASE }} -c 'tar -C build/pasteboard-independent -xzf build/pasteboard-independent/oracle-runtime.tar.gz; test -x build/pasteboard-independent/oracle/pasteboard-oracle; test -x build/pasteboard-independent/oracle/pasteboard-oracle_app/pasteboard-oracle.so; build/pasteboard-independent/oracle/pasteboard-oracle selftest "$PWD/build/pasteboard-independent/fixtures"'
+        run: ${{ env.GREASE }} -c 'tar -C build/pasteboard-independent -xzf build/pasteboard-independent/oracle-runtime.tar.gz; test -x build/pasteboard-independent/oracle/pasteboard-oracle; test -x build/pasteboard-independent/oracle/pasteboard-oracle_app/pasteboard-oracle.so; build/pasteboard-independent/oracle/pasteboard-oracle selftest "${{ github.workspace }}/build/pasteboard-independent/fixtures"'
       - name: Install declared acceptance-tool dependency
         run: ${{ env.GREASE }} -c 'sudo apt-get update; sudo apt-get install -y ripgrep'
       - name: Enable emulator KVM
