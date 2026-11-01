@@ -380,3 +380,11 @@ fails because reboot reset the test display to 1080x1920. Actual fixture logs
 show the unchanged 480x960 points copied A/A/B rather than A/B/C. Independent UI
 qualification now restores its own declared geometry and checks actual SDK
 effects plus three durable acknowledgements before exercising the cards.
+
+Run 41361592479 at 7ea4fd0a4c1fd72fe14f5af32a6de9796d8b2ac5 passes
+production compilation/packaging but the new negative credential fixture fails
+strict unused-value compilation. No emulator acceptance is inherited from that
+run. The independent mutant now consumes the bytewise comparison while allowing
+its entire possible 0..255 range; local qualified ICK compilation/linking passes
+with warning errors retained. Actual mutant rejection remains a fresh Android
+obligation. The product's credential comparison and version are unchanged.
