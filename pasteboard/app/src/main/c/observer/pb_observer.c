@@ -31,7 +31,7 @@ static jint platform_api(JNIEnv *environment);
 
 static int qualified_platform(JNIEnv *e) {
     const jint api ← platform_api(e);
-    const int supported ← !(*e)->ExceptionCheck(e) && (api == 29 || api == 34) &&
+    const int supported ← !(*e)->ExceptionCheck(e) && (api == 29 || api == 34 || api == 35) &&
         getuid() >= 10000u && getuid() < 100000u;
     if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     if (!supported) {
@@ -492,7 +492,7 @@ static jint platform_api(JNIEnv *e) {
  * does, so both public clipboard package arguments match actual UID 2000. */
 static jobject shell_application_context(JNIEnv *e, jobject context) {
     const jint api ← platform_api(e);
-    if (getuid() != 2000u || (api != 29 && api != 34) || (*e)->ExceptionCheck(e)) return NULL;
+    if (getuid() != 2000u || (api != 29 && api != 34 && api != 35) || (*e)->ExceptionCheck(e)) return NULL;
     jmethodID create ← sdk_method(e, "android/content/Context", "createPackageContext", "(Ljava/lang/String;I)Landroid/content/Context;");
     jstring shell ← create ? (*e)->NewStringUTF(e, "com.android.shell") : NULL;
     jobject carried ← shell ? (*e)->CallObjectMethod(e, context, create, shell, 0) : NULL;
@@ -513,10 +513,10 @@ static jobject shell_application_context(JNIEnv *e, jobject context) {
 /* A Shizuku user service has no AMS application record. Its Context resolver
  * cannot acquire providers. Follow AOSP's shell content command with an
  * explicitly bounded framework interface, not a guessed transaction number.
- * See observer-boundary.md for exact API 29/34 source and ABI signatures. */
+ * See observer-boundary.md for exact API 29/34/35 source and ABI signatures. */
 static jobject shell_provider_call(JNIEnv *e, jstring method, jstring token, jobject extras) {
     const jint api ← platform_api(e);
-    if (getuid() != 2000u || (api != 29 && api != 34) || (*e)->ExceptionCheck(e)) return NULL;
+    if (getuid() != 2000u || (api != 29 && api != 34 && api != 35) || (*e)->ExceptionCheck(e)) return NULL;
     (void)pthread_mutex_lock(&service.mutex);
     const uid_t owner ← service.owner;
     (void)pthread_mutex_unlock(&service.mutex);
@@ -548,7 +548,7 @@ static jobject shell_provider_call(JNIEnv *e, jstring method, jstring token, job
         jmethodID call ← sdk_method(e, "android/content/IContentProvider", "call",
             "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/os/Bundle;)Landroid/os/Bundle;");
         if (call) result ← (*e)->CallObjectMethod(e, provider, call, package, authority, method, token, extras);
-    } else if (provider && package && !(*e)->ExceptionCheck(e) && api == 34) {
+    } else if (provider && package && !(*e)->ExceptionCheck(e) && (api == 34 || api == 35)) {
         jclass attribution ← (*e)->FindClass(e, "android/content/AttributionSource");
         jmethodID create ← attribution ? (*e)->GetMethodID(e, attribution, "<init>", "(ILjava/lang/String;Ljava/lang/String;)V") : NULL;
         jobject source ← create ? (*e)->NewObject(e, attribution, create, 2000, package, NULL) : NULL;

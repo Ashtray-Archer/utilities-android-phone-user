@@ -18,7 +18,7 @@ Shizuku's [pinned developer guide](https://github.com/RikkaApps/Shizuku-API/blob
 states that its user service is not a valid Android application process and
 that Context content resolution does not work normally there. The companion
 therefore uses the external-provider acquisition path in Android's own shell
-`content` command. This path is confined to UID 2000, API 29 or API 34 and the
+`content` command. This path is confined to UID 2000, API 29, 34 or 35 and the
 primary Android user. Other versions and user profiles expose unavailable
 automatic capture; the explicit foreground mode remains available. This is an
 implementation/qualification boundary, not evidence that another Android
@@ -40,6 +40,19 @@ writer after ordinary process death.
 | 29 and 34 | `IActivityManager.removeContentProviderExternalAsUser(String authority, IBinder lifetime, int userId)` in cleanup |
 
 Primary source definitions are pinned to Android release tags:
+
+API 35 uses the same context factory, external acquisition/release and
+AttributionSource call shapes as the API 34 rows above. Its attribution
+constructor retains the default device ID. This source agreement permits a
+candidate implementation; only fresh API 35 execution can qualify it.
+
+| Android 15 source (`android-15.0.0_r1`) | Blob |
+| --- | --- |
+| [IContentProvider](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-15.0.0_r1/core/java/android/content/IContentProvider.java) | `ef8d0f9e18c81ebdd5b533c6b2dc35d5c4e01a55` |
+| [IActivityManager](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-15.0.0_r1/core/java/android/app/IActivityManager.aidl) | `ffb920b907abc178cf165ef70a7415fb963018e9` |
+| [ContextImpl](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-15.0.0_r1/core/java/android/app/ContextImpl.java) | `3b9a5d3b2cf2310a89e1e2bcbf0567171ec9423a` |
+| [AttributionSource](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-15.0.0_r1/core/java/android/content/AttributionSource.java) | `37f419d717c2f4dd1ee01391e68b756831a231f8` |
+| [Shell permissions](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-15.0.0_r1/packages/Shell/AndroidManifest.xml) | `04d30ed6f00108bd159e19f64bef79f3565e431b` |
 
 | Source | API 29 blob | API 34 blob |
 | --- | --- | --- |

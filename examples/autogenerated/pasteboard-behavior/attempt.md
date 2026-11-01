@@ -275,3 +275,27 @@ then checks exact Unicode/NUL bytes, metadata defaults and the copy timestamp.
 The independent focused fixture also asserts extras are absent before its real
 A/B/C/long/numbered clipboard effects. These checks must execute on Android;
 source inspection and native compilation do not establish runtime success.
+
+Cat Food's retained TAB_P10 instructions mention Android 15. No current tablet
+endpoint is available, so that is not a fresh physical API observation. The
+next candidate extends the explicitly bounded adapter to API 35 after inspecting
+the exact Android 15 context, attribution, IActivityManager, IContentProvider
+and shell-permission definitions. A fresh API 35 migration/workflow CI lane is
+added alongside API 29/34; successful lookup or similarity is not acceptance.
+
+Release preparation now separates unstripped debug libraries from installable
+payloads. NDK llvm-strip removes unnecessary symbols before the canonical APK
+producer signs the candidates; section checks reject retained debug/static
+symbol tables. Per-ABI receipts retain native pre/post-strip and APK sizes plus
+the two native digests. Android qualification consumes the stripped signed APK,
+not the debug library. This remains candidate preparation, not release authority.
+
+At 61e975827252cc54aac2ad8e9c515022bb54cc19 / run 41350659918,
+both API 29 and 34 pass actual A/B/C capture, exact long-text capture and all
+exclusion policies. Both real legacy migration jobs pass; shared JNI SDK smoke
+also passes. Neither am kill request terminates the live app/provider process,
+so the required death assertion correctly fails. The independent trigger is
+changed to the framework's exact-PID am crash command, with matching runtime
+crash and PID-disappearance receipts required before exact restart comparison.
+The Google API images' recorded default keyboard is Gboard on both APIs;
+this is emulator evidence and does not establish either physical keyboard state.

@@ -80,7 +80,7 @@ Valid original `pasteboard.bin` v1 records are imported through the checked
 reducer when no new-format history exists. The original file remains until two
 independently synced modern copies exist, then is retired. An incompatible or
 damaged legacy record stops migration and preserves the original. The stable
-package is `com.isomorphisms.pasteboard`; candidate version code 12
+package is `com.isomorphisms.pasteboard`; candidate version code 13
 uses the persistent Wegert public test certificate
 `de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
 An installation with another legacy signer cannot be replaced by Android;
@@ -115,10 +115,10 @@ system clipboard history.
 The manager attachment and user-service Binder protocols are bounded to API 13
 and the pinned Shizuku 13.6 source. Clipboard callbacks and acquisition use
 public SDK methods; external provider acquisition/call is bounded to the exact
-API 29/34 interfaces and the primary user. Other versions expose unavailable
+API 29/34/35 interfaces and the primary user. Other versions expose unavailable
 automatic capture and retain the explicit foreground mode. The actual shell Context, clipboard listener delivery,
 permissions, companion lifetime, revocation and reconnection all require fresh
-API 29/34 and physical-device qualification. Until that evidence exists this
+API 29/34/35 and physical-device qualification. Until that evidence exists this
 route must not be described as working automatic history. Foreground-only mode
 captures the current value on focus and cannot recover intermediate copies.
 
@@ -131,12 +131,15 @@ compiles a wrong-order source mutant which must fail the ordering oracle.
 `build-apk.grease` consumes those exact outputs, qualified ABI-specific ICK
 stages and NDK 27.2.12479018, then calls the canonical Android APK producer.
 It emits separate ARM64, ARM32 and x86_64 candidates with signer and packaging
-receipts. The former DEX-free `build-apk.sh`/`check-apk.sh` entry points are
+receipts. Native libraries are stripped before signing and Android qualification; debug
+copies remain only in build evidence. Per-ABI receipts record pre-strip native,
+post-strip native and final APK sizes.
+The former DEX-free `build-apk.sh`/`check-apk.sh` entry points are
 retired because they cannot represent the completed checked-model architecture.
 
 The workflow retains source/build receipts and candidates, then separately
 tests installed loader initialization, process restart and replacement on API
-29 and 34. These are not the decisive cross-application test. Independent ai-ci
+29, 34 and 35. These are not the decisive cross-application test. Independent ai-ci
 qualification, actual A/B/C copies in another application, long text, observer
 negative controls, complete UI interaction and physical C67/TAB_P10 acceptance
 remain separately reported obligations. No emulator result counts as a physical
