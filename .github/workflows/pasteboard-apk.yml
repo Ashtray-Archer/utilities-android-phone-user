@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: de8ef0457519b6a5fc00d86934d3490f69742d78
+          ref: 555d720f694f3e4c2c3c67295355e24801f564d6
           path: .ai-ci-ick
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -101,7 +101,7 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018'
       - name: Qualify owned host ICK compiler
         id: ick
-        uses: isomorphisms/ai-ci/ick-host@de8ef0457519b6a5fc00d86934d3490f69742d78
+        uses: isomorphisms/ai-ci/ick-host@555d720f694f3e4c2c3c67295355e24801f564d6
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: grease-cache
         with:
@@ -223,11 +223,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: de8ef0457519b6a5fc00d86934d3490f69742d78
+          ref: 555d720f694f3e4c2c3c67295355e24801f564d6
           path: .ai-ci-independent
           persist-credentials: false
       - name: Restore pinned Grease runtime
         run: tar -xzf downloaded-tools/pasteboard-grease.tar.gz
+      - name: Restore and preflight the independent Idriç oracle with executable modes
+        run: ${{ env.GREASE }} -c 'tar -C build/pasteboard-independent -xzf build/pasteboard-independent/oracle-runtime.tar.gz; test -x build/pasteboard-independent/oracle/pasteboard-oracle; test -x build/pasteboard-independent/oracle/pasteboard-oracle_app/pasteboard-oracle.so; build/pasteboard-independent/oracle/pasteboard-oracle selftest "$PWD/build/pasteboard-independent/fixtures"'
       - name: Install declared acceptance-tool dependency
         run: ${{ env.GREASE }} -c 'sudo apt-get update; sudo apt-get install -y ripgrep'
       - name: Enable emulator KVM

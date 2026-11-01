@@ -121,9 +121,20 @@ acceptance remain separate evidence obligations.
 
 The integration heads were re-read during qualification. Idriç, ai-ci main,
 Cat Food and android-NDK main remain at their initial inspected commits.
-android-NDK PR #41 advanced from 035452331c0f2b98391a551e0797418da5793eae
+The canonical checked-export branch advanced from 035452331c0f2b98391a551e0797418da5793eae
 to 6e1c9619a96f28494ad891a32a06edfb72f3e25b. Its code change saturates
 optimized IO Unit command World closures; this application exports a pure
 Text-to-Text reducer and does not use that command entry. The consumer keeps its
 explicit 0354523 compiler pin while qualification proceeds, rather than
 silently changing the executable boundary during a run.
+
+At e0d9e7a110c4c536e5ecd0d7eb59f0b4b9379bfc, Actions run 41332839522,
+API 29 and API 34 execute all 26 exact checked-reducer responses successfully
+and reject the actual compiled ordering mutant at case 2 with exit 73. The
+separate copy fixture now installs. A real version-2 APK upgrade preserves UID
+and produces current/recovery records with exact C/B/A contents, independently
+validated after download. The on-run migration observer stops before its
+assertions because the artifact ZIP dropped its executable mode. The next run
+restores the oracle from a mode-preserving inner archive and preflights it.
+No migration assertion is weakened; privileged A/B/C and physical acceptance
+are still unverified.
