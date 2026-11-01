@@ -43,7 +43,7 @@ compile_abi() {
 
     common_flags="-std=c17 -O2 -g -fPIC -ffunction-sections -fdata-sections"
     warnings="-Wall -Wextra -Werror -Wpedantic"
-    includes="-I$project_dir/app/src/main/c -isystem $glue_dir"
+    includes="-I$project_dir/app/src/main/c -I$project_dir/../android-clipboard -isystem $glue_dir"
 
     "$compiler" $common_flags $warnings -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
         $includes -c "$project_dir/app/src/main/c/native_main.c" \
@@ -51,13 +51,20 @@ compile_abi() {
     "$compiler" $common_flags $warnings -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
         $includes -c "$project_dir/app/src/main/c/pasteboard_model.c" \
         -o "$object_dir/pasteboard_model.o"
+    "$compiler" $common_flags $warnings -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
+        $includes -c "$project_dir/../android-clipboard/clipboard_jni.c" \
+        -o "$object_dir/clipboard_jni.o"
+    "$compiler" $common_flags $warnings -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
+        $includes -c "$project_dir/../android-clipboard/utf8.c" \
+        -o "$object_dir/clipboard_utf8.o"
     "$compiler" $common_flags -isystem "$glue_dir" \
         -c "$glue_dir/android_native_app_glue.c" \
         -o "$object_dir/native_app_glue.o"
 
     "$compiler" -shared -Wl,--no-undefined -Wl,--gc-sections -Wl,-z,relro,-z,now \
         "$object_dir/native_main.o" "$object_dir/pasteboard_model.o" \
-        "$object_dir/native_app_glue.o" -landroid -llog -lm \
+        "$object_dir/native_app_glue.o" "$object_dir/clipboard_jni.o" \
+        "$object_dir/clipboard_utf8.o" -landroid -llog -lm \
         -o "$library_dir/libpasteboard.so"
 }
 
@@ -73,7 +80,7 @@ final_apk="$output_dir/pasteboard-debug.apk"
 "$build_tools/aapt2" link -I "$platform_jar" \
     --manifest "$project_dir/app/src/main/AndroidManifest.xml" \
     --min-sdk-version 26 --target-sdk-version 36 \
-    --version-code 1 --version-name 0.1.0 -o "$base_apk"
+    --version-code 2 --version-name 0.2.0 -o "$base_apk"
 cp "$base_apk" "$unsigned_apk"
 (
     cd "$staging_dir"
@@ -85,22 +92,44 @@ cp "$base_apk" "$unsigned_apk"
 
 "$build_tools/zipalign" -f -P 16 4 "$unsigned_apk" "$aligned_apk"
 
-keystore=${ANDROID_KEYSTORE:-$work_dir/debug.keystore}
-keystore_password=${ANDROID_KEYSTORE_PASSWORD:-android}
+keystore=${ANDROID_KEYSTORE:-}
+keystore_password=${ANDROID_KEYSTORE_PASSWORD:-wegert-debug}
 key_password=${ANDROID_KEY_PASSWORD:-$keystore_password}
-key_alias=${ANDROID_KEY_ALIAS:-androiddebugkey}
-if [ -z "${ANDROID_KEYSTORE:-}" ]; then
-    keytool -genkeypair -noprompt -keystore "$keystore" \
-        -storepass "$keystore_password" -keypass "$key_password" \
-        -alias "$key_alias" -dname "CN=Android Debug,O=Android,C=US" \
-        -keyalg RSA -keysize 2048 -validity 10000 >/dev/null 2>&1
-elif [ ! -f "$keystore" ]; then
+key_alias=${ANDROID_KEY_ALIAS:-wegert-debug}
+expected_signer_sha256=${ANDROID_EXPECTED_CERT_SHA256:-DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9}
+
+if [ -z "$keystore" ]; then
+    echo "ANDROID_KEYSTORE is required; refusing to generate a throwaway APK signer" >&2
+    exit 2
+fi
+if [ ! -f "$keystore" ]; then
     echo "missing Android signing keystore: $keystore" >&2
     exit 2
 fi
 
-"$build_tools/apksigner" sign --ks "$keystore" --ks-key-alias "$key_alias" \
-    --ks-pass "pass:$keystore_password" --key-pass "pass:$key_password" \
-    --out "$final_apk" "$aligned_apk"
+signer_sha256=$(
+    keytool -list -v \
+        -keystore "$keystore" \
+        -storepass "$keystore_password" \
+        -alias "$key_alias" 2>/dev/null |
+        sed -n 's/^[[:space:]]*SHA256: //p' |
+        head -n 1
+)
+if [ "$signer_sha256" != "$expected_signer_sha256" ]; then
+    echo "unexpected Android test signer: ${signer_sha256:-missing}" >&2
+    exit 2
+fi
+
+"$build_tools/apksigner" sign \
+    --ks "$keystore" \
+    --ks-key-alias "$key_alias" \
+    --ks-pass "pass:$keystore_password" \
+    --key-pass "pass:$key_password" \
+    --out "$final_apk" \
+    "$aligned_apk"
+
+"$build_tools/apksigner" verify --verbose --print-certs "$final_apk" |
+    tee "$work_dir/apk-signing.txt"
+grep -Fq "Signer #1 certificate SHA-256 digest: $(printf '%s' "$expected_signer_sha256" | tr '[:upper:]' '[:lower:]' | tr -d ':')" "$work_dir/apk-signing.txt"
 
 echo "$final_apk"
