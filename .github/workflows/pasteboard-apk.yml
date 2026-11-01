@@ -1,0 +1,138 @@
+name: Pasteboard Android
+
+on:
+  pull_request:
+    paths:
+      - 'pasteboard/**'
+      - '.github/workflows/pasteboard-apk.yml'
+      - 'android-clipboard/**'
+  push:
+    branches: [recover-pasteboard-20261101, main]
+    paths:
+      - 'pasteboard/**'
+      - '.github/workflows/pasteboard-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  idric-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/Idric
+          ref: 58295f6fb49a823c5c0880568b30cff513d42d7b
+          path: idric-compiler
+
+      - name: Restore pinned Idriç compiler
+        id: idric-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            idric-compiler/.tools
+            idric-compiler/bootstrap-build
+            idric-compiler/build/exec
+          key: idric-${{ runner.os }}-${{ runner.arch }}-58295f6fb49a823c5c0880568b30cff513d42d7b
+
+      - name: Build pinned Idriç compiler
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        run: idric-compiler/edric bootstrap
+
+      - name: Check Idriç pasteboard contract
+        run: |
+          PATH="$PWD/idric-compiler/.tools/bin:$PATH" \
+          IDRIS2_PATH="$PWD/idric-compiler/bootstrap-build/idris2-0.8.0/prelude-0.8.0:$PWD/idric-compiler/bootstrap-build/idris2-0.8.0/base-0.8.0" \
+          IDRIS2_DATA="$PWD/idric-compiler/bootstrap-build/idris2-0.8.0/support" \
+          IDRIS2_LIBS="$PWD/idric-compiler/bootstrap-build/idris2-0.8.0/lib" \
+          IDRIC_COMPILER="$PWD/idric-compiler/build/exec/idris2" \
+          sh pasteboard/check-idric-config.sh
+
+  test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
+      ANDROID_KEYSTORE_PASSWORD: wegert-debug
+      ANDROID_KEY_PASSWORD: wegert-debug
+      ANDROID_KEY_ALIAS: wegert-debug
+      ANDROID_EXPECTED_CERT_SHA256: DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Check out the stable public Android test signer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphismes/wegert
+          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
+          path: .test-signing
+          sparse-checkout: _/build/app/wegert-debug.keystore
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018'
+
+      - name: Test shared clipboard JNI bridge on host
+        run: sh android-clipboard/run-host-tests.sh
+
+      - name: Test pasteboard model
+        run: sh pasteboard/run-host-tests.sh
+
+      - name: Build native APK
+        run: sh pasteboard/build-apk.sh
+
+      - name: Verify APK contract
+        run: sh pasteboard/ci/check-apk.sh pasteboard/app/build/outputs/apk/debug/pasteboard-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pasteboard-debug-apk
+          path: pasteboard/app/build/outputs/apk/debug/pasteboard-debug.apk
+          if-no-files-found: error
+
+  emulator-smoke:
+    needs: test-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 34]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pasteboard-debug-apk
+          path: downloaded-apk
+
+      - name: Enable KVM
+        run: sudo chmod a+rw /dev/kvm
+
+      - name: Launch native pasteboard
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: sh pasteboard/ci/emulator-smoke.sh downloaded-apk/pasteboard-debug.apk /tmp/pasteboard.png
+
+      - name: Upload smoke-test screen
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pasteboard-smoke-screen-api${{ matrix.api }}
+          path: /tmp/pasteboard.png
+          if-no-files-found: warn
