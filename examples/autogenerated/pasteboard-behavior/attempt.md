@@ -350,3 +350,13 @@ four-entry snapshot remains C/B/A/long with no new delivery instead of promoting
 A. Metadata was not retained at that failure. The independent procedure now
 checks the actual A SDK copy and saves foreground metadata plus a separate
 visible manual-capture diagnostic while keeping the original assertion failed.
+
+Run 41357353376 at 881950c7475f4a1f6a6892a75c57ab770a17d4b3
+shows the foreground test reading too early: native focus validation takes
+about two seconds before a successful SDK read. The later exact snapshot
+contains A/C/B/long and the independent oracle confirms two new deliveries,
+one from focus and one from the manual diagnostic. No application repair is
+needed for that timing. The qualifier now awaits the exact durable effects of
+native UI commands, including one focus capture, one explicit manual capture,
+real SDK card-copy readback and all saved pin/move/delete/archive states.
+Assertions remain exact and bounded; product clipboard acquisition is unchanged.
