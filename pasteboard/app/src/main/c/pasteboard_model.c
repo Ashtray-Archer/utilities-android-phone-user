@@ -1,26 +1,16 @@
 #include "pasteboard_model.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static const unsigned char file_magic[8] = {'P', 'B', 'O', 'A', 'R', 'D', '1', '\0'};
 
-static size_t utf8_prefix_bytes(const char *text, size_t maximum) {
-    const size_t length = strlen(text);
-    if (length <= maximum) {
-        return length;
-    }
-    size_t cut = maximum;
-    while (cut > 0u && (((unsigned char)text[cut] & 0xC0u) == 0x80u)) {
-        --cut;
-    }
-    return cut;
-}
-
-static void copy_text(char destination[PASTEBOARD_TEXT_CAPACITY], const char *source) {
-    const size_t bytes = utf8_prefix_bytes(source, PASTEBOARD_TEXT_CAPACITY - 1u);
-    memcpy(destination, source, bytes);
-    destination[bytes] = '\0';
+static void copy_text(char destination[PASTEBOARD_TEXT_CAPACITY],
+                      const char *source, size_t length) {
+    memcpy(destination, source, length);
+    destination[length] = '\0';
 }
 
 static bool valid_board(size_t board_index) {
@@ -83,6 +73,17 @@ bool pasteboard_capture(PasteboardState *state, size_t board_index,
     if (!valid_board(board_index) || text == NULL || text[0] == '\0') {
         return false;
     }
+    /*
+     * The fixed-slot model cannot hold more than 8191 content bytes.
+     * Reject at the boundary; never silently shorten a captured clip.
+     */
+    size_t length = 0u;
+    while (length < PASTEBOARD_TEXT_CAPACITY && text[length] != '\0') {
+        ++length;
+    }
+    if (length == PASTEBOARD_TEXT_CAPACITY) {
+        return false;
+    }
     const uint64_t hash = pasteboard_hash_text(text);
     if (hash == state->last_clipboard_hash) {
         return false;
@@ -90,7 +91,7 @@ bool pasteboard_capture(PasteboardState *state, size_t board_index,
 
     PasteboardEntry entry;
     memset(&entry, 0, sizeof(entry));
-    copy_text(entry.text, text);
+    copy_text(entry.text, text, length);
     if (entry.text[0] == '\0') {
         return false;
     }
@@ -151,8 +152,34 @@ static bool read_exact(FILE *file, void *buffer, size_t bytes) {
 }
 
 bool pasteboard_save(const PasteboardState *state, const char *path) {
-    FILE *file = fopen(path, "wb");
+    if (state == NULL || path == NULL || path[0] == '\0') {
+        return false;
+    }
+    const size_t path_length = strlen(path);
+    static const char suffix[] = ".tmp.XXXXXX";
+    if (path_length > SIZE_MAX - sizeof(suffix)) {
+        return false;
+    }
+    char *temporary = malloc(path_length + sizeof(suffix));
+    if (temporary == NULL) {
+        return false;
+    }
+    memcpy(temporary, path, path_length);
+    memcpy(temporary + path_length, suffix, sizeof(suffix));
+
+    /*
+     * Write a distinct private sibling, sync it and rename over the old
+     * state only after the whole new image has been written successfully.
+     * A crash before rename leaves the last committed state intact.
+     */
+    const int descriptor = mkstemp(temporary);
+    FILE *file = descriptor < 0 ? NULL : fdopen(descriptor, "wb");
     if (file == NULL) {
+        if (descriptor >= 0) {
+            (void)close(descriptor);
+            (void)unlink(temporary);
+        }
+        free(temporary);
         return false;
     }
     const uint32_t version = PASTEBOARD_FILE_VERSION;
@@ -172,12 +199,21 @@ bool pasteboard_save(const PasteboardState *state, const char *path) {
                  write_exact(file, entry->text, length);
         }
     }
+    if (fflush(file) != 0 || fsync(descriptor) != 0) {
+        ok = false;
+    }
     if (fclose(file) != 0) {
         ok = false;
     }
+    if (ok && rename(temporary, path) != 0) {
+        ok = false;
+    }
+    if (!ok) {
+        (void)unlink(temporary);
+    }
+    free(temporary);
     return ok;
 }
-
 bool pasteboard_load(PasteboardState *state, const char *path) {
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
