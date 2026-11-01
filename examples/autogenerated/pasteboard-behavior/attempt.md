@@ -341,3 +341,12 @@ result-code assertion stops: Android's pretty instrumentation output omits the
 code when a stream is present. The qualifier now requests raw output and keeps
 both exact assertions. Application code and candidate version 14 are unchanged
 for this qualification-only follow-up; fresh receipts must still name its head.
+
+At b6f74ce473f8e74a4e5f33da78ce924355d4ab51 / run 41355463463,
+API 35 passes the corrected actual caller/permission controls and both compiled
+mutants, pause/session controls, companion crash/reconnection and real manager
+revocation/regrant. It then fails explicit foreground fallback: the valid
+four-entry snapshot remains C/B/A/long with no new delivery instead of promoting
+A. Metadata was not retained at that failure. The independent procedure now
+checks the actual A SDK copy and saves foreground metadata plus a separate
+visible manual-capture diagnostic while keeping the original assertion failed.
