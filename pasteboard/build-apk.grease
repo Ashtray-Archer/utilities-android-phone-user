@@ -19,8 +19,8 @@ test -s "$checked/assets/pasteboard-behavior.dex"
 setglobal ENV.ANDROID_HOME = sdk
 setglobal ENV.ANDROID_BUILD_TOOLS = "$sdk/build-tools/36.0.0"
 setglobal ENV.ANDROID_PACKAGE_ID = 'com.isomorphisms.pasteboard'
-setglobal ENV.ANDROID_VERSION_CODE = '14'
-setglobal ENV.ANDROID_VERSION_NAME = '0.14.0-candidate'
+setglobal ENV.ANDROID_VERSION_CODE = '15'
+setglobal ENV.ANDROID_VERSION_NAME = '0.15.0-candidate'
 setglobal ENV.ANDROID_MIN_SDK = '26'
 setglobal ENV.ANDROID_TARGET_SDK = '36'
 setglobal ENV.ANDROID_EXPECTED_LABEL = 'Pasteboard'
@@ -67,5 +67,5 @@ for abi in arm64-v8a armeabi-v7a x86_64 {
   sha256sum "$output/debug/$abi/libpasteboard.so" "$output/native/$abi/libpasteboard.so" > "$output/native-$abi.sha256"
 }
 cp "$checked/consumer-commit.txt" "$checked/frontend-commit.txt" "$checked/backend-commit.txt" "$checked/digests.txt" "$output/"
-printf 'package\tcom.isomorphisms.pasteboard\nversion_code\t14\nsigner_sha256\tde9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9\nphysical_C67\tNOT_VERIFIED\nphysical_TAB_P10\tNOT_VERIFIED\n' > "$output/identity.tsv"
+printf 'package\tcom.isomorphisms.pasteboard\nversion_code\t15\nsigner_sha256\tde9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9\nphysical_C67\tNOT_VERIFIED\nphysical_TAB_P10\tNOT_VERIFIED\n' > "$output/identity.tsv"
 cat "$output/identity.tsv"

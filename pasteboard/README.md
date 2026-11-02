@@ -80,7 +80,7 @@ Valid original `pasteboard.bin` v1 records are imported through the checked
 reducer when no new-format history exists. The original file remains until two
 independently synced modern copies exist, then is retired. An incompatible or
 damaged legacy record stops migration and preserves the original. The stable
-package is `com.isomorphisms.pasteboard`; candidate version code 14
+package is `com.isomorphisms.pasteboard`; candidate version code 15
 uses the persistent Wegert public test certificate
 `de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
 An installation with another legacy signer cannot be replaced by Android;
@@ -106,8 +106,10 @@ Starting a new session after Pause or foreground-only mode atomically replaces
 the private capability before checked capture is re-enabled. The companion
 discards queued events authenticated for an earlier session. Ordinary process
 restarts keep the current credential. Heartbeats expose connection loss and
-permit authorized reconnection. Pending unacknowledged events from the current
-session remain in companion memory; a companion crash can lose
+permit authorized reconnection. An identical configuration retry retains the
+registered listener, its callback epoch and pending queue. Successful
+authenticated delivery also refreshes connection status. Pending events remain
+in companion memory; a companion crash can lose
 that pending queue and clipboard values copied during downtime. History already
 acknowledged remains local and durable. Reconnection cannot reconstruct missed
 system clipboard history.

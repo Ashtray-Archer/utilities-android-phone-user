@@ -6,12 +6,37 @@ var adb = ARGV[1]
 var output = ARGV[2]
 if test -e "$output" { echo 'refusing reused emulator evidence' >&2; exit 2 }
 mkdir -p "$output"
+"$adb" -s emulator-5554 shell getprop ro.kernel.qemu | tr -d '\r' | rg -x 1
+"$adb" -s emulator-5554 shell id -u | tr -d '\r' | rg -x 2000
 "$adb" -s emulator-5554 shell getprop ro.build.fingerprint > "$output/fingerprint.txt"
 "$adb" -s emulator-5554 shell getprop ro.build.version.sdk > "$output/api.txt"
 sha256sum "$apk" > "$output/apk.sha256"
+proc launch(label) {
+  var launched = false
+  for attempt in @(seq 1 3) {
+    try {
+      "$adb" -s emulator-5554 shell am start -W -n com.isomorphisms.pasteboard/android.app.NativeActivity \
+        > "$output/$label.attempt-$attempt.txt" 2>&1
+    }
+    var result = _error.code
+    printf 'remote_exit\t%s\n' "$result" > "$output/$label.attempt-$attempt.status.tsv"
+    if (result === 0) {
+      cp "$output/$label.attempt-$attempt.txt" "$output/$label.txt"
+      setvar launched = true
+      break
+    }
+    "$adb" -s emulator-5554 logcat -d -v threadtime > "$output/$label.attempt-$attempt.logcat.txt"
+    # Only the observed Activity-service connection failure permits a retry.
+    # Target crashes, unresolved components and every other error still fail.
+    try { rg -q -F 'cmd: Failure calling service activity: Broken pipe (32)' "$output/$label.attempt-$attempt.txt" }
+    if (_error.code !== 0) { cat "$output/$label.attempt-$attempt.txt"; exit 1 }
+    sleep 2
+  }
+  if (not launched) { echo 'FAIL Activity service connection unavailable after bounded launch attempts' >&2; exit 1 }
+}
 "$adb" -s emulator-5554 install -r "$apk" > "$output/install.txt"
 "$adb" -s emulator-5554 logcat -c
-"$adb" -s emulator-5554 shell am start -W -n com.isomorphisms.pasteboard/android.app.NativeActivity > "$output/start.txt"
+launch start
 sleep 5
 "$adb" -s emulator-5554 shell pidof com.isomorphisms.pasteboard > "$output/pid.txt"
 test -s "$output/pid.txt"
@@ -23,12 +48,12 @@ if (storage_result !== 0) { echo 'FAIL installed checked behavior did not create
 rg -a -q -F 'PBHIST2' "$output/history.bin"
 rg -a -q -F '3:PB3' "$output/history.bin"
 "$adb" -s emulator-5554 shell am force-stop com.isomorphisms.pasteboard
-"$adb" -s emulator-5554 shell am start -W -n com.isomorphisms.pasteboard/android.app.NativeActivity > "$output/restart.txt"
+launch restart
 sleep 3
 "$adb" -s emulator-5554 exec-out run-as com.isomorphisms.pasteboard cat files/history.v2 > "$output/restarted-history.bin"
 cmp "$output/history.bin" "$output/restarted-history.bin"
 "$adb" -s emulator-5554 install -r "$apk" > "$output/replacement-install.txt"
-"$adb" -s emulator-5554 shell am start -W -n com.isomorphisms.pasteboard/android.app.NativeActivity > "$output/replacement-start.txt"
+launch replacement-start
 sleep 3
 "$adb" -s emulator-5554 exec-out run-as com.isomorphisms.pasteboard cat files/history.v2 > "$output/replaced-history.bin"
 cmp "$output/history.bin" "$output/replaced-history.bin"

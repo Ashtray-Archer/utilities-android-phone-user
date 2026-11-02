@@ -344,6 +344,7 @@ jobject pb_observer_provider_request(JNIEnv *e, jstring name, jstring token,
         strcmp(view.outcome, "empty") == 0 || strcmp(view.outcome, "own_copy") == 0 || unsupported);
     if (accepted) {
         (void)pthread_mutex_lock(&app_mutex);
+        connected ← 1;
         last_heartbeat ← time(NULL);
         (void)snprintf(app_status, sizeof(app_status), "%s", unsupported
             ? "Embedded NUL clipboard item skipped" : "Authorized observer active");
@@ -393,6 +394,11 @@ static struct {
     ClipboardEvent *head;
     ClipboardEvent *tail;
 } service ← {.mutex = PTHREAD_MUTEX_INITIALIZER, .changed = PTHREAD_COND_INITIALIZER};
+
+/* Serialize configuration without holding the callback/queue mutex across
+ * framework calls. Same-session retries must not invalidate an in-flight
+ * clipboard read or replace an already registered listener. */
+static pthread_mutex_t configuration_mutex ← PTHREAD_MUTEX_INITIALIZER;
 
 static jint caller_uid(JNIEnv *e) {
     jclass binder ← (*e)->FindClass(e, "android/os/Binder");
@@ -724,6 +730,19 @@ static int start_listener(JNIEnv *e, jstring token, jlong capture_since) {
         free(capability.bytes);
         return 0;
     }
+    (void)pthread_mutex_lock(&configuration_mutex);
+    (void)pthread_mutex_lock(&service.mutex);
+    const int retained ← service.registered && !service.stopping && service.listener &&
+        service.worker_started && service.capture_since == (int64_t)capture_since &&
+        memcmp(service.token, capability.bytes, 64u) == 0;
+    if (retained) (void)pthread_cond_broadcast(&service.changed);
+    (void)pthread_mutex_unlock(&service.mutex);
+    if (retained) {
+        (void)pthread_mutex_unlock(&configuration_mutex);
+        free(capability.bytes);
+        __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard listener configuration retained=1 caller_uid=%d", caller_uid(e));
+        return 1;
+    }
     stop_listener(e);
     jclass type ← (*e)->FindClass(e, "com/isomorphisms/pasteboard/ClipboardListener");
     jmethodID constructor ← type ? (*e)->GetMethodID(e, type, "<init>", "()V") : NULL;
@@ -757,6 +776,7 @@ static int start_listener(JNIEnv *e, jstring token, jlong capture_since) {
         }
         if (!valid) stop_listener(e);
     } else if (held) (*e)->DeleteGlobalRef(e, held);
+    (void)pthread_mutex_unlock(&configuration_mutex);
     free(capability.bytes);
     __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard listener registration accepted=%d caller_uid=%d", valid, caller_uid(e));
     return valid;
@@ -846,6 +866,7 @@ Java_com_isomorphisms_pasteboard_ClipboardListener_onPrimaryClipChanged(JNIEnv *
         clipboard_free(text); clipboard_free(details.origin_utf8); return;
     }
     if (details.copied_at_millis <= 0 || details.copied_at_millis < capture_since) {
+        __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard callback excluded at session boundary");
         clipboard_free(text); clipboard_free(details.origin_utf8);
         if (details.copied_at_millis <= 0) stop_listener(e);
         return;
@@ -858,6 +879,7 @@ Java_com_isomorphisms_pasteboard_ClipboardListener_onPrimaryClipChanged(JNIEnv *
     event->origin ← (PBText){details.origin_utf8, details.origin_length};
     char fingerprint[65];
     if (!event_fingerprint(e, event->text, event->origin, fingerprint)) {
+        __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard callback fingerprint failed");
         if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
         free_event(event); stop_listener(e); return;
     }
@@ -865,6 +887,7 @@ Java_com_isomorphisms_pasteboard_ClipboardListener_onPrimaryClipChanged(JNIEnv *
     (void)pthread_mutex_lock(&service.mutex);
     if (!service.registered || service.epoch != epoch) {
         (void)pthread_mutex_unlock(&service.mutex);
+        __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard callback discarded after configuration changed");
         free_event(event);
         return;
     }
@@ -875,4 +898,5 @@ Java_com_isomorphisms_pasteboard_ClipboardListener_onPrimaryClipChanged(JNIEnv *
     service.tail ← event;
     (void)pthread_cond_broadcast(&service.changed);
     (void)pthread_mutex_unlock(&service.mutex);
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardObserver", "clipboard callback enqueued=1");
 }

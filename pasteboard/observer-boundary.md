@@ -81,6 +81,13 @@ requires the app owner's actual Binder UID, a bounded Parcel with no file
 descriptors, exactly one credential String and one positive capture-since Long.
 The capture-since value is the synced private credential file's creation/write
 time, retained across ordinary app restart and renewed before explicit Resume.
+An identical credential/cutoff configuration retains a healthy registered
+listener and its callback epoch. Configuration calls are serialized outside the
+callback/queue mutex, so retrying a connection cannot invalidate a current read.
+An acknowledged authenticated event restores connection state as well as its
+heartbeat time. Changed credentials, explicit stops and actual listener failures
+still require a new registration. These candidate-15 repairs require fresh
+Android receipts; the earlier two-delivery failure remains negative evidence.
 Shizuku's normal version-code
 replacement restarts an old companion after an application upgrade. ARM32 APKs
 request a 32-bit app_process; ARM64 and x86-64 APKs request a 64-bit process.

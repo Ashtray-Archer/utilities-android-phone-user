@@ -388,3 +388,29 @@ run. The independent mutant now consumes the bytewise comparison while allowing
 its entire possible 0..255 range; local qualified ICK compilation/linking passes
 with warning errors retained. Actual mutant rejection remains a fresh Android
 obligation. The product's credential comparison and version are unchanged.
+
+Run 41362536328 at eb820bce2f371469ef40b0212fdf864c515c332a passes all
+migration lanes. API 34 executes and rejects the new credential mutant, then
+passes pause/revocation/reconnection, expiration and reboot. Its post-reboot UI
+setup receives actual SDK A/B/C effects but acknowledges only two deliveries;
+the exact saved order is B/A/C/long. C's callback reads successfully while the
+companion repeatedly re-registers its listener. Source permits configuration to
+invalidate the callback epoch between acquisition and enqueue, and a successful
+event previously refreshed time without restoring the connected flag.
+
+Candidate 15 serializes configuration, retains a healthy identical listener and
+epoch, and treats an authenticated acknowledged event as connection evidence.
+Real changed sessions still replace registration and reject stale queued
+credentials. Static callback-stage diagnostics distinguish filtering, failed
+fingerprinting, configuration invalidation and enqueue without logging content,
+timestamps, identities or digests. Local full ICK x86-64 compile/link passes with
+all warning errors enabled. New ABI APK and Android evidence is required.
+
+The same run's API 29 launch fails with an Activity-service broken connection
+after successful replacement; API 35's screenshot instead shows the unrelated
+Pixel Launcher ANR intercepting input. The smoke harness retries only that exact
+service error, retaining each result/log. Independent mode selection waits for
+the actual durable flag and can close only a positively identified Pixel
+Launcher ANR before repeating the visible action. A Pasteboard ANR or other
+failure remains failed. Prior failed artifacts are retained in their original
+run rather than overwritten through a retry.
