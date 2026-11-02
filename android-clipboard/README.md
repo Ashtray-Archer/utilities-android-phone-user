@@ -2,6 +2,13 @@
 
 Small C/JNI boundary for Android's real `ClipboardManager`. Application editing, terminal, and message semantics stay native; this directory owns only Android framework lookup, text conversion, clipboard calls, and explicit failure reporting.
 
+The details API reads item count, sensitive-content metadata and an optional
+`com.isomorphisms.clipboard.ORIGIN` string from the same ClipData as the text.
+The origin string is separately malloc-owned. The tagged setter attaches that
+advisory metadata before `setPrimaryClip`; the ordinary setter retains its
+original contract. Consumers must validate any hint against their own exact
+retained text. Clipboard metadata is public and is never authentication.
+
 ## Native surface
 
 ```c

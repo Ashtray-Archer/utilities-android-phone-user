@@ -4,3 +4,10 @@
 *.iml
 *.o
 .idea/
+
+# Pinned CI dependencies have their own source/signing receipts.
+/.ai-ci-ick/
+/.ai-ci-independent/
+/.ick-host-source/
+/.test-signing/
+/.tools/

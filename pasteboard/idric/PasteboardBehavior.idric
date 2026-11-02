@@ -1,0 +1,367 @@
+module PasteboardBehavior
+
+import Data.Text
+import Data.List
+
+-- The renderer and file adapter exchange framed text with this reducer. They
+-- never decide duplicate, movement, protection or retention behavior.
+public export
+record RetainedEntry where
+  constructor RetainEntry
+  identity : Text
+  contents : Text
+  captured_at : Text
+  board : Int32
+  protected : Bool
+
+public export
+record History where
+  constructor RetainHistory
+  selected_board : Int32
+  last_seen : Text
+  capture_enabled : Bool
+  automatic_requested : Bool
+  delivered : List Text
+  entries : List RetainedEntry
+
+export
+initial_history : History
+initial_history = RetainHistory 1 "" True False [] []
+
+record FramedValue where
+  constructor ReadValue
+  value : Text
+  remaining : List Char
+
+record FramedLength where
+  constructor ReadLength
+  count : Int32
+  remaining : List Char
+
+digit_value : Char → Maybe Int32
+digit_value '0' = Just 0
+digit_value '1' = Just 1
+digit_value '2' = Just 2
+digit_value '3' = Just 3
+digit_value '4' = Just 4
+digit_value '5' = Just 5
+digit_value '6' = Just 6
+digit_value '7' = Just 7
+digit_value '8' = Just 8
+digit_value '9' = Just 9
+digit_value _ = Nothing
+
+-- Reject overflow before multiplication; 2,147,483,647 is the boundary's
+-- positive signed Int32 limit, not a per-entry storage allocation.
+parse_length : List Char → Int32 → Bool → Maybe FramedLength
+parse_length [] count started = Nothing
+parse_length (':' :: rest) count started =
+  if started then Just (ReadLength count rest) else Nothing
+parse_length (character :: rest) count started = do
+  digit ← digit_value character
+  if count > 214748364 || (count ≟ 214748364 && digit > 7)
+    then Nothing
+    else parse_length rest (count × 10 + digit) True
+
+take_value : List Char → Int32 → List Char → Maybe FramedValue
+take_value remaining count reversed =
+  if count ≟ 0 then Just (ReadValue (pack (reverse reversed)) remaining)
+  else case remaining of
+    [] ⇒ Nothing
+    character :: rest ⇒ take_value rest (count - 1) (character :: reversed)
+
+read_frame : List Char → Maybe FramedValue
+read_frame characters = do
+  size ← parse_length characters 0 False
+  take_value size.remaining size.count []
+
+decode_with_fuel : List Char → List Char → Maybe (List Text)
+decode_with_fuel fuel [] = Just []
+decode_with_fuel [] remaining = Nothing
+decode_with_fuel (_ :: fuel) remaining = do
+  field ← read_frame remaining
+  fields ← decode_with_fuel fuel field.remaining
+  pure (field.value :: fields)
+
+export
+decode_fields : Text → Maybe (List Text)
+decode_fields text = let characters = unpack text in
+  decode_with_fuel characters characters
+
+character_count : List Char → Int32 → Int32
+character_count [] count = count
+character_count (_ :: rest) count = character_count rest (count + 1)
+
+export
+frame : Text → Text
+frame text = show (character_count (unpack text) 0) ++ ":" ++ text
+
+export
+encode_fields : List Text → Text
+encode_fields [] = ""
+encode_fields (field :: rest) = frame field ++ encode_fields rest
+
+board_text : Int32 → Text
+board_text board = if board ≟ 0 then "0" else
+  if board ≟ 1 then "1" else if board ≟ 2 then "2" else "archive"
+
+parse_board : Text → Maybe Int32
+parse_board "0" = Just 0
+parse_board "1" = Just 1
+parse_board "2" = Just 2
+parse_board "archive" = Just (-1)
+parse_board _ = Nothing
+
+flag_text : Bool → Text
+flag_text True = "1"
+flag_text False = "0"
+
+parse_flag : Text → Maybe Bool
+parse_flag "1" = Just True
+parse_flag "0" = Just False
+parse_flag _ = Nothing
+
+valid_text : Text → Bool
+valid_text text = not (elem '\0' (unpack text))
+
+encode_entry : RetainedEntry → Text
+encode_entry entry = encode_fields
+  [entry.identity, board_text entry.board, flag_text entry.protected,
+   entry.captured_at, entry.contents]
+
+decode_entry : Text → Maybe RetainedEntry
+decode_entry text = do
+  fields ← decode_fields text
+  case fields of
+    [identity, position, protection, timestamp, contents] ⇒ do
+      board ← parse_board position
+      protected ← parse_flag protection
+      if identity ≟ "" || contents ≟ "" ||
+         not (valid_text identity && valid_text timestamp && valid_text contents)
+        then Nothing
+        else Just (RetainEntry identity contents timestamp board protected)
+    _ ⇒ Nothing
+
+decode_entries : List Text → Maybe (List RetainedEntry)
+decode_entries [] = Just []
+decode_entries (text :: rest) = do
+  entry ← decode_entry text
+  entries ← decode_entries rest
+  pure (entry :: entries)
+
+visible_count : Int32 → List RetainedEntry → Int32
+visible_count board [] = 0
+visible_count board (entry :: rest) =
+  (if entry.board ≟ board then 1 else 0) + visible_count board rest
+
+unique_entries : List RetainedEntry → Bool
+unique_entries [] = True
+unique_entries (entry :: rest) =
+  all (\other ⇒ not (entry.identity ≟ other.identity) &&
+                 not (entry.contents ≟ other.contents)) rest &&
+  unique_entries rest
+
+unique_deliveries : List Text → Bool
+unique_deliveries [] = True
+unique_deliveries (identity :: rest) =
+  not (identity ≟ "") && valid_text identity &&
+  not (elem identity rest) && unique_deliveries rest
+
+export
+encode_history : History → Text
+encode_history history = encode_fields
+  ["PB3", board_text history.selected_board, history.last_seen,
+   flag_text history.capture_enabled, flag_text history.automatic_requested, encode_fields history.delivered,
+   encode_fields (map encode_entry history.entries)]
+
+export
+decode_history : Text → Maybe History
+decode_history text = do
+  fields ← decode_fields text
+  case fields of
+    ["PB3", selected, seen, enabled, automatic, deliveries, retained] ⇒ do
+      board ← parse_board selected
+      capture_enabled ← parse_flag enabled
+      automatic_requested ← parse_flag automatic
+      delivered ← decode_fields deliveries
+      encoded_entries ← decode_fields retained
+      entries ← decode_entries encoded_entries
+      if board < 0 || not (valid_text seen) ||
+         visible_count 0 entries > 16 || visible_count 1 entries > 16 ||
+         visible_count 2 entries > 16 || not (unique_entries entries) ||
+         not (unique_deliveries delivered)
+        then Nothing
+        else Just (RetainHistory board seen capture_enabled automatic_requested delivered entries)
+    _ ⇒ Nothing
+
+find_identity : Text → List RetainedEntry → Maybe RetainedEntry
+find_identity identity [] = Nothing
+find_identity identity (entry :: rest) =
+  if entry.identity ≟ identity then Just entry else find_identity identity rest
+
+find_contents : Text → List RetainedEntry → Maybe RetainedEntry
+find_contents contents [] = Nothing
+find_contents contents (entry :: rest) =
+  if entry.contents ≟ contents then Just entry else find_contents contents rest
+
+without_identity : Text → List RetainedEntry → List RetainedEntry
+without_identity identity = filter (\entry ⇒ not (entry.identity ≟ identity))
+
+-- Scan oldest first. Only the visible placement changes; archived bytes remain.
+archive_oldest : Int32 → List RetainedEntry → Maybe (List RetainedEntry)
+archive_oldest board [] = Nothing
+archive_oldest board (entry :: rest) =
+  if entry.board ≟ board && not entry.protected
+    then Just ({ board := -1 } entry :: rest)
+    else do
+      changed ← archive_oldest board rest
+      pure (entry :: changed)
+
+make_room : Int32 → List RetainedEntry → Maybe (List RetainedEntry)
+make_room board entries =
+  if visible_count board entries < 16 then Just entries
+  else map reverse (archive_oldest board (reverse entries))
+
+record Transition where
+  constructor TransitionTo
+  outcome : Text
+  history : History
+
+remember_delivery : History → Text → Text → History
+remember_delivery history delivery contents =
+  { last_seen := contents, delivered := delivery :: history.delivered } history
+
+copied_entry_matches : History → Text → Text → Bool
+copied_entry_matches history origin contents = case find_identity origin history.entries of
+  Just entry ⇒ not (origin ≟ "") && entry.contents ≟ contents
+  Nothing ⇒ False
+
+capture_entry : History → Text → Text → Text → Text → Transition
+capture_entry history delivery timestamp contents origin =
+  if not history.capture_enabled then TransitionTo "paused" history else
+  if delivery ≟ "" || not (valid_text delivery && valid_text timestamp &&
+                             valid_text contents)
+    then TransitionTo "unsupported_text" history else
+  if elem delivery history.delivered then TransitionTo "replayed" history else
+  -- Public metadata is only a no-reorder hint for already retained exact text.
+  -- It grants no authority and can never suppress different/new contents.
+  if copied_entry_matches history origin contents then TransitionTo "own_copy"
+    (remember_delivery history delivery contents) else
+  if contents ≟ "" then TransitionTo "empty"
+    (remember_delivery history delivery "") else
+  if contents ≟ history.last_seen then TransitionTo "duplicate"
+    (remember_delivery history delivery contents) else
+  let previous = find_contents contents history.entries
+      entry = case previous of
+        Nothing ⇒ RetainEntry delivery contents timestamp history.selected_board False
+        Just existing ⇒ { captured_at := timestamp } existing
+      destination = if entry.board < 0 then history.selected_board else entry.board
+      remaining = without_identity entry.identity history.entries
+      next = remember_delivery history delivery contents in
+    -- A delivery identity is not permitted to alias a different retained entry.
+    case find_identity delivery history.entries of
+      Just collision ⇒ if not (collision.contents ≟ contents)
+        then TransitionTo "identity_conflict" history
+        else place_capture next entry destination remaining
+      Nothing ⇒ place_capture next entry destination remaining
+  where
+    place_capture : History → RetainedEntry → Int32 → List RetainedEntry → Transition
+    place_capture next entry destination remaining = case make_room destination remaining of
+      Nothing ⇒ TransitionTo "archived" ({ entries :=
+        { board := -1 } entry :: remaining } next)
+      Just room ⇒ TransitionTo "captured" ({ entries :=
+        { board := destination } entry :: room } next)
+
+move_entry : History → Text → Int32 → Bool → Transition
+move_entry history identity destination restoring =
+  if destination < 0 || destination > 2 then TransitionTo "invalid_board" history
+  else case find_identity identity history.entries of
+    Nothing ⇒ TransitionTo "missing_entry" history
+    Just entry ⇒
+      if (restoring && entry.board < 0) ||
+         (not restoring && (destination ≟ entry.board + 1 ||
+                             destination ≟ entry.board - 1) && entry.board >= 0)
+        then case make_room destination (without_identity identity history.entries) of
+          Nothing ⇒ TransitionTo "protected_board_full" history
+          Just room ⇒ TransitionTo "moved" ({ entries :=
+            { board := destination } entry :: room } history)
+        else TransitionTo "invalid_move" history
+
+protect_entry : History → Text → Transition
+protect_entry history identity = case find_identity identity history.entries of
+  Nothing ⇒ TransitionTo "missing_entry" history
+  Just entry ⇒ TransitionTo (if entry.protected then "unprotected" else "protected")
+    ({ entries := map (\other ⇒ if other.identity ≟ identity
+      then { protected := not other.protected } other else other) history.entries } history)
+
+delete_entry : History → Text → Transition
+delete_entry history identity = case find_identity identity history.entries of
+  Nothing ⇒ TransitionTo "missing_entry" history
+  Just entry ⇒ if entry.protected then TransitionTo "entry_protected" history
+    else TransitionTo "deleted"
+      ({ entries := without_identity identity history.entries,
+         last_seen := if history.last_seen ≟ entry.contents then "" else history.last_seen } history)
+
+dispatch : History → Text → List Text → Transition
+dispatch history "capture" [delivery, timestamp, contents] =
+  capture_entry history delivery timestamp contents ""
+dispatch history "capture" [delivery, timestamp, contents, origin] =
+  capture_entry history delivery timestamp contents origin
+dispatch history "capture_foreground" [delivery, timestamp, contents] =
+  if history.automatic_requested then TransitionTo "automatic_pending" history
+  else capture_entry history delivery timestamp contents ""
+dispatch history "capture_foreground" [delivery, timestamp, contents, origin] =
+  if history.automatic_requested then TransitionTo "automatic_pending" history
+  else capture_entry history delivery timestamp contents origin
+dispatch history "capture_observer" [delivery, timestamp, contents] =
+  if history.automatic_requested then capture_entry history delivery timestamp contents ""
+  else TransitionTo "background_disabled" history
+dispatch history "capture_observer" [delivery, timestamp, contents, origin] =
+  if history.automatic_requested then capture_entry history delivery timestamp contents origin
+  else TransitionTo "background_disabled" history
+dispatch history "request_automatic" [] = TransitionTo "automatic_requested"
+  ({ automatic_requested := True } history)
+dispatch history "foreground_only" [] = TransitionTo "foreground_only"
+  ({ automatic_requested := False } history)
+dispatch history "select" [destination] = case parse_board destination of
+  Just board ⇒ if board >= 0 then TransitionTo "selected"
+    ({ selected_board := board } history) else TransitionTo "invalid_board" history
+  Nothing ⇒ TransitionTo "invalid_board" history
+dispatch history "move" [identity, destination] = case parse_board destination of
+  Just board ⇒ move_entry history identity board False
+  Nothing ⇒ TransitionTo "invalid_board" history
+dispatch history "restore" [identity] =
+  move_entry history identity history.selected_board True
+dispatch history "protect" [identity] = protect_entry history identity
+dispatch history "delete" [identity] = delete_entry history identity
+dispatch history "seen" [identity] = case find_identity identity history.entries of
+  Nothing ⇒ TransitionTo "missing_entry" history
+  Just entry ⇒ TransitionTo "seen" ({ last_seen := entry.contents } history)
+dispatch history "copy_failed" [identity] = case find_identity identity history.entries of
+  Nothing ⇒ TransitionTo "missing_entry" history
+  Just entry ⇒ TransitionTo "copy_failed"
+    (if history.last_seen ≟ entry.contents then { last_seen := "" } history else history)
+dispatch history "pause" [] = TransitionTo "paused" ({ capture_enabled := False } history)
+dispatch history "resume" [] = TransitionTo "resumed" ({ capture_enabled := True } history)
+dispatch history "clear_archive" [] =
+  let removing_seen = any (\entry ⇒ entry.board < 0 && not entry.protected &&
+        entry.contents ≟ history.last_seen) history.entries in
+  TransitionTo "archive_cleared"
+    ({ entries := filter (\entry ⇒ entry.board >= 0 || entry.protected) history.entries,
+       last_seen := if removing_seen then "" else history.last_seen } history)
+dispatch history "validate" [] = TransitionTo "valid" history
+dispatch history action arguments = TransitionTo "invalid_action" history
+
+%export "dex:pasteboard_transition"
+export
+pasteboard_transition : Text → Text
+pasteboard_transition input = case decode_fields input of
+  Just ["initialize"] ⇒ encode_fields ["initialized", encode_history initial_history]
+  Just (action :: serialized :: arguments) ⇒ case decode_history serialized of
+    Nothing ⇒ encode_fields ["invalid_history", serialized]
+    Just history ⇒ let result = dispatch history action arguments in
+      encode_fields [result.outcome, encode_history result.history]
+  _ ⇒ encode_fields ["invalid_request", ""]
+
+main : IO ()
+main = pure ()

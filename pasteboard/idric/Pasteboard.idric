@@ -1,0 +1,37 @@
+module Pasteboard
+
+%default total
+
+public export
+board_count : ℕ
+board_count = 3
+
+public export
+slot_count : ℕ
+slot_count = 16
+
+public export
+columns : ℕ
+columns = 2
+
+public export
+starting_board : ℕ
+starting_board = 1
+
+public export
+row_count : ℕ
+row_count = 8
+
+public export
+all_slots : ℕ
+all_slots = board_count * slot_count
+
+public export
+configuration_holds : Bool
+configuration_holds =
+  board_count == 3 &&
+  slot_count == 16 &&
+  columns == 2 &&
+  starting_board == 1 &&
+  row_count * columns == slot_count &&
+  all_slots == 48

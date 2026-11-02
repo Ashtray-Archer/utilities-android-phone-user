@@ -1,0 +1,416 @@
+# Fixed Pasteboard executable model
+
+## Intended boundary
+
+Continue the recovered application on `recover-pasteboard-20261101`. The checked
+Idriç reducer owns capture, exact-text duplicate handling, ordering, board
+selection, movement, pinning, deletion and archive retention. C owns Android
+clipboard conversion, rendering, JNI invocation, file locking and atomic byte
+storage. It must not implement a second reducer.
+
+Values are decoded `Text`, entry identities, three board positions, protected
+entries, a sequence of retained entries, and explicit results. The model keeps
+all retained text separately from the sixteen visible positions on each board.
+Storage encoding and Android classes are boundary representations.
+
+The central exported operation is a checked `Text → Text` transition. Its input
+contains one length-delimited action and a complete length-delimited snapshot;
+its result contains an explicit outcome and the next validated snapshot.
+Lengths count decoded Unicode scalar values in the reducer protocol. The file
+adapter separately frames standard UTF-8 by byte length and validates integrity.
+No character count is reused as a byte count.
+
+## Invariants and decisions
+
+- Initially select the middle of three unlabeled boards, each with 16 visible
+  positions, two columns and eight rows.
+- A capture inserts newest first. Exact duplicate text has one retained entry;
+  recopying promotes that entry without discarding its protection or board.
+- Tapping an entry marks that clipboard value seen, so the app's own copy does
+  not become a new capture.
+- Overflow archives the oldest unprotected visible entry. An entirely protected
+  board sends a new capture directly to the archive. No overflow deletes text.
+- Only adjacent-board movements are allowed. A full protected destination
+  refuses a move and leaves the source intact.
+- Protection blocks deletion until explicitly removed. Deletion is explicit and
+  must be committed atomically before the UI reports success.
+- Embedded NUL is refused with a visible unsupported-text result. Empty and
+  non-text clipboard items are distinguished from unavailable clipboard access.
+- Sensitive clips are excluded from durable capture by default. Clipboard
+  contents must never appear in logs or network traffic.
+
+## Required execution
+
+Use the canonical direct DEX backend and checked source frontend. Qualify a
+separate caller against emitted DEX under ART; compile semantic source mutants
+and require the same observer to reject them. Host reference behavior and DEX
+decoding remain separate evidence. First-party Java/Kotlin, generated Java,
+`javac`, `d8`, Gradle and RefC are excluded.
+
+Starting inspected heads:
+
+| Repository | Revision |
+| --- | --- |
+| utilities recovery | `18411b63faf7fa50a935bb04e38ff5669fcf1a47` |
+| utilities main | `34b2391a97867ab25ea885cedc7ac2e04b591609` |
+| android-NDK main | `6ab4818219efa7ea5eda137ca6b76976eb2a4d42` |
+| Idriç | `0e8cfdd1106ebdeffd01b6c519880ea3afc7dc35` |
+| ai-ci main | `a66e3a9bb1070a338f8c4a67f9b4b4ac39dfb5ec` |
+| Cat Food main | `eafd7fa9e61138a664b205bf8ba82ec6837bbbb9` |
+
+## Execution record
+
+The current checked source passes its host behavior checks. Direct DEX emission,
+independent baksmali decoding and repeated-byte determinism pass. An actual
+compiled wrong-order source mutant is rejected by the ordering oracle. These
+are not ART or installed-APK acceptance.
+
+The platform declarations use the canonical typed framework encoder. The
+canonical NativeActivity producer accepts one declared DEX input, so JNI
+platform classes occupy `classes.dex` and the checked reducer remains an
+immutable DEX asset loaded by API-26 `InMemoryDexClassLoader`. This is ART code
+execution, not a native interpreter. Both DEX inputs must be bound to installed
+acceptance receipts; execution is still pending.
+
+The first integrated exact-head build (`49408003ae67dd34102eb41fddf1f84cddd3c0a7`)
+typechecked/emitted DEX and passed the host controls, then correctly refused
+file opening under the existing Fortify profile.
+[ai-ci PR #333 — Qualify checked file opening and independent Fixed Pasteboard acceptance](https://github.com/isomorphisms/ai-ci/pull/333) extends that
+shared profile with checked open/openat varargs and independent negative
+controls rather than disabling hardening. The extension passes actual Bionic
+static runtime at O1/O2/O3/Os on the Linux x86_64 host; ARM ABI and Android tests
+remain separate.
+
+Local ICK-to-NDK x86_64 linking then exposed unsupported GNU TLS symbol
+`__tls_get_addr` at the API-26 boundary. Native per-thread diagnostic buffers now
+use public pthread keys and destructors. No application semantics moved back
+to C. That current x86_64 native library compiles and links successfully.
+
+The first Grease parse rejected a quoted glob in a word list; the coordinator
+uses the documented `io.glob` expression instead and has executed successfully
+through the exact Grease source launcher. No alternate shell implementation was
+used. Installed DEX/ART, observer, full Android UI and physical-device acceptance
+remain pending.
+
+Full current requalification correctly rejected the original retained ICK stage:
+the old workflow selected `c61e448251744a2f40ad743ebef1a027bdcd2f9d`, not the
+assumed current `fbe86e23d55cfec2000c08e61deea2a407fd7175`. Its actual x86_64
+complex extraction failure is retained in ai-ci's
+`examples/autogenerated/fixed-pasteboard/retained-source-mismatch.md`. Current
+builds restore freshly qualified stages, check their source receipt and execute
+the current profile again. The mislabeled old frontend cache is invalidated.
+
+Deletion now removes a matching raw seen value and requires an independently
+synced current recovery image before acknowledgement. A version-3 marker makes
+an interrupted checkpoint resumable after checked model validation. Host tests
+pass actual process death at that boundary, no-space refusal, separate recovery
+inodes and recovery that does not resurrect acknowledged deleted text. Both
+modern formats remain supported. The original v1 file is retired only after
+two synced modern copies exist. These current changes also compile/link through
+ICK and NDK locally; installed acceptance remains separate.
+
+Tap-to-copy now attaches an advisory retained identity to its immutable ClipData
+instead of preparing a marker in a separate history transaction. Source tests
+exercise an intervening external capture and both mismatched and unknown hints.
+The checked reducer alone decides whether the exact identity/text pair is an
+own copy. Source/host checks, deterministic direct DEX and ICK/NDK compilation
+pass locally. Private companion protocol v2 carries this hint; the stable user
+service tag is retained, and candidate version code 5 requests replacement.
+PB3 storage is unchanged. Installed loader, actual callbacks and physical-device
+acceptance remain separate evidence obligations.
+
+The integration heads were re-read during qualification. Idriç, ai-ci main,
+Cat Food and android-NDK main remain at their initial inspected commits.
+The canonical checked-export branch advanced from 035452331c0f2b98391a551e0797418da5793eae
+to 6e1c9619a96f28494ad891a32a06edfb72f3e25b. Its code change saturates
+optimized IO Unit command World closures; this application exports a pure
+Text-to-Text reducer and does not use that command entry. The consumer keeps its
+explicit 0354523 compiler pin while qualification proceeds, rather than
+silently changing the executable boundary during a run.
+
+At e0d9e7a110c4c536e5ecd0d7eb59f0b4b9379bfc, Actions run 41332839522,
+API 29 and API 34 execute all 26 exact checked-reducer responses successfully
+and reject the actual compiled ordering mutant at case 2 with exit 73. The
+separate copy fixture now installs. A real version-2 APK upgrade preserves UID
+and produces current/recovery records with exact C/B/A contents, independently
+validated after download. The on-run migration observer stops before its
+assertions because the artifact ZIP dropped its executable mode. The next run
+restores the oracle from a mode-preserving inner archive and preflights it.
+No migration assertion is weakened; privileged A/B/C and physical acceptance
+are still unverified.
+
+At 9b85f5bae3cdd7db5b76925a6046567ec08f9b09, run 41334889688,
+the new clean-source check refuses the build because four declared dependency
+checkouts appear as untracked directories: ai-ci, ICK host source, the public
+test-signing checkout and tools. No application source changed. Those exact
+dependency directories are now ignored at the consumer root; their identities
+remain separately recorded. The clean-source assertion is retained. Feature
+branch pushes no longer duplicate the existing pull-request qualification run.
+
+At 819108c319477056d4490e937fded1ba3561fe1c / run 41336882942,
+both ART jobs pass all 26 exact responses and reject the compiled mutant.
+API 34 also passes migration, corrupt-legacy refusal, installed loader and
+restart/replacement. The first automatic-mode UI action leaves its snapshot
+unchanged (generation 1, capture enabled, automatic disabled), so the independent
+mode assertion fails rather than claiming observation. Candidate version 6 adds
+only lifecycle/touch/menu and foreground-read status diagnostics; no entry
+identity or content is logged. UI screenshots are taken around the actual menu
+action. API 29's independent run-as absence check is repaired separately using
+the system ls executable with an explicit ENOENT requirement.
+
+At c31afd5a660352ce40f616d82304436a7b706414 / run 41340603986,
+independent migration passes on fresh API 29 and 34 environments. Both workflow
+jobs execute all 26 ART responses and reject the compiled ordering mutant, then
+fail the actual automatic-mode action. Native touch traces show the intended
+menu row was invoked. Both Android SELinux audit logs deny `link` for the
+private history backup and observer-key installation. This is a platform I/O
+failure, not a touch-coordinate failure or a missing Shizuku authorization.
+
+Candidate version 7 replaces history backup hard links with independently
+written, synced files followed by atomic rename, and atomically renames a synced
+private observer key. Host storage fault/crash/concurrency checks pass with the
+new backup path. A failed mode write now preserves its error instead of trying
+to enable an observer afterward. The companion process also follows the actual
+APK native pointer width, so an ARM32 APK requests a 32-bit app_process. The
+next Android run must re-establish every affected acceptance result; neither
+these repairs nor the historical receipts establish privileged capture yet.
+
+At 89dda5d07ab37621963ad8f507ebe9c7136d3b29 / run 41342118606,
+API 29/34 migration still passes. API 34 now persists automatic mode, refuses
+capture without Shizuku and after actual permission denial, then starts an
+actual shell-owned companion after the real grant. A/B/C retention still fails;
+the companion reconnects without successful heartbeats. Candidate 8 adds only
+content-free initialization, listener, callback and delivery-stage diagnostics
+to establish the failing SDK boundary. No clipboard content, capability or
+exception message is logged. API 29 separately exposes delivery bookkeeping for
+an empty text clipboard item on each foreground focus. The foreground adapter
+now ignores that empty SDK item before constructing a delivery identity.
+
+Explicit capture resumption prepares a freshly synced private credential while
+the checked mode is still inactive. The companion discards entries from an old
+credential and ignores late delivery failures from a replaced registration.
+Ordinary process restart preserves the existing credential. Independent actual
+Pause/copy/Resume and session-digest controls are added and remain unverified.
+The exact pinned backend executable and TTC cache is bound to frontend/backend
+source IDs and SHA-256 manifests. Local seed and verified reuse both compile the
+current consumer, pass host controls and yield identical behavior/platform DEX.
+This reuse does not skip consumer compilation, deterministic output comparisons,
+source mutants, installed Android tests or current acceptance receipts.
+
+At 882a4c2d8e2f8df1cbef09120499324e5d5394c8 / run 41343815598,
+API 34 records actual companion UID 2000, app owner 10192, successful bridge
+initialization and listener registration. Every heartbeat fails at the Context
+resolver IPC with SecurityException, before a reply Bundle. No callback content
+or successful history delivery is established. This matches Shizuku's explicit
+user-service Context limitation. Candidate 9 replaces that invalid application
+resolver boundary with the external-provider path in AOSP's own shell command,
+using explicit API 29/34 framework signatures, balanced lifetime references and
+the existing actual-UID/capability/mode/fresh-authorization gates. No global
+hidden-API policy, keyboard or permission is changed to make it work.
+
+The worker also verifies the shell package and operation-package identities,
+checks bounded FD-free configuration Parcels and clears/restores only the
+already authenticated incoming Binder identity while registering its public
+clipboard listener as itself. These current sources compile/link through owned
+ICK and NDK locally. Android observation and physical acceptance remain
+unverified until fresh exact-head execution; the historical registration
+success does not establish content delivery for these changes.
+
+At d50b9917d9296ec97f0366697b341536b46a2905 / run 41345425096,
+both APIs pass migration, installed restart/replacement and all exact ART/mutant
+controls. Both decisive capture workflows still fail. API 34's new explicit
+shell identity check refuses initialization before bridge setup. AOSP's exact
+API 29/34 ContextImpl constructor carries its container's operation-package
+identity through createPackageContext. Candidate 10 rebuilds a genuine shell
+LoadedApk context through the bounded createAppContext factory and verifies its
+UID, package and operation-package identities before public SDK registration.
+Fresh Android receipts must establish callback read and private writer delivery.
+
+A separate real-fork crash test proves that a pre-replacement pending snapshot
+survives a later acknowledged deletion in the prior store. The new checkpoint
+retires only owned, regular 0600 files matching the actual pending filename
+protocol, under the exclusive writer lock after both committed copies are
+synced. Directory cleanup is synced before success. The regression now passes,
+including preservation of an unrelated similarly named file, crash recovery,
+full-storage/error controls and concurrent transactions. The independent Android
+UI test also seeds an abandoned snapshot from already captured SDK history and
+requires confirmed deletion to retire it. These are filesystem controls, not
+synthetic capture evidence.
+
+At 6b359f2ffd83b9a3fb67f343406c291e0c96f900 / run 41347388884,
+API 29 and 34 both retain real separate-application A/B/C copies in exact C/B/A
+order before Pasteboard is focused. The actual shell context, public listener,
+public clipboard read and private app-UID writer all execute. Both APIs also
+pass migration and all 26 ART responses with the compiled ordering mutant
+rejected. API 29 additionally passes the exact 20 KB text and sensitive/NUL/
+multiple/non-text/clear policies. Its next lifecycle test fails because the
+run-as kill command cannot address the previously reported PID. API 34's fixed
+four-second long-text snapshot is premature or exposes a remaining failure;
+the retained logs do not distinguish those explanations. Neither run reaches
+the complete permission, lifecycle or UI suite.
+
+Android emits two callbacks for individual A/B/C copies, including later text
+classification. Candidate 11 carries the public SDK copy timestamp and a
+length-delimited UTF-8 text/origin digest as platform event identity, leaving
+all replay and content-deduplication decisions in checked Idriç. The v3 control
+Parcel also supplies the synced credential timestamp; callbacks predating an
+explicit capture resumption are excluded. This does not poll the clipboard or
+introduce a second application model. The shared JNI smoke now checks the
+public copy timestamp as well as exact Unicode content.
+
+The independent long-text check now waits up to 30 seconds for the unchanged
+exact-content assertion and collects content-free transition exception classes
+on failure. Ordinary background process death uses ActivityManager am kill
+and requires the original PID to disappear before restart. Source assertions
+are preserved. Local owned-ICK native linking, JNI compilation, Unicode, wire
+and store fault/crash/concurrency tests pass. Fresh Android execution must
+qualify every changed boundary; physical acceptance remains unavailable.
+
+Subsequent shared-reader inspection finds that an absent optional extras Bundle
+returns a generic JNI error. Real plain SDK ClipData need not contain extras;
+depending on system classification to add them is invalid. Candidate 12 accepts
+the documented absent metadata case while keeping sensitive=false and origin
+empty. The DEX-free SDK smoke copies a fresh newPlainText clip without extras,
+then checks exact Unicode/NUL bytes, metadata defaults and the copy timestamp.
+The independent focused fixture also asserts extras are absent before its real
+A/B/C/long/numbered clipboard effects. These checks must execute on Android;
+source inspection and native compilation do not establish runtime success.
+
+Cat Food's retained TAB_P10 instructions mention Android 15. No current tablet
+endpoint is available, so that is not a fresh physical API observation. The
+next candidate extends the explicitly bounded adapter to API 35 after inspecting
+the exact Android 15 context, attribution, IActivityManager, IContentProvider
+and shell-permission definitions. A fresh API 35 migration/workflow CI lane is
+added alongside API 29/34; successful lookup or similarity is not acceptance.
+
+Release preparation now separates unstripped debug libraries from installable
+payloads. NDK llvm-strip removes unnecessary symbols before the canonical APK
+producer signs the candidates; section checks reject retained debug/static
+symbol tables. Per-ABI receipts retain native pre/post-strip and APK sizes plus
+the two native digests. Android qualification consumes the stripped signed APK,
+not the debug library. This remains candidate preparation, not release authority.
+
+At 61e975827252cc54aac2ad8e9c515022bb54cc19 / run 41350659918,
+both API 29 and 34 pass actual A/B/C capture, exact long-text capture and all
+exclusion policies. Both real legacy migration jobs pass; shared JNI SDK smoke
+also passes. Neither am kill request terminates the live app/provider process,
+so the required death assertion correctly fails. The independent trigger is
+changed to the framework's exact-PID am crash command, with matching runtime
+crash and PID-disappearance receipts required before exact restart comparison.
+The Google API images' recorded default keyboard is Gboard on both APIs;
+this is emulator evidence and does not establish either physical keyboard state.
+
+At cfe03efcfa324c7cf75bd28d28e16bf104fc1e48 / run 41352294404,
+API 35 passes installed model loading/replacement, all 26 ART responses and
+compiled ordering-mutant rejection, and real legacy migration. Its automatic
+mode action fails before Shizuku startup. The actual trace reports a full
+480x960 viewport at origin 0,0; the screenshot places board controls inside the
+system bars. Android 15 edge-to-edge layout changes NativeActivity's content
+rectangle. This is a demonstrated UI/insets defect, not negative clipboard
+permission evidence.
+
+The next candidate intersects that rectangle with public root WindowInsets
+for system bars and display cutouts on API 35+. Earlier APIs retain their
+qualified viewport path. The exact Android 15 NativeActivity source blob
+`12d16049d1c3201e106d902fb8363d6de5951e80` reports the content view's full
+window-relative bounds; WindowInsets blob
+`561d979f2f9dc57ffae27756170d181d26d48b5b` defines the public typed query.
+The legacy renderer's ExceptionDescribe call is also removed so framework
+exception messages cannot enter product diagnostics. UI automation card-menu
+points are calibrated from actual API 29/34 screenshots; the old fixed pitch
+put API 34's last-row point in a gap. All behavioral assertions remain intact.
+
+API 34 at this same source additionally proves actual process-crash recovery,
+replacement with preserved UID/history, wrong-signer refusal and unchanged
+Gboard. The subsequent caller-control PASS labels are invalid: the independent
+Grease guard invoked a nonexistent `not` command and skipped output assertions;
+all four instrumentation outputs actually say Process crashed. The supporting
+qualifier repairs the assertion path and controller register initialization and
+requires exact result codes. Permission-mutant and UID-mutant acceptance must
+be established afresh, not inherited from those labels. The later manager UI
+launch also used an unresolvable implicit intent and is made explicit using
+the exact exported component in the pinned official APK.
+
+At ece12736459f9cdb54528237f5ff59a91735b7b9 / run 41354279642,
+API 34 and 35 both pass actual A/B/C and long capture, exclusion policies,
+actual process-crash recovery, replacement and wrong-signer controls, and
+unchanged Gboard. The API 35 screenshot confirms all sixteen cards and header
+outside system bars. All three migration lanes pass. The fixed independent
+controller now reports the expected external-caller refusal, but the exact
+result-code assertion stops: Android's pretty instrumentation output omits the
+code when a stream is present. The qualifier now requests raw output and keeps
+both exact assertions. Application code and candidate version 14 are unchanged
+for this qualification-only follow-up; fresh receipts must still name its head.
+
+At b6f74ce473f8e74a4e5f33da78ce924355d4ab51 / run 41355463463,
+API 35 passes the corrected actual caller/permission controls and both compiled
+mutants, pause/session controls, companion crash/reconnection and real manager
+revocation/regrant. It then fails explicit foreground fallback: the valid
+four-entry snapshot remains C/B/A/long with no new delivery instead of promoting
+A. Metadata was not retained at that failure. The independent procedure now
+checks the actual A SDK copy and saves foreground metadata plus a separate
+visible manual-capture diagnostic while keeping the original assertion failed.
+
+Run 41357353376 at 881950c7475f4a1f6a6892a75c57ab770a17d4b3
+shows the foreground test reading too early: native focus validation takes
+about two seconds before a successful SDK read. The later exact snapshot
+contains A/C/B/long and the independent oracle confirms two new deliveries,
+one from focus and one from the manual diagnostic. No application repair is
+needed for that timing. The qualifier now awaits the exact durable effects of
+native UI commands, including one focus capture, one explicit manual capture,
+real SDK card-copy readback and all saved pin/move/delete/archive states.
+Assertions remain exact and bounded; product clipboard acquisition is unchanged.
+
+Independent qualification also adds an actual shell-UID call with a synthetic
+wrong private credential and an independently compiled credential-comparison
+bypass mutant. Android permission, caller UID and live Shizuku authorization
+remain intact in that mutant. Exact provider refusal/acceptance, unchanged
+history and restored real callback delivery must distinguish the candidate
+from it. No actual credential or clipboard text enters a shell argument.
+
+Candidate checksum sidecars now name their adjacent APK rather than a CI-only
+absolute path. This is delivery metadata only; the signed APK producer and
+application version are unchanged. Downloaded bundles can be checked directly
+with the ordinary checksum verifier after selecting their explicit directory.
+
+Run 41359814484 at 2da8967cde5ee5433577f00f65f470958ed15d58 passes the
+complete API 34/35 workflows, expiration, reboot and visible/archive controls.
+API 29 passes all observer/lifecycle controls through reboot, then its UI setup
+fails because reboot reset the test display to 1080x1920. Actual fixture logs
+show the unchanged 480x960 points copied A/A/B rather than A/B/C. Independent UI
+qualification now restores its own declared geometry and checks actual SDK
+effects plus three durable acknowledgements before exercising the cards.
+
+Run 41361592479 at 7ea4fd0a4c1fd72fe14f5af32a6de9796d8b2ac5 passes
+production compilation/packaging but the new negative credential fixture fails
+strict unused-value compilation. No emulator acceptance is inherited from that
+run. The independent mutant now consumes the bytewise comparison while allowing
+its entire possible 0..255 range; local qualified ICK compilation/linking passes
+with warning errors retained. Actual mutant rejection remains a fresh Android
+obligation. The product's credential comparison and version are unchanged.
+
+Run 41362536328 at eb820bce2f371469ef40b0212fdf864c515c332a passes all
+migration lanes. API 34 executes and rejects the new credential mutant, then
+passes pause/revocation/reconnection, expiration and reboot. Its post-reboot UI
+setup receives actual SDK A/B/C effects but acknowledges only two deliveries;
+the exact saved order is B/A/C/long. C's callback reads successfully while the
+companion repeatedly re-registers its listener. Source permits configuration to
+invalidate the callback epoch between acquisition and enqueue, and a successful
+event previously refreshed time without restoring the connected flag.
+
+Candidate 15 serializes configuration, retains a healthy identical listener and
+epoch, and treats an authenticated acknowledged event as connection evidence.
+Real changed sessions still replace registration and reject stale queued
+credentials. Static callback-stage diagnostics distinguish filtering, failed
+fingerprinting, configuration invalidation and enqueue without logging content,
+timestamps, identities or digests. Local full ICK x86-64 compile/link passes with
+all warning errors enabled. New ABI APK and Android evidence is required.
+
+The same run's API 29 launch fails with an Activity-service broken connection
+after successful replacement; API 35's screenshot instead shows the unrelated
+Pixel Launcher ANR intercepting input. The smoke harness retries only that exact
+service error, retaining each result/log. Independent mode selection waits for
+the actual durable flag and can close only a positively identified Pixel
+Launcher ANR before repeating the visible action. A Pasteboard ANR or other
+failure remains failed. Prior failed artifacts are retained in their original
+run rather than overwritten through a retry.

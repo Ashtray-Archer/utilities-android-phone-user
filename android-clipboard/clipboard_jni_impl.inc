@@ -291,7 +291,80 @@ cleanup:
     return status;
 }
 
-ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len) {
+static ClipboardStatus clip_sensitive(JNIEnv *environment, jobject clip,
+                                       jclass clip_class, ClipboardDetails *details) {
+    details->sensitive ← 0;
+    if ((*environment)->PushLocalFrame(environment, 24) != JNI_OK)
+        return CLIPBOARD_OUT_OF_MEMORY;
+    ClipboardStatus status ← CLIPBOARD_JNI_ERROR;
+    const jmethodID get_description ← (*environment)->GetMethodID(environment,
+        clip_class, "getDescription", "()Landroid/content/ClipDescription;");
+    jobject description ← get_description
+        ? (*environment)->CallObjectMethod(environment, clip, get_description) : NULL;
+    if (take_exception(environment) || description == NULL) goto details_finished;
+    jclass description_class ← (*environment)->GetObjectClass(environment, description);
+    jint api_level ← 0;
+    if (get_api_level(environment, &api_level) != CLIPBOARD_OK) goto details_finished;
+    if (api_level >= 26) {
+        const jmethodID timestamp ← description_class ? (*environment)->GetMethodID(environment,
+            description_class, "getTimestamp", "()J") : NULL;
+        if (timestamp == NULL || take_exception(environment)) goto details_finished;
+        details->copied_at_millis ← (*environment)->CallLongMethod(environment, description, timestamp);
+        if (take_exception(environment)) goto details_finished;
+    }
+    const jmethodID get_extras ← description_class ? (*environment)->GetMethodID(environment,
+        description_class, "getExtras", "()Landroid/os/PersistableBundle;") : NULL;
+    jobject extras ← get_extras
+        ? (*environment)->CallObjectMethod(environment, description, get_extras) : NULL;
+    if (take_exception(environment) || get_extras == NULL) goto details_finished;
+    /* No extras is an ordinary plain-text clip. Sensitive/origin metadata is
+     * optional, so its absence cannot reject otherwise valid copied text. */
+    if (extras == NULL) {
+        status ← CLIPBOARD_OK;
+        goto details_finished;
+    }
+    if (extras != NULL) {
+        jclass bundle_class ← (*environment)->GetObjectClass(environment, extras);
+        const jmethodID get_boolean ← bundle_class ? (*environment)->GetMethodID(environment,
+            bundle_class, "getBoolean", "(Ljava/lang/String;Z)Z") : NULL;
+        jstring key ← get_boolean ? new_ascii(environment, "android.content.extra.IS_SENSITIVE") : NULL;
+        if (key == NULL || take_exception(environment)) goto details_finished;
+        const jboolean indicated ← (*environment)->CallBooleanMethod(environment, extras,
+            get_boolean, key, JNI_FALSE);
+        if (take_exception(environment)) goto details_finished;
+        details->sensitive ← indicated == JNI_TRUE ? 1 : 0;
+        const jmethodID get_string ← (*environment)->GetMethodID(environment,
+            bundle_class, "getString", "(Ljava/lang/String;)Ljava/lang/String;");
+        jstring origin_key ← get_string ? new_ascii(environment, "com.isomorphisms.clipboard.ORIGIN") : NULL;
+        if (origin_key == NULL || take_exception(environment)) goto details_finished;
+        jstring origin ← (*environment)->CallObjectMethod(environment, extras, get_string, origin_key);
+        if (take_exception(environment)) goto details_finished;
+        if (origin != NULL) {
+            const jsize count ← (*environment)->GetStringLength(environment, origin);
+            const jchar *units ← (*environment)->GetStringChars(environment, origin, NULL);
+            if (units == NULL || take_exception(environment)) goto details_finished;
+            status ← map_utf_status(clipboard_utf16_to_utf8((const uint16_t *)units, (size_t)count,
+                &details->origin_utf8, &details->origin_length));
+            (*environment)->ReleaseStringChars(environment, origin, units);
+            /* An invalid advisory hint cannot discard otherwise valid text. */
+            if (status == CLIPBOARD_INVALID_UTF8) {
+                free(details->origin_utf8);
+                details->origin_utf8 ← NULL;
+                details->origin_length ← 0u;
+                status ← CLIPBOARD_OK;
+            }
+            if (status != CLIPBOARD_OK) goto details_finished;
+        }
+    }
+    status ← CLIPBOARD_OK;
+details_finished:
+    (void)take_exception(environment);
+    (*environment)->PopLocalFrame(environment, NULL);
+    return status;
+}
+
+static ClipboardStatus get_utf8_snapshot(char **out_bytes, size_t *out_len,
+                                         ClipboardDetails *details) {
     if (out_bytes == NULL || out_len == NULL) {
         return CLIPBOARD_INVALID_ARGUMENT;
     }
@@ -364,6 +437,16 @@ ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len) {
     if (item_count <= 0) {
         status = CLIPBOARD_NO_TEXT;
         goto cleanup;
+    }
+
+    if (details != NULL) {
+        details->item_count ← item_count;
+        if (item_count != 1) {
+            status ← CLIPBOARD_UNSUPPORTED_ITEMS;
+            goto cleanup;
+        }
+        status ← clip_sensitive(environment, clip, clip_class, details);
+        if (status != CLIPBOARD_OK) goto cleanup;
     }
 
     item = (*environment)->CallObjectMethod(environment, clip, get_item_at, 0);
@@ -458,7 +541,27 @@ cleanup:
         (*environment)->DeleteLocalRef(environment, manager_class);
     }
     release_environment(&attached);
+    if (status != CLIPBOARD_OK && details != NULL) {
+        free(details->origin_utf8);
+        details->origin_utf8 ← NULL;
+        details->origin_length ← 0u;
+    }
     return status;
+}
+
+ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len) {
+    return get_utf8_snapshot(out_bytes, out_len, NULL);
+}
+
+ClipboardStatus clipboard_get_utf8_details(char **out_bytes, size_t *out_len,
+                                          ClipboardDetails *out_details) {
+    if (out_details == NULL) return CLIPBOARD_INVALID_ARGUMENT;
+    out_details->item_count ← 0;
+    out_details->sensitive ← 0;
+    out_details->origin_utf8 ← NULL;
+    out_details->origin_length ← 0u;
+    out_details->copied_at_millis ← 0;
+    return get_utf8_snapshot(out_bytes, out_len, out_details);
 }
 
 static ClipboardStatus make_plain_clip(
@@ -633,8 +736,37 @@ static ClipboardStatus set_primary_clip(JNIEnv *environment, jobject clip) {
     return failed ? CLIPBOARD_JNI_ERROR : CLIPBOARD_OK;
 }
 
-ClipboardStatus clipboard_set_utf8(const char *bytes, size_t len, int sensitive) {
-    if (bytes == NULL && len != 0) {
+static ClipboardStatus attach_origin(JNIEnv *e, jobject clip, jstring origin) {
+    if ((*e)->PushLocalFrame(e, 16) != JNI_OK) return CLIPBOARD_OUT_OF_MEMORY;
+    ClipboardStatus status ← CLIPBOARD_JNI_ERROR;
+    jclass type ← (*e)->GetObjectClass(e, clip);
+    jmethodID description ← type ? (*e)->GetMethodID(e, type, "getDescription", "()Landroid/content/ClipDescription;") : NULL;
+    jobject detail ← description ? (*e)->CallObjectMethod(e, clip, description) : NULL;
+    jclass detail_type ← detail ? (*e)->GetObjectClass(e, detail) : NULL;
+    jmethodID get ← detail_type ? (*e)->GetMethodID(e, detail_type, "getExtras", "()Landroid/os/PersistableBundle;") : NULL;
+    jobject bundle ← get ? (*e)->CallObjectMethod(e, detail, get) : NULL;
+    if (take_exception(e) || detail == NULL || get == NULL) goto origin_finished;
+    jclass bundle_type ← (*e)->FindClass(e, "android/os/PersistableBundle");
+    jmethodID constructor ← bundle_type ? (*e)->GetMethodID(e, bundle_type, "<init>", "()V") : NULL;
+    if (bundle == NULL && constructor) bundle ← (*e)->NewObject(e, bundle_type, constructor);
+    jmethodID put ← bundle_type ? (*e)->GetMethodID(e, bundle_type, "putString", "(Ljava/lang/String;Ljava/lang/String;)V") : NULL;
+    jmethodID set ← detail_type ? (*e)->GetMethodID(e, detail_type, "setExtras", "(Landroid/os/PersistableBundle;)V") : NULL;
+    jstring key ← put ? new_ascii(e, "com.isomorphisms.clipboard.ORIGIN") : NULL;
+    if (bundle && key && set && !take_exception(e)) {
+        (*e)->CallVoidMethod(e, bundle, put, key, origin);
+        if (take_exception(e)) goto origin_finished;
+        (*e)->CallVoidMethod(e, detail, set, bundle);
+        if (!take_exception(e)) status ← CLIPBOARD_OK;
+    }
+origin_finished:
+    (void)take_exception(e);
+    (*e)->PopLocalFrame(e, NULL);
+    return status;
+}
+
+ClipboardStatus clipboard_set_utf8_with_origin(const char *bytes, size_t len, int sensitive,
+                                              const char *origin, size_t origin_length) {
+    if ((bytes == NULL && len != 0) || (origin == NULL && origin_length != 0)) {
         return CLIPBOARD_INVALID_ARGUMENT;
     }
 
@@ -668,6 +800,18 @@ ClipboardStatus clipboard_set_utf8(const char *bytes, size_t len, int sensitive)
 
     jobject clip = NULL;
     status = make_plain_clip(environment, text, sensitive != 0, &clip);
+    if (status == CLIPBOARD_OK && origin != NULL) {
+        uint16_t *origin_units ← NULL;
+        size_t count ← 0u;
+        status ← map_utf_status(clipboard_utf8_to_utf16(origin, origin_length, &origin_units, &count));
+        if (status == CLIPBOARD_OK && count > (size_t)INT_MAX) status ← CLIPBOARD_OUT_OF_MEMORY;
+        jstring value ← status == CLIPBOARD_OK
+            ? (*environment)->NewString(environment, (const jchar *)origin_units, (jsize)count) : NULL;
+        free(origin_units);
+        if (status == CLIPBOARD_OK)
+            status ← value && !take_exception(environment) ? attach_origin(environment, clip, value) : CLIPBOARD_JNI_ERROR;
+        if (value) (*environment)->DeleteLocalRef(environment, value);
+    }
     if (status == CLIPBOARD_OK) {
         status = set_primary_clip(environment, clip);
     }
@@ -678,6 +822,10 @@ ClipboardStatus clipboard_set_utf8(const char *bytes, size_t len, int sensitive)
     (*environment)->DeleteLocalRef(environment, text);
     release_environment(&attached);
     return status;
+}
+
+ClipboardStatus clipboard_set_utf8(const char *bytes, size_t len, int sensitive) {
+    return clipboard_set_utf8_with_origin(bytes, len, sensitive, NULL, 0u);
 }
 
 ClipboardStatus clipboard_clear(void) {
@@ -761,6 +909,8 @@ const char *clipboard_status_name(ClipboardStatus status) {
             return "jni_error";
         case CLIPBOARD_ALREADY_INITIALIZED:
             return "already_initialized";
+        case CLIPBOARD_UNSUPPORTED_ITEMS:
+            return "unsupported_multiple_items";
     }
     return "unknown";
 }

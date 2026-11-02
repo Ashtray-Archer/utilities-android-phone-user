@@ -3,6 +3,7 @@
 
 #include <jni.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,8 +18,17 @@ typedef enum {
     CLIPBOARD_INVALID_UTF8 = 5,
     CLIPBOARD_OUT_OF_MEMORY = 6,
     CLIPBOARD_JNI_ERROR = 7,
-    CLIPBOARD_ALREADY_INITIALIZED = 8
+    CLIPBOARD_ALREADY_INITIALIZED = 8,
+    CLIPBOARD_UNSUPPORTED_ITEMS = 9
 } ClipboardStatus;
+
+typedef struct {
+    int item_count;
+    int sensitive;
+    char *origin_utf8;
+    size_t origin_length;
+    int64_t copied_at_millis; /* SDK copy timestamp; zero before API 26. */
+} ClipboardDetails;
 
 /*
  * Initialize once from an Android framework thread or another thread that has
@@ -45,6 +55,16 @@ ClipboardStatus clipboard_has_text(int *out_has_text);
  */
 ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len);
 
+/* Capture one immutable ClipData snapshot, including its sensitive-content
+ * indication. Multi-item clips are explicitly refused by this history-facing
+ * API; the original first-item getter above retains its existing contract.
+ * A sensitive clip still returns its exact text and flag to the caller, which
+ * must apply the user's retention policy before saving it. On success, a
+ * present origin hint is separately malloc-owned and must also be freed. The
+ * hint is public clipboard metadata, never authentication or read authority. */
+ClipboardStatus clipboard_get_utf8_details(char **out_bytes, size_t *out_len,
+                                          ClipboardDetails *out_details);
+
 /*
  * `bytes[0..len)` is strict standard UTF-8, not JNI modified UTF-8.
  * NULL is accepted only when len is zero. When `sensitive` is nonzero the
@@ -52,6 +72,10 @@ ClipboardStatus clipboard_get_utf8(char **out_bytes, size_t *out_len);
  * interpreted by the system clipboard UI on API 33+.
  */
 ClipboardStatus clipboard_set_utf8(const char *bytes, size_t len, int sensitive);
+/* Attach an advisory exact-text origin hint in the same immutable ClipData.
+ * Existing callers retain the untagged setter contract. */
+ClipboardStatus clipboard_set_utf8_with_origin(const char *bytes, size_t len, int sensitive,
+                                              const char *origin, size_t origin_length);
 
 /* API 28+ uses clearPrimaryClip(); older Android receives an empty text clip. */
 ClipboardStatus clipboard_clear(void);

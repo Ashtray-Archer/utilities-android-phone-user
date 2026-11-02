@@ -10,11 +10,12 @@ PROFILE_API_accelerometer = 26
 PROFILE_API_picker = 26
 PROFILE_API_hardware = 21
 PROFILE_API_clipboard = 24
+PROFILE_API_pasteboard = 26
 API ?= $(PROFILE_API_$(PROFILE))
 ifeq ($(API),)
-$(error PROFILE must be accelerometer, picker, hardware, or clipboard)
+$(error PROFILE must be accelerometer, picker, hardware, clipboard, or pasteboard)
 endif
-ifneq ($(filter $(PROFILE),accelerometer picker),)
+ifneq ($(filter $(PROFILE),accelerometer picker pasteboard),)
 FORTIFY_SOURCE = 2
 HARDENING = -fstack-protector-strong
 endif
@@ -38,10 +39,12 @@ SOURCE_accelerometer = accelerometer/app/src/main/c/native_main.c accelerometer/
 SOURCE_picker = math-characters/app/src/main/c/native_main.c math-characters/app/src/main/c/pad_model.c math-characters/app/src/main/c/pad_ui.c
 SOURCE_hardware = hardware/android-native/hardware_sensor.c accelerometer/android/android_accelerometer.c
 SOURCE_clipboard = android-clipboard/device-smoke/smoke.c android-clipboard/clipboard_jni.c android-clipboard/utf8.c
+SOURCE_pasteboard = pasteboard/app/src/main/c/native_main.c pasteboard/app/src/main/c/pasteboard_store.c pasteboard/app/src/main/c/pasteboard_wire.c pasteboard/app/src/main/c/pasteboard_history.c pasteboard/app/src/main/c/pasteboard_behavior_loader.c pasteboard/app/src/main/c/observer/pb_observer.c pasteboard/app/src/main/c/observer/pb_shizuku_client.c pasteboard/app/src/main/c/observer/pb_shizuku_parcelable.c android-clipboard/clipboard_jni.c android-clipboard/utf8.c
 INCLUDE_accelerometer = -I"$(ROOT)/accelerometer/app/src/main/c" -I"$(ROOT)/accelerometer/model" -I"$(ROOT)/accelerometer/android"
 INCLUDE_picker = -I"$(ROOT)/math-characters/app/src/main/c"
 INCLUDE_hardware = -I"$(ROOT)/accelerometer/android" -I"$(ROOT)/accelerometer/model" -I"$(ROOT)/accelerometer/command"
 INCLUDE_clipboard = -I"$(ROOT)/android-clipboard"
+INCLUDE_pasteboard = -I"$(ROOT)/pasteboard/app/src/main/c" -I"$(ROOT)/android-clipboard"
 SOURCES = $(SOURCE_$(PROFILE))
 INCLUDES = $(INCLUDE_$(PROFILE)) -isystem "$(GLUE)"
 OBJECTS = $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
@@ -49,11 +52,12 @@ LIBS_accelerometer = -landroid -llog -lm
 LIBS_picker = -landroid -llog
 LIBS_hardware = -landroid -lm
 LIBS_clipboard = -landroid -llog
+LIBS_pasteboard = -landroid -llog -lm
 LINK_FLAGS = -shared -Wl,--no-undefined -Wl,--gc-sections -Wl,-z,relro,-z,now
-ifneq ($(filter $(PROFILE),accelerometer picker),)
+ifneq ($(filter $(PROFILE),accelerometer picker pasteboard),)
 OBJECTS += $(BUILD)/upstream/native_app_glue.o
 endif
-ifeq ($(PROFILE),accelerometer)
+ifneq ($(filter $(PROFILE),accelerometer pasteboard),)
 LINK_FLAGS += -Wl,-u,ANativeActivity_onCreate
 endif
 ifeq ($(PROFILE),hardware)

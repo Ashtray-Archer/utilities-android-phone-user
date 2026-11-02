@@ -1,0 +1,89 @@
+name: Pasteboard emulator qualification
+
+on:
+  workflow_call:
+    inputs:
+      api:
+        type: number
+        required: true
+      suite:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      GREASE: ${{ github.workspace }}/.tools/runtime/.build/grease/bin/grease
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pasteboard-candidate-apks
+          path: downloaded-apks
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pasteboard-grease
+          path: downloaded-tools
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pasteboard-independent-inputs
+          path: build/pasteboard-independent
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pasteboard-build-evidence
+          path: downloaded-evidence
+      - name: Retrieve exact retained legacy APK for real upgrade qualification
+        if: inputs.suite == 'migration'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pasteboard-debug-apk
+          run-id: 41315218239
+          github-token: ${{ github.token }}
+          path: downloaded-legacy
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 1dec6eebee6482a01cc334d4fb441e083c7ba0ce
+          path: .ai-ci-independent
+          persist-credentials: false
+      - name: Restore pinned Grease runtime
+        run: tar -xzf downloaded-tools/pasteboard-grease.tar.gz
+      - name: Restore and preflight the independent Idriç oracle with executable modes
+        run: ${{ env.GREASE }} -c 'tar -C build/pasteboard-independent -xzf build/pasteboard-independent/oracle-runtime.tar.gz; test -x build/pasteboard-independent/oracle/pasteboard-oracle; test -x build/pasteboard-independent/oracle/pasteboard-oracle_app/pasteboard-oracle.so; build/pasteboard-independent/oracle/pasteboard-oracle selftest "${{ github.workspace }}/build/pasteboard-independent/fixtures"'
+      - name: Install declared acceptance-tool dependency
+        run: ${{ env.GREASE }} -c 'sudo apt-get update; sudo apt-get install -y ripgrep'
+      - name: Enable emulator KVM
+        run: ${{ env.GREASE }} -c 'sudo chmod a+rw /dev/kvm'
+      - name: Execute installed checked model, restart and replacement
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: ${{ inputs.api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          script: >-
+            ${{ env.GREASE }} .ai-ci-independent/pasteboard/run-suite.grease
+            "$ANDROID_HOME/platform-tools/adb" emulator-5554 '${{ inputs.api }}'
+            '${{ inputs.suite }}' "$GITHUB_WORKSPACE"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: pasteboard-${{ inputs.suite }}-api${{ inputs.api }}
+          path: |
+            build/emulator-evidence
+            build/art-evidence
+            build/clipboard-evidence
+            build/control-evidence
+            build/migration-evidence
+            build/ui-evidence
+          if-no-files-found: warn

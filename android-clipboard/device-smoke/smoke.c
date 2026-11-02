@@ -34,6 +34,38 @@ static int expect_ok(const char *step, ClipboardStatus status) {
     return 0;
 }
 
+static int remove_optional_extras(ANativeActivity *activity) {
+    JNIEnv *e = activity->env;
+    if ((*e)->PushLocalFrame(e, 24) != JNI_OK) return 0;
+    jclass context = (*e)->GetObjectClass(e, activity->clazz);
+    jmethodID service = context ? (*e)->GetMethodID(e, context, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;") : NULL;
+    jstring name = service ? (*e)->NewStringUTF(e, "clipboard") : NULL;
+    jobject manager = name ? (*e)->CallObjectMethod(e, activity->clazz, service, name) : NULL;
+    jclass manager_type = manager && !(*e)->ExceptionCheck(e) ? (*e)->GetObjectClass(e, manager) : NULL;
+    jmethodID get = manager_type ? (*e)->GetMethodID(e, manager_type, "getPrimaryClip", "()Landroid/content/ClipData;") : NULL;
+    jobject clip = get ? (*e)->CallObjectMethod(e, manager, get) : NULL;
+    jclass clip_type = clip && !(*e)->ExceptionCheck(e) ? (*e)->GetObjectClass(e, clip) : NULL;
+    jmethodID item_at = clip_type ? (*e)->GetMethodID(e, clip_type, "getItemAt", "(I)Landroid/content/ClipData$Item;") : NULL;
+    jobject item = item_at ? (*e)->CallObjectMethod(e, clip, item_at, 0) : NULL;
+    jclass item_type = item && !(*e)->ExceptionCheck(e) ? (*e)->GetObjectClass(e, item) : NULL;
+    jmethodID get_text = item_type ? (*e)->GetMethodID(e, item_type, "getText", "()Ljava/lang/CharSequence;") : NULL;
+    jobject text = get_text ? (*e)->CallObjectMethod(e, item, get_text) : NULL;
+    jmethodID plain = clip_type && !(*e)->ExceptionCheck(e) ? (*e)->GetStaticMethodID(e, clip_type, "newPlainText", "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;") : NULL;
+    jobject fresh = plain && text ? (*e)->CallStaticObjectMethod(e, clip_type, plain, NULL, text) : NULL;
+    jmethodID describe = clip_type && !(*e)->ExceptionCheck(e) ? (*e)->GetMethodID(e, clip_type, "getDescription", "()Landroid/content/ClipDescription;") : NULL;
+    jobject description = fresh && describe ? (*e)->CallObjectMethod(e, fresh, describe) : NULL;
+    jclass description_type = description && !(*e)->ExceptionCheck(e) ? (*e)->GetObjectClass(e, description) : NULL;
+    jmethodID get_extras = description_type ? (*e)->GetMethodID(e, description_type, "getExtras", "()Landroid/os/PersistableBundle;") : NULL;
+    jobject extras = get_extras ? (*e)->CallObjectMethod(e, description, get_extras) : NULL;
+    jmethodID set = manager_type && !(*e)->ExceptionCheck(e) ? (*e)->GetMethodID(e, manager_type, "setPrimaryClip", "(Landroid/content/ClipData;)V") : NULL;
+    const int absent = get_extras && extras == NULL && !(*e)->ExceptionCheck(e);
+    if (set && absent) (*e)->CallVoidMethod(e, manager, set, fresh);
+    const int valid = set && absent && !(*e)->ExceptionCheck(e);
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    (*e)->PopLocalFrame(e, NULL);
+    return valid;
+}
+
 static void run_smoke(ANativeActivity *activity) {
     ClipboardStatus status = clipboard_bridge_init(activity->env, activity->clazz);
     if (!expect_ok("init", status)) {
@@ -67,6 +99,21 @@ static void run_smoke(ANativeActivity *activity) {
         }
     }
     clipboard_free(actual);
+
+    if (!remove_optional_extras(activity)) fail_text("copy without optional extras");
+    ClipboardDetails details = {0};
+    actual = NULL;
+    actual_len = 0;
+    if (expect_ok("read copy timestamp", clipboard_get_utf8_details(&actual, &actual_len, &details))) {
+        if (details.sensitive || details.origin_utf8 || details.origin_length != 0u)
+            fail_text("absent extras has no sensitive/origin metadata");
+        if ((activity->sdkVersion >= 26 && details.copied_at_millis <= 0) ||
+            (activity->sdkVersion < 26 && details.copied_at_millis != 0)) fail_text("SDK copy timestamp boundary");
+        if (actual_len != sizeof(sample) || memcmp(actual, sample, sizeof(sample)) != 0)
+            fail_text("timestamp metadata preserves full UTF-8");
+    }
+    clipboard_free(actual);
+    clipboard_free(details.origin_utf8);
 
     /* This proves the sensitive write path executes on Android. The system
      * preview treatment itself remains a separate API-33+ acceptance check. */

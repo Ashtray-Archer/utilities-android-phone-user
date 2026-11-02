@@ -1,0 +1,71 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 5) {
+  echo 'usage: grease build-apk.grease REPOSITORY ANDROID_NDK_REPOSITORY SDK CHECKED_OUTPUT NEW_OUTPUT' >&2
+  exit 2
+}
+var repository = ARGV[0]
+var backend = ARGV[1]
+var sdk = ARGV[2]
+var checked = ARGV[3]
+var output = ARGV[4]
+for path in "$repository" "$backend" "$sdk" "$checked" "$output" {
+  if (path[0] !== '/') { echo 'absolute path required' >&2; exit 2 }
+}
+if test -e "$output" { echo 'refusing reused APK output' >&2; exit 1 }
+mkdir -p "$output"
+test -s "$checked/platform.dex"
+test -s "$checked/assets/pasteboard-behavior.dex"
+setglobal ENV.ANDROID_HOME = sdk
+setglobal ENV.ANDROID_BUILD_TOOLS = "$sdk/build-tools/36.0.0"
+setglobal ENV.ANDROID_PACKAGE_ID = 'com.isomorphisms.pasteboard'
+setglobal ENV.ANDROID_VERSION_CODE = '15'
+setglobal ENV.ANDROID_VERSION_NAME = '0.15.0-candidate'
+setglobal ENV.ANDROID_MIN_SDK = '26'
+setglobal ENV.ANDROID_TARGET_SDK = '36'
+setglobal ENV.ANDROID_EXPECTED_LABEL = 'Pasteboard'
+setglobal ENV.ANDROID_KEYSTORE_TYPE = 'JKS'
+setglobal ENV.ANDROID_STORE_PASSWORD = ENV.ANDROID_KEYSTORE_PASSWORD
+setglobal ENV.ANDROID_REQUIRE_NO_DEX = '0'
+setglobal ENV.ANDROID_DEX_FILE = "$checked/platform.dex"
+setglobal ENV.ANDROID_ASSET_DIR = "$checked/assets"
+setglobal ENV.ANDROID_GREASE = ENV.GREASE
+setglobal ENV.ANDROID_SOURCE_COMMIT = $(git -C "$repository" rev-parse HEAD)
+var ndk = "$sdk/ndk/27.2.12479018"
+var strip = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+var readelf = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+test -x "$strip"
+test -x "$readelf"
+cd "$repository"
+for abi in arm64-v8a armeabi-v7a x86_64 {
+  try {
+    make -f icky/Android.mk native PROFILE=pasteboard ABI="$abi" NDK="$ndk" \
+      BUILD="$output/objects/$abi" OUT="$output/native/$abi/libpasteboard.so" > "$output/compile-$abi.txt" 2>&1
+  }
+  if (_error.code !== 0) { cat "$output/compile-$abi.txt"; exit 1 }
+  # Keep debug bytes outside the installable payload. Qualify the exact stripped
+  # native library that the canonical APK producer will package and sign.
+  mkdir -p "$output/debug/$abi"
+  cp "$output/native/$abi/libpasteboard.so" "$output/debug/$abi/libpasteboard.so"
+  var before_bytes = $(wc -c < "$output/debug/$abi/libpasteboard.so" | tr -d '[:space:]')
+  "$strip" --strip-unneeded "$output/native/$abi/libpasteboard.so"
+  var after_bytes = $(wc -c < "$output/native/$abi/libpasteboard.so" | tr -d '[:space:]')
+  "$readelf" --sections "$output/native/$abi/libpasteboard.so" > "$output/stripped-$abi.sections.txt"
+  try { rg -n '\.(debug_|symtab)' "$output/stripped-$abi.sections.txt" }
+  if (_error.code !== 1) { echo 'FAIL installable native payload retains debug sections or static symbols' >&2; exit 1 }
+  # Fixed canonical APK producer; no first-party Java source or alternate model.
+  try {
+    bash "$backend/apk/build-nativeactivity-apk.sh" "$repository/pasteboard/app/src/main/AndroidManifest.xml" \
+      "$output/native/$abi/libpasteboard.so" "$abi" "$output/pasteboard-$abi.apk" > "$output/package-$abi.txt" 2>&1
+  }
+  if (_error.code !== 0) { cat "$output/package-$abi.txt"; exit 1 }
+  var apk_digest = $(sha256sum "$output/pasteboard-$abi.apk" | cut -d ' ' -f 1)
+  printf '%s  pasteboard-%s.apk\n' "$apk_digest" "$abi" > "$output/pasteboard-$abi.apk.sha256"
+  var apk_bytes = $(wc -c < "$output/pasteboard-$abi.apk" | tr -d '[:space:]')
+  printf 'abi\t%s\npre_strip_native_bytes\t%s\npost_strip_native_bytes\t%s\napk_bytes\t%s\n' \
+    "$abi" "$before_bytes" "$after_bytes" "$apk_bytes" > "$output/size-$abi.tsv"
+  sha256sum "$output/debug/$abi/libpasteboard.so" "$output/native/$abi/libpasteboard.so" > "$output/native-$abi.sha256"
+}
+cp "$checked/consumer-commit.txt" "$checked/frontend-commit.txt" "$checked/backend-commit.txt" "$checked/digests.txt" "$output/"
+printf 'package\tcom.isomorphisms.pasteboard\nversion_code\t15\nsigner_sha256\tde9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9\nphysical_C67\tNOT_VERIFIED\nphysical_TAB_P10\tNOT_VERIFIED\n' > "$output/identity.tsv"
+cat "$output/identity.tsv"

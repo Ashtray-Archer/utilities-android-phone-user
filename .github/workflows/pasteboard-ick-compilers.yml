@@ -1,0 +1,67 @@
+name: Qualified ICK Android compilers
+
+on:
+  workflow_call:
+    inputs:
+      rebuild:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  compiler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [armeabi-v7a, arm64-v8a, x86_64]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 4a052ca8cf812fcc42f8d8fb145002a62d13badc
+          path: .ai-ci-ick
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dilapidated-shed/ick
+          ref: fbe86e23d55cfec2000c08e61deea2a407fd7175
+          path: .ick-source
+          persist-credentials: false
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+      - name: Install the declared Android NDK
+        run: sdkmanager "ndk;27.2.12479018"
+      - name: Reuse retained source-identical compiler stage
+        if: ${{ !inputs.rebuild }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ick-android-compiler-${{ matrix.abi }}-edb615dcca30863b19a61318f6d365c25cc2ebdf
+          repository: isomorphisms/ai-ci
+          run-id: 41322683283
+          github-token: ${{ github.token }}
+          path: retained-compiler
+      - name: Restore retained compiler and qualify current exact Fortify profile
+        if: ${{ !inputs.rebuild }}
+        run: |
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI='${{ matrix.abi }}' ICK_STAGE="$RUNNER_TEMP/ick-android-${{ matrix.abi }}-stage" ICK_ARCHIVE="$GITHUB_WORKSPACE/retained-compiler/ick-android-${{ matrix.abi }}-stage.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile qualify ABI='${{ matrix.abi }}' NDK="$ANDROID_HOME/ndk/27.2.12479018" FORTIFY_SOURCE=2 ICK_SOURCE="$GITHUB_WORKSPACE/.ick-source" ICK_STAGE="$RUNNER_TEMP/ick-android-${{ matrix.abi }}-stage" QUALIFY_BUILD="$RUNNER_TEMP/ick-android-${{ matrix.abi }}-stage/qualification-current"
+      - name: Rebuild the same pinned compiler from source when explicitly selected
+        if: ${{ inputs.rebuild }}
+        uses: isomorphisms/ai-ci/ick-android@4a052ca8cf812fcc42f8d8fb145002a62d13badc
+        with:
+          abi: ${{ matrix.abi }}
+          ndk: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+          fortify-source: '2'
+      - name: Retain the installed compiler and qualification receipt
+        run: tar -C "${{ runner.temp }}/ick-android-${{ matrix.abi }}-stage" -czf "${{ runner.temp }}/ick-${{ matrix.abi }}.tar.gz" .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ick-${{ matrix.abi }}
+          path: ${{ runner.temp }}/ick-${{ matrix.abi }}.tar.gz
+          if-no-files-found: error

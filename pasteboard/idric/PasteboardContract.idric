@@ -1,0 +1,11 @@
+module PasteboardContract
+
+import Pasteboard
+
+%default total
+
+main : IO ()
+main =
+  if configuration_holds
+    then putStrLn "pasteboard_contract: all checks passed"
+    else putStrLn "pasteboard_contract: FAILED"
