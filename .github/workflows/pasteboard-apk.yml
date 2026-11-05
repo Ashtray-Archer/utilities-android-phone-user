@@ -32,6 +32,7 @@ jobs:
     env:
       GREASE: ${{ github.workspace }}/.tools/runtime/.build/grease/bin/grease
       CHARCOAL_PRESENTATION: ${{ github.workspace }}/.tools/charcoal/native/presentation
+      ANDROID_RES_DIR: ${{ github.workspace }}/.tools/charcoal/native/presentation/res
       ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
       ANDROID_KEYSTORE_PASSWORD: wegert-debug
       ANDROID_KEY_PASSWORD: wegert-debug
