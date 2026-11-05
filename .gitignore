@@ -5,3 +5,8 @@
 *.o
 .idea/
 .subpixel/
+.charcoal/
+**/res/values/charcoal.xml
+**/res/values-v21/charcoal.xml
+**/res/values-v31/charcoal.xml
+**/res/color/charcoal_text_states.xml

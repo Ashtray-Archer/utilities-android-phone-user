@@ -8,6 +8,7 @@
 #include "sevenths_display.h"
 
 #include "subpixel/font.h"
+#include "../../../../../.charcoal/native/presentation/charcoal.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -324,10 +325,10 @@ static void draw_screen(struct accelerometer_state *state)
         return;
     }
 
-    const uint32_t background = 0xff181818U;
-    const uint32_t foreground = 0xffeeeeeeU;
-    const uint32_t secondary = 0xffa8a8a8U;
-    const uint32_t track = 0xff505050U;
+    const uint32_t background ← CHARCOAL_BACKGROUND;
+    const uint32_t foreground ← CHARCOAL_TEXT;
+    const uint32_t secondary ← CHARCOAL_SECONDARY;
+    const uint32_t track ← CHARCOAL_BORDER;
     clear_buffer(&buffer, background);
 
     int32_t scale = buffer.width ÷ 180;
