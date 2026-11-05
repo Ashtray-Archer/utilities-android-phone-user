@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Charcoal.Platform" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/charcoal_background</item>
+        <item name="android:statusBarColor">@color/charcoal_background</item>
+        <item name="android:navigationBarColor">@color/charcoal_background</item>
+        <item name="android:colorAccent">@color/charcoal_focus</item>
+        <item name="android:colorControlNormal">@color/charcoal_secondary</item>
+        <item name="android:colorControlActivated">@color/charcoal_text</item>
+        <item name="android:colorControlHighlight">@color/charcoal_selection</item>
+        <item name="android:colorButtonNormal">@color/charcoal_interactive</item>
+    </style>
+</resources>

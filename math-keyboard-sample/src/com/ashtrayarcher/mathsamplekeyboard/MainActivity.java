@@ -32,6 +32,7 @@ public final class MainActivity extends Activity {
         );
 
         LinearLayout layout = new LinearLayout(this);
+        layout.setBackgroundResource(R.color.charcoal_background);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(20), dp(24), dp(20), dp(24));
 

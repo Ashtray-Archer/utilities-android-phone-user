@@ -14,19 +14,20 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "../../../../../ci/charcoal/charcoal.h"
 
 #define LOG_TAG "ProgrammersUnicodePad"
 #define LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOG_INFO(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-static const int32_t COLOR_BACKGROUND = (int32_t)0xFF101318u;
-static const int32_t COLOR_PANEL = (int32_t)0xFF1A2028u;
-static const int32_t COLOR_KEY = (int32_t)0xFF252E39u;
-static const int32_t COLOR_KEY_BORDER = (int32_t)0xFF526274u;
-static const int32_t COLOR_ACTION = (int32_t)0xFF31465Eu;
-static const int32_t COLOR_TEXT = (int32_t)0xFFF2F5F8u;
-static const int32_t COLOR_MUTED = (int32_t)0xFFB5C0CBu;
-static const int32_t COLOR_ACCENT = (int32_t)0xFF8ED0FFu;
+static const int32_t COLOR_BACKGROUND = (int32_t)CHARCOAL_BACKGROUND;
+static const int32_t COLOR_PANEL = (int32_t)CHARCOAL_SURFACE;
+static const int32_t COLOR_KEY = (int32_t)CHARCOAL_INTERACTIVE;
+static const int32_t COLOR_KEY_BORDER = (int32_t)CHARCOAL_BORDER;
+static const int32_t COLOR_ACTION = (int32_t)CHARCOAL_INTERACTIVE;
+static const int32_t COLOR_TEXT = (int32_t)CHARCOAL_TEXT;
+static const int32_t COLOR_MUTED = (int32_t)CHARCOAL_SECONDARY;
+static const int32_t COLOR_ACCENT = (int32_t)CHARCOAL_TEXT;
 
 typedef struct {
     struct android_app *app;

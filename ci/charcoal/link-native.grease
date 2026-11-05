@@ -1,0 +1,21 @@
+#!/usr/bin/env grease
+# AAPT2 JAR MANIFEST RES MIN_API VERSION_CODE VERSION_NAME OUTPUT
+set -eu -o pipefail
+if (len(ARGV) !== 8) { echo 'requires eight explicit resource-packaging arguments' >&2; exit 2 }
+var aapt = ARGV[0]
+var jar = ARGV[1]
+var manifest = ARGV[2]
+var resources = ARGV[3]
+var minimum = ARGV[4]
+var version = ARGV[5]
+var name = ARGV[6]
+var output = ARGV[7]
+for path in "$aapt" "$jar" "$manifest" "$resources" "$output" {
+  if (path[0] !== '/') { echo 'absolute package paths required' >&2; exit 2 }
+}
+test ! -e "$output"
+"$aapt" compile --dir "$resources" -o "$output.resources.zip"
+"$aapt" link -I "$jar" --manifest "$manifest" \
+  --min-sdk-version "$minimum" --target-sdk-version 36 \
+  --version-code "$version" --version-name "$name" \
+  -o "$output" "$output.resources.zip"

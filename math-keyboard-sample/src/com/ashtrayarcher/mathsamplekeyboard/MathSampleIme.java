@@ -9,6 +9,10 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 
 public final class MathSampleIme extends InputMethodService {
+    public MathSampleIme() {
+        setTheme(R.style.Theme_Charcoal_InputMethod);
+    }
+
     @Override
     public boolean onEvaluateInputViewShown() {
         return true;
@@ -63,6 +67,7 @@ public final class MathSampleIme extends InputMethodService {
     @Override
     public View onCreateInputView() {
         LinearLayout keyboard = new LinearLayout(this);
+        keyboard.setBackgroundResource(R.color.charcoal_background);
         keyboard.setOrientation(LinearLayout.VERTICAL);
         keyboard.setPadding(dp(3), dp(3), dp(3), dp(3));
 

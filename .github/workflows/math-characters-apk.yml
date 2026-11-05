@@ -3,6 +3,7 @@ name: Programmer's Unicode Picker Android
 on:
   pull_request:
     paths:
+      - 'ci/charcoal/**'
       - 'math-characters/**'
       - 'icky/**'
       - '.github/workflows/ick-compilers.yml'
@@ -10,6 +11,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'ci/charcoal/**'
       - 'math-characters/**'
       - 'icky/**'
       - '.github/workflows/ick-compilers.yml'
@@ -17,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   compilers:
@@ -64,6 +67,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
+      CHARCOAL_GREASE: ${{ github.workspace }}/grease/bin/grease
+      ASAN_OPTIONS: detect_leaks=0
       ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
       ANDROID_KEYSTORE_PASSWORD: wegert-debug
       ANDROID_KEY_PASSWORD: wegert-debug
@@ -119,6 +124,12 @@ jobs:
         env:
           ICK: ${{ steps.ick.outputs.compiler }}
         run: math-characters/run-host-tests.sh
+
+      - name: Require shared palette copies and acquire canonical Grease
+        uses: isomorphisms/ai-ci/.github/actions/charcoal-vendor@876a843dd7c5c635adaba854a53fd6f2c2139210
+        with:
+          header: ci/charcoal/charcoal.h
+          resources: ci/charcoal/res
 
       - name: Build native APK
         run: math-characters/build-apk.sh

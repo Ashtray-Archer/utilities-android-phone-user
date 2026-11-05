@@ -1,0 +1,32 @@
+#!/usr/bin/env grease
+# PROJECT SDK BUILD_TOOLS; preserve the existing Java/DEX sample and signer.
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'requires absolute PROJECT SDK BUILD_TOOLS' >&2; exit 2 }
+var root = ARGV[0]
+var sdk = ARGV[1]
+var tools = ARGV[2]
+for path in "$root" "$sdk" "$tools" {
+  if (path[0] !== '/') { echo 'absolute package paths required' >&2; exit 2 }
+}
+var sample = "$root/math-keyboard-sample"
+var output = "$sample/out"
+var jar = "$sdk/platforms/android-36/android.jar"
+mkdir -p "$output/classes" "$output/dex" "$output/generated"
+"$tools/aapt2" compile --dir "$root/ci/charcoal/res" -o "$output/charcoal.zip"
+"$tools/aapt2" compile --dir "$sample/res" -o "$output/sample.zip"
+"$tools/aapt2" link -I "$jar" --manifest "$sample/AndroidManifest.xml" \
+  --min-sdk-version 23 --target-sdk-version 36 --version-code 1 --version-name 0.1.0 \
+  --java "$output/generated" -o "$output/unsigned-unaligned.apk" \
+  "$output/charcoal.zip" "$output/sample.zip"
+javac -encoding UTF-8 -source 8 -target 8 -classpath "$jar" -d "$output/classes" \
+  "$output/generated/com/ashtrayarcher/mathsamplekeyboard/R.java" \
+  "$sample/src/com/ashtrayarcher/mathsamplekeyboard/Keyset.java" \
+  "$sample/src/com/ashtrayarcher/mathsamplekeyboard/MainActivity.java" \
+  "$sample/src/com/ashtrayarcher/mathsamplekeyboard/MathSampleIme.java"
+jar --create --file "$output/classes.jar" -C "$output/classes" .
+"$tools/d8" --lib "$jar" --output "$output/dex" "$output/classes.jar"
+zip -q -j "$output/unsigned-unaligned.apk" "$output/dex/classes.dex"
+"$tools/zipalign" -f 4 "$output/unsigned-unaligned.apk" "$output/unsigned-aligned.apk"
+"$tools/apksigner" sign --ks "$ANDROID_KEYSTORE" --ks-key-alias "$ANDROID_KEY_ALIAS" \
+  --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+  --out "$output/math-keyboard-sample.apk" "$output/unsigned-aligned.apk"
