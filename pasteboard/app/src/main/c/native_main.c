@@ -11,6 +11,7 @@
 #include <android/native_window_jni.h>
 #include <android_native_app_glue.h>
 #include <jni.h>
+#include "charcoal.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -27,14 +28,14 @@
 #define LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOG_INFO(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-static const int32_t COLOR_BACKGROUND = (int32_t)0xFF0F1115u;
-static const int32_t COLOR_CARD = (int32_t)0xFF1A1E24u;
-static const int32_t COLOR_CARD_EMPTY = (int32_t)0xFF14171Cu;
-static const int32_t COLOR_BORDER = (int32_t)0xFF343B46u;
-static const int32_t COLOR_TEXT = (int32_t)0xFFF2F4F7u;
-static const int32_t COLOR_MUTED = (int32_t)0xFF8A939Fu;
-static const int32_t COLOR_DOT = (int32_t)0xFF56606Du;
-static const int32_t COLOR_DOT_ACTIVE = (int32_t)0xFFE7EBF0u;
+static const int32_t COLOR_BACKGROUND = (int32_t)CHARCOAL_BACKGROUND;
+static const int32_t COLOR_CARD = (int32_t)CHARCOAL_SURFACE;
+static const int32_t COLOR_CARD_EMPTY = (int32_t)CHARCOAL_SURFACE;
+static const int32_t COLOR_BORDER = (int32_t)CHARCOAL_BORDER;
+static const int32_t COLOR_TEXT = (int32_t)CHARCOAL_TEXT;
+static const int32_t COLOR_MUTED = (int32_t)CHARCOAL_SECONDARY;
+static const int32_t COLOR_DOT = (int32_t)CHARCOAL_DISABLED;
+static const int32_t COLOR_DOT_ACTIVE = (int32_t)CHARCOAL_TEXT;
 
 typedef struct {
     float left;
@@ -52,6 +53,8 @@ typedef struct {
 
 typedef struct {
     struct android_app *app;
+    jobject canvas_surface;
+    ANativeWindow *canvas_window;
     PBHistoryView state;
     bool redraw;
     bool loaded;
@@ -262,6 +265,28 @@ static jstring new_java_string_utf8_with_class(JNIEnv *environment, jclass strin
     return result;
 }
 
+/* One Java Surface producer per native-window lifetime. A discarded JNI local
+ * reference alone leaves its native CPU connection alive until Java GC. */
+static void release_canvas_surface(AppContext *context) {
+    if (context->canvas_surface == NULL) return;
+    JNIEnv *environment ← NULL;
+    bool detach ← false;
+    if (!attach_environment(context->app->activity, &environment, &detach)) return;
+    jclass type ← (*environment)->GetObjectClass(environment, context->canvas_surface);
+    const jmethodID release ← type ? (*environment)->GetMethodID(environment, type, "release", "()V") : NULL;
+    const bool failed ← clear_exception(environment, "resolving Surface.release");
+    if (release != NULL && !failed) {
+        (*environment)->CallVoidMethod(environment, context->canvas_surface, release);
+        (void)clear_exception(environment, "Surface.release");
+    }
+    if (type != NULL) (*environment)->DeleteLocalRef(environment, type);
+    (*environment)->DeleteGlobalRef(environment, context->canvas_surface);
+    context->canvas_surface ← NULL;
+    context->canvas_window ← NULL;
+    __android_log_print(ANDROID_LOG_INFO, "PasteboardDiagnostic", "canvas_surface=released");
+    if (detach) (void)(*context->app->activity->vm)->DetachCurrentThread(context->app->activity->vm);
+}
+
 static void end_canvas(AppContext *context, CanvasSession *session) {
     JNIEnv *environment = session->env;
     if (session->canvas != NULL && session->surface != NULL && session->unlock_canvas != NULL) {
@@ -290,8 +315,24 @@ static bool begin_canvas(AppContext *context, CanvasSession *session) {
         return false;
     }
     JNIEnv *environment = session->env;
-    session->surface = ANativeWindow_toSurface(environment, context->app->window);
-    if (session->surface == NULL || clear_exception(environment, "ANativeWindow_toSurface")) {
+    if (context->canvas_surface != NULL && context->canvas_window != context->app->window)
+        release_canvas_surface(context);
+    if (context->canvas_surface == NULL) {
+        jobject surface ← ANativeWindow_toSurface(environment, context->app->window);
+        const bool failed ← clear_exception(environment, "ANativeWindow_toSurface");
+        if (surface != NULL && !failed) context->canvas_surface ← (*environment)->NewGlobalRef(environment, surface);
+        if (surface != NULL) (*environment)->DeleteLocalRef(environment, surface);
+        const bool retained_failed ← clear_exception(environment, "retaining canvas Surface");
+        if (context->canvas_surface == NULL || failed || retained_failed) {
+            end_canvas(context, session);
+            return false;
+        }
+        context->canvas_window ← context->app->window;
+        __android_log_print(ANDROID_LOG_INFO, "PasteboardDiagnostic", "canvas_surface=created");
+    }
+    session->surface ← (*environment)->NewLocalRef(environment, context->canvas_surface);
+    const bool surface_failed ← clear_exception(environment, "borrowing canvas Surface");
+    if (session->surface == NULL || surface_failed) {
         end_canvas(context, session);
         return false;
     }
@@ -360,7 +401,8 @@ static bool begin_canvas(AppContext *context, CanvasSession *session) {
 
     session->canvas = (*environment)->CallObjectMethod(environment, session->surface,
                                                         lock_canvas, NULL);
-    if (session->canvas == NULL || clear_exception(environment, "Surface.lockCanvas")) {
+    const bool lock_failed ← clear_exception(environment, "Surface.lockCanvas");
+    if (session->canvas == NULL || lock_failed) {
         session->canvas = NULL;
         end_canvas(context, session);
         return false;
@@ -934,6 +976,9 @@ static void handle_command(struct android_app *app, int32_t command) {
         case APP_CMD_CONFIG_CHANGED:
             context->redraw ← true;
             break;
+        case APP_CMD_TERM_WINDOW:
+            release_canvas_surface(context);
+            break;
         default: break;
     }
 }
@@ -984,6 +1029,7 @@ void android_main(struct android_app *app) {
             }
         }
         if (app->destroyRequested) {
+            release_canvas_surface(&context);
             pb_history_set_change_handler(NULL, NULL);
             pb_history_view_free(&context.state);
             free(context.down_identity); free(context.selected_identity);

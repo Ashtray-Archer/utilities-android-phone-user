@@ -9,6 +9,9 @@ var backend = ARGV[1]
 var sdk = ARGV[2]
 var checked = ARGV[3]
 var output = ARGV[4]
+var presentation = ENV.CHARCOAL_PRESENTATION
+test -s "$presentation/charcoal.h"
+test -s "$presentation/res/values/charcoal.xml"
 for path in "$repository" "$backend" "$sdk" "$checked" "$output" {
   if (path[0] !== '/') { echo 'absolute path required' >&2; exit 2 }
 }
@@ -29,6 +32,7 @@ setglobal ENV.ANDROID_STORE_PASSWORD = ENV.ANDROID_KEYSTORE_PASSWORD
 setglobal ENV.ANDROID_REQUIRE_NO_DEX = '0'
 setglobal ENV.ANDROID_DEX_FILE = "$checked/platform.dex"
 setglobal ENV.ANDROID_ASSET_DIR = "$checked/assets"
+setglobal ENV.ANDROID_RES_DIR = "$presentation/res"
 setglobal ENV.ANDROID_GREASE = ENV.GREASE
 setglobal ENV.ANDROID_SOURCE_COMMIT = $(git -C "$repository" rev-parse HEAD)
 var ndk = "$sdk/ndk/27.2.12479018"

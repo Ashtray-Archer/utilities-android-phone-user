@@ -31,6 +31,8 @@ jobs:
     timeout-minutes: 90
     env:
       GREASE: ${{ github.workspace }}/.tools/runtime/.build/grease/bin/grease
+      CHARCOAL_PRESENTATION: ${{ github.workspace }}/.tools/charcoal/native/presentation
+      ANDROID_RES_DIR: ${{ github.workspace }}/.tools/charcoal/native/presentation/res
       ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
       ANDROID_KEYSTORE_PASSWORD: wegert-debug
       ANDROID_KEY_PASSWORD: wegert-debug
@@ -58,6 +60,12 @@ jobs:
           repository: isomorphisms/android-NDK
           ref: 035452331c0f2b98391a551e0797418da5793eae
           path: .tools/android-NDK
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/android-NDK
+          ref: 38d6899706d855201239d86e1629e2620c0e8821
+          path: .tools/charcoal
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -155,10 +163,17 @@ jobs:
         run: ${{ env.GREASE }} pasteboard/build-checked.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$GITHUB_WORKSPACE/.tools/android-NDK" "$GITHUB_WORKSPACE/build/pasteboard-checked"
       - name: Package ABI-specific signed APKs through canonical producer
         run: ${{ env.GREASE }} pasteboard/build-apk.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/android-NDK" "$ANDROID_HOME" "$GITHUB_WORKSPACE/build/pasteboard-checked" "$GITHUB_WORKSPACE/build/pasteboard-apks"
+      - name: Check out the exact independent reboot and history observer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 3c17121c5622af712dbb32e53c4cdb9b76b64232
+          path: .ai-ci-independent
+          persist-credentials: false
       - name: Build independent ai-ci oracle and real clipboard-copy fixture
-        run: ${{ env.GREASE }} .ai-ci-ick/pasteboard/prepare.grease "$GITHUB_WORKSPACE/.ai-ci-ick" "$GITHUB_WORKSPACE/.tools/Idric" "$GITHUB_WORKSPACE/.tools/android-NDK" "$ANDROID_HOME" "$GITHUB_WORKSPACE/build/ick/x86_64" "$ANDROID_KEYSTORE" "$GITHUB_WORKSPACE/build/pasteboard-independent"
+        run: ${{ env.GREASE }} .ai-ci-independent/pasteboard/prepare.grease "$GITHUB_WORKSPACE/.ai-ci-independent" "$GITHUB_WORKSPACE/.tools/Idric" "$GITHUB_WORKSPACE/.tools/android-NDK" "$ANDROID_HOME" "$GITHUB_WORKSPACE/build/ick/x86_64" "$ANDROID_KEYSTORE" "$GITHUB_WORKSPACE/build/pasteboard-independent"
       - name: Build independent caller controls and deliberate source mutants
-        run: ${{ env.GREASE }} .ai-ci-ick/pasteboard/prepare-guards.grease "$GITHUB_WORKSPACE/.ai-ci-ick" "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/build/pasteboard-checked" "$GITHUB_WORKSPACE/.tools/android-NDK" "$ANDROID_HOME" "$GITHUB_WORKSPACE/build/ick/x86_64" "$ANDROID_KEYSTORE" "$GITHUB_WORKSPACE/build/pasteboard-independent/guards"
+        run: ${{ env.GREASE }} .ai-ci-independent/pasteboard/prepare-guards.grease "$GITHUB_WORKSPACE/.ai-ci-independent" "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/build/pasteboard-checked" "$GITHUB_WORKSPACE/.tools/android-NDK" "$ANDROID_HOME" "$GITHUB_WORKSPACE/build/ick/x86_64" "$ANDROID_KEYSTORE" "$GITHUB_WORKSPACE/build/pasteboard-independent/guards"
       - name: Retain Grease execution environment for independent emulator steps
         run: ${{ env.GREASE }} -c 'tar -czf build/pasteboard-grease.tar.gz .tools/runtime/.build/grease .tools/runtime/grease/source .tools/Idric/_/.tools'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
