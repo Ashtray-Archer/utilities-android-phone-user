@@ -11,6 +11,10 @@ for path in "$root" "$sdk" "$tools" {
 var sample = "$root/math-keyboard-sample"
 var output = "$sample/out"
 var jar = "$sdk/platforms/android-36/android.jar"
+var keystore = ENV.ANDROID_KEYSTORE
+var alias = ENV.ANDROID_KEY_ALIAS
+var store_password = ENV.ANDROID_KEYSTORE_PASSWORD
+var key_password = ENV.ANDROID_KEY_PASSWORD
 mkdir -p "$output/classes" "$output/dex" "$output/generated"
 "$tools/aapt2" compile --dir "$root/ci/charcoal/res" -o "$output/charcoal.zip"
 "$tools/aapt2" compile --dir "$sample/res" -o "$output/sample.zip"
@@ -27,6 +31,6 @@ jar --create --file "$output/classes.jar" -C "$output/classes" .
 "$tools/d8" --lib "$jar" --output "$output/dex" "$output/classes.jar"
 zip -q -j "$output/unsigned-unaligned.apk" "$output/dex/classes.dex"
 "$tools/zipalign" -f 4 "$output/unsigned-unaligned.apk" "$output/unsigned-aligned.apk"
-"$tools/apksigner" sign --ks "$ANDROID_KEYSTORE" --ks-key-alias "$ANDROID_KEY_ALIAS" \
-  --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+"$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$alias" \
+  --ks-pass "pass:$store_password" --key-pass "pass:$key_password" \
   --out "$output/math-keyboard-sample.apk" "$output/unsigned-aligned.apk"
