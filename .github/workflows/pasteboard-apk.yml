@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/android-NDK
-          ref: e8b67dfc67776c2b8da919785d15f38d68c91db0
+          ref: 38d6899706d855201239d86e1629e2620c0e8821
           path: .tools/charcoal
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
