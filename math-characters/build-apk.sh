@@ -42,7 +42,10 @@ unsigned_apk="$work_dir/unsigned.apk"
 aligned_apk="$work_dir/aligned.apk"
 final_apk="$output_dir/app-debug.apk"
 
-"$build_tools/aapt2" link -I "$platform_jar" --manifest "$project_dir/app/src/main/AndroidManifest.xml" --min-sdk-version 26 --target-sdk-version 36 --version-code 3 --version-name 0.3.0 -o "$base_apk"
+"${CHARCOAL_GREASE:?canonical Grease is required for resource packaging}" \
+    "$project_dir/../ci/charcoal/link-native.grease" \
+    "$build_tools/aapt2" "$platform_jar" "$project_dir/app/src/main/AndroidManifest.xml" \
+    "$project_dir/../ci/charcoal/res" 26 3 0.3.0 "$base_apk"
 cp "$base_apk" "$unsigned_apk"
 (
     cd "$staging_dir"

@@ -47,11 +47,10 @@ make -f "$bridge_root/../icky/Android.mk" native \
 base_apk="$work/base.apk"
 unsigned_apk="$work/unsigned.apk"
 aligned_apk="$work/aligned.apk"
-"$build_tools/aapt2" link -I "$platform_jar" \
-    --manifest "$root/AndroidManifest.xml" \
-    --min-sdk-version "$api" --target-sdk-version 36 \
-    --version-code 1 --version-name 0.1.0 \
-    -o "$base_apk"
+"${CHARCOAL_GREASE:?canonical Grease is required for resource packaging}" \
+    "$bridge_root/../ci/charcoal/link-native.grease" \
+    "$build_tools/aapt2" "$platform_jar" "$root/AndroidManifest.xml" \
+    "$bridge_root/../ci/charcoal/res" "$api" 1 0.1.0 "$base_apk"
 cp "$base_apk" "$unsigned_apk"
 (
     cd "$staging"

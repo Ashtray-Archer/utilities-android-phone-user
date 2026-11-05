@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Charcoal.InputMethod29" parent="Theme.Charcoal.InputMethod27">
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+    <style name="Theme.Charcoal.InputMethod" parent="Theme.Charcoal.InputMethod29" />
+</resources>

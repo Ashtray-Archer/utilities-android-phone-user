@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Preserve InputMethodService window semantics; set before onCreate. -->
+    <style name="Theme.Charcoal.InputMethod23" parent="android:style/Theme.Material.InputMethod">
+        <item name="android:windowBackground">@color/charcoal_background</item>
+        <item name="android:colorBackground">@color/charcoal_background</item>
+        <item name="android:colorForeground">@color/charcoal_text</item>
+        <item name="android:textColorPrimary">@color/charcoal_text_states</item>
+        <item name="android:textColorSecondary">@color/charcoal_secondary</item>
+        <item name="android:textViewStyle">@style/Widget.Charcoal.TextView</item>
+        <item name="android:colorButtonNormal">@color/charcoal_interactive</item>
+        <item name="android:colorControlNormal">@color/charcoal_secondary</item>
+        <item name="android:colorControlActivated">@color/charcoal_text</item>
+        <item name="android:colorControlHighlight">@color/charcoal_selection</item>
+        <item name="android:colorAccent">@color/charcoal_focus</item>
+        <item name="android:imeFullscreenBackground">@color/charcoal_background</item>
+        <item name="android:statusBarColor">@color/charcoal_background</item>
+        <item name="android:navigationBarColor">@color/charcoal_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <style name="Theme.Charcoal.InputMethod" parent="Theme.Charcoal.InputMethod23" />
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Charcoal.Window29" parent="Theme.Charcoal.Window27">
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+    <style name="Theme.Charcoal.Platform" parent="Theme.Charcoal.Window29" />
+    <style name="Theme.Charcoal.Dialog29" parent="Theme.Charcoal.Dialog21">
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+    <style name="Theme.Charcoal.Dialog.Platform" parent="Theme.Charcoal.Dialog29" />
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Charcoal.Window27" parent="Theme.Charcoal.Window23">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="Theme.Charcoal.Platform" parent="Theme.Charcoal.Window27" />
+</resources>

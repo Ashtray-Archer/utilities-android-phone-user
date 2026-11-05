@@ -6,7 +6,7 @@
         android:extractNativeLibs="false"
         android:hasCode="false"
         android:label="Clipboard smoke"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@style/Theme.Charcoal">
         <activity
             android:name="android.app.NativeActivity"
             android:exported="true">

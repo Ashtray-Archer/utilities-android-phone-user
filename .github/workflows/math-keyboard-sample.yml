@@ -3,18 +3,23 @@ name: Compact Math Keyboard Sample
 on:
   pull_request:
     paths:
+      - 'ci/charcoal/**'
       - 'math-keyboard-sample/**'
       - '.github/workflows/math-keyboard-sample.yml'
   push:
     branches: [main]
     paths:
+      - 'ci/charcoal/**'
       - 'math-keyboard-sample/**'
       - '.github/workflows/math-keyboard-sample.yml'
 
 permissions:
   contents: read
+  actions: read
 
 env:
+  CHARCOAL_GREASE: ${{ github.workspace }}/grease/bin/grease
+  ASAN_OPTIONS: detect_leaks=0
   SAMPLE_DIR: math-keyboard-sample
   BUILD_TOOLS: '36.0.0'
   ANDROID_PLATFORM: 'android-36'
@@ -60,38 +65,14 @@ jobs:
             src/com/ashtrayarcher/mathsamplekeyboard/KeysetTest.java
           java -cp out/key-test com.ashtrayarcher.mathsamplekeyboard.KeysetTest
 
-      - name: Compile and package keyboard APK
-        working-directory: math-keyboard-sample
-        run: |
-          set -eu
-          tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
-          android_jar="$ANDROID_HOME/platforms/$ANDROID_PLATFORM/android.jar"
-          mkdir -p out/classes out/dex
-          javac -encoding UTF-8 -source 8 -target 8 -classpath "$android_jar" -d out/classes \
-            src/com/ashtrayarcher/mathsamplekeyboard/Keyset.java \
-            src/com/ashtrayarcher/mathsamplekeyboard/MainActivity.java \
-            src/com/ashtrayarcher/mathsamplekeyboard/MathSampleIme.java
-          jar --create --file out/classes.jar -C out/classes .
-          "$tools/d8" --lib "$android_jar" --output out/dex out/classes.jar
-          "$tools/aapt2" compile --dir res -o out/resources.zip
-          "$tools/aapt2" link \
-            -o out/unsigned-unaligned.apk \
-            --manifest AndroidManifest.xml \
-            -I "$android_jar" \
-            --min-sdk-version 23 \
-            --target-sdk-version 36 \
-            --version-code 1 \
-            --version-name 0.1.0 \
-            out/resources.zip
-          zip -q -j out/unsigned-unaligned.apk out/dex/classes.dex
-          "$tools/zipalign" -f 4 out/unsigned-unaligned.apk out/unsigned-aligned.apk
-          "$tools/apksigner" sign \
-            --ks "$ANDROID_KEYSTORE" \
-            --ks-key-alias "$ANDROID_KEY_ALIAS" \
-            --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
-            --key-pass "pass:$ANDROID_KEY_PASSWORD" \
-            --out out/math-keyboard-sample.apk \
-            out/unsigned-aligned.apk
+      - name: Require shared palette copies and acquire canonical Grease
+        uses: isomorphisms/ai-ci/.github/actions/charcoal-vendor@ff34c4100bc7063aab245f8088b4abee77df3e3a
+        with:
+          header: ci/charcoal/charcoal.h
+          resources: ci/charcoal/res
+
+      - name: Compile and package keyboard APK with generated resources
+        run: '"$CHARCOAL_GREASE" ci/charcoal/package-keyboard.grease "$GITHUB_WORKSPACE" "$ANDROID_HOME" "$ANDROID_HOME/build-tools/$BUILD_TOOLS"'
 
       - name: Verify finished APK identity and signer
         working-directory: math-keyboard-sample

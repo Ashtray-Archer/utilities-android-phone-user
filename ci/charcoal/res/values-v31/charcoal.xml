@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Charcoal.Window31" parent="Theme.Charcoal.Window29">
+        <item name="android:windowSplashScreenBackground">@color/charcoal_background</item>
+    </style>
+    <style name="Theme.Charcoal.Platform" parent="Theme.Charcoal.Window31" />
+</resources>

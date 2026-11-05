@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="charcoal_background">#212121</color>
+    <color name="charcoal_surface">#2F2F2F</color>
+    <color name="charcoal_interactive">#383838</color>
+    <color name="charcoal_border">#454545</color>
+    <color name="charcoal_text">#F4F4F4</color>
+    <color name="charcoal_secondary">#B4B4B4</color>
+    <color name="charcoal_disabled">#858585</color>
+    <color name="charcoal_selection">#595959</color>
+    <color name="charcoal_focus">#B4B4B4</color>
+    <color name="charcoal_error">#FFB4AB</color>
+    <color name="charcoal_warning">#E8CB8B</color>
+    <color name="charcoal_success">#A8D5BA</color>
+    <!-- TextView's platform textAppearance can bypass textColorPrimary. -->
+    <style name="Widget.Charcoal.TextView" parent="android:style/Widget.TextView">
+        <item name="android:textColor">@color/charcoal_text_states</item>
+        <item name="android:textColorHint">@color/charcoal_secondary</item>
+    </style>
+    <!-- API 19 remains supported by native consumers such as Chord Changes. -->
+    <style name="Theme.Charcoal.Platform" parent="android:style/Theme.Holo.NoActionBar" />
+    <style name="Theme.Charcoal.Dialog.Platform" parent="android:style/Theme.Holo.Dialog" />
+    <style name="Theme.Charcoal" parent="Theme.Charcoal.Platform">
+        <item name="android:windowBackground">@color/charcoal_background</item>
+        <item name="android:colorBackground">@color/charcoal_background</item>
+        <item name="android:colorForeground">@color/charcoal_text</item>
+        <item name="android:textColorPrimary">@color/charcoal_text_states</item>
+        <item name="android:textViewStyle">@style/Widget.Charcoal.TextView</item>
+        <item name="android:textColorSecondary">@color/charcoal_secondary</item>
+        <item name="android:textColorHint">@color/charcoal_secondary</item>
+        <item name="android:textColorLink">@color/charcoal_text</item>
+        <item name="android:textColorHighlight">@color/charcoal_selection</item>
+        <item name="android:alertDialogTheme">@style/Theme.Charcoal.Dialog</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+    <style name="Theme.Charcoal.Dialog" parent="Theme.Charcoal.Dialog.Platform">
+        <item name="android:windowBackground">@color/charcoal_surface</item>
+        <item name="android:colorBackground">@color/charcoal_surface</item>
+        <item name="android:colorForeground">@color/charcoal_text</item>
+        <item name="android:textColorPrimary">@color/charcoal_text_states</item>
+        <item name="android:textViewStyle">@style/Widget.Charcoal.TextView</item>
+        <item name="android:textColorSecondary">@color/charcoal_secondary</item>
+        <item name="android:textColorHint">@color/charcoal_secondary</item>
+        <item name="android:textColorHighlight">@color/charcoal_selection</item>
+    </style>
+</resources>
