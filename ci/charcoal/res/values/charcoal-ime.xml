@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Preserve InputMethodService window semantics; set before onCreate. -->
-    <style name="Theme.Charcoal.InputMethod" parent="android:style/Theme.Material.InputMethod">
+    <style name="Theme.Charcoal.InputMethod23" parent="android:style/Theme.Material.InputMethod">
         <item name="android:windowBackground">@color/charcoal_background</item>
         <item name="android:colorBackground">@color/charcoal_background</item>
         <item name="android:colorForeground">@color/charcoal_text</item>
@@ -17,7 +17,6 @@
         <item name="android:statusBarColor">@color/charcoal_background</item>
         <item name="android:navigationBarColor">@color/charcoal_background</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:forceDarkAllowed">false</item>
     </style>
+    <style name="Theme.Charcoal.InputMethod" parent="Theme.Charcoal.InputMethod23" />
 </resources>

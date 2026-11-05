@@ -24,9 +24,6 @@
         <item name="android:windowBackground">@color/charcoal_background</item>
         <item name="android:colorBackground">@color/charcoal_background</item>
         <item name="android:colorForeground">@color/charcoal_text</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:forceDarkAllowed">false</item>
         <item name="android:textColorPrimary">@color/charcoal_text_states</item>
         <item name="android:textViewStyle">@style/Widget.Charcoal.TextView</item>
         <item name="android:textColorSecondary">@color/charcoal_secondary</item>
@@ -45,6 +42,5 @@
         <item name="android:textColorSecondary">@color/charcoal_secondary</item>
         <item name="android:textColorHint">@color/charcoal_secondary</item>
         <item name="android:textColorHighlight">@color/charcoal_selection</item>
-        <item name="android:forceDarkAllowed">false</item>
     </style>
 </resources>

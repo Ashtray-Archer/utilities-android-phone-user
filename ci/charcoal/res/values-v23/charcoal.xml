@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Charcoal.Window23" parent="Theme.Charcoal.Window21">
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <style name="Theme.Charcoal.Platform" parent="Theme.Charcoal.Window23" />
+</resources>
