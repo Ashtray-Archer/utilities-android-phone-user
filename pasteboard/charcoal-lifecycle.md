@@ -25,3 +25,14 @@ must qualify this repair; the old API29 failure is not relabeled as passed.
 
 Platform lifetime contract:
 https://developer.android.com/ndk/reference/group/native-activity#anativewindow_tosurface
+
+The signed29d6a7a candidate now passes both API29/API34 system modes, rotation
+policy, Home/resume, force-stop reopen and all-frame broad-white startup guard
+in ai-ci41980041161. Its separate full workflow API35 fails post-reboot launch;
+API34 is cancelled after a long wait in that region. The old observer can
+accept the previous kernel's boot-complete value. Pin the new-kernel observer
+for both fixture preparation and execution, retaining the separate unchanged
+ICK producer. The preceding observer5ad01a4 passed real reboots on all three
+APIs; the bounded current source must requalify. Require exact saved history
+bytes and never reinstall or recreate state after reboot. Fresh full-suite
+qualification must establish whether this resolves the captured failure.
