@@ -35,6 +35,15 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Check out the shared charcoal presentation contract
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/android-NDK
+          ref: 38d6899706d855201239d86e1629e2620c0e8821
+          path: .charcoal
+          persist-credentials: false
+      - name: Materialize pinned charcoal launch resources
+        run: cp -R .charcoal/native/presentation/res/. accelerometer/app/src/main/res/
       - name: Check out pinned shared Subpixel whole-path renderer
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

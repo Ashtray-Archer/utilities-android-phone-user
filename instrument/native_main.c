@@ -5,6 +5,7 @@
 #include <android/log.h>
 #include <android_native_app_glue.h>
 #include "subpixel/font.h"
+#include "../.charcoal/native/presentation/charcoal.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -98,21 +99,21 @@ static void draw(struct instrument *state) {
     uint32_t *pixels = buffer.bits;
     for (int y = 0; y < buffer.height; ++y)
         for (int x = 0; x < buffer.width; ++x)
-            pixels[(size_t)y*(size_t)buffer.stride+(size_t)x] = UINT32_C(0xff161616);
+            pixels[(size_t)y*(size_t)buffer.stride+(size_t)x] ← CHARCOAL_BACKGROUND;
     int small = buffer.width/180;
     if (small < 2) small = 2;
     if (small > 5) small = 5;
-    text(&buffer,TITLE,buffer.height/12,small+1,UINT32_C(0xffeeeeee));
-    text(&buffer,state->status,buffer.height/5,small,UINT32_C(0xffa0a0a0));
+    text(&buffer,TITLE,buffer.height/12,small+1,CHARCOAL_TEXT);
+    text(&buffer,state->status,buffer.height/5,small,CHARCOAL_SECONDARY);
     if (state->have_sample) {
         for (unsigned axis = 0; axis < AXES; ++axis) {
             char number[64];
             if (AXES == 3)
                 (void)snprintf(number,sizeof number,"%c %+.5g",(int)('X'+axis),(double)state->value[axis]);
             else (void)snprintf(number,sizeof number,"%.5g",(double)state->value[axis]);
-            text(&buffer,number,buffer.height*(3+(int)axis)/8,small+2,UINT32_C(0xffeee8c0));
+            text(&buffer,number,buffer.height*(3+(int)axis)/8,small+2,CHARCOAL_TEXT);
         }
-        text(&buffer,UNIT,buffer.height*7/8,small,UINT32_C(0xffa0a0a0));
+        text(&buffer,UNIT,buffer.height*7/8,small,CHARCOAL_SECONDARY);
     }
     (void)ANativeWindow_unlockAndPost(state->app->window);
     (void)clock_gettime(CLOCK_MONOTONIC,&finished);

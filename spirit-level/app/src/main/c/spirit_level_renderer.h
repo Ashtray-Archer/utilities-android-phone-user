@@ -3,6 +3,7 @@
 
 #include "spirit_level_geometry.h"
 #include "subpixel/font.h"
+#include "../../../../../.charcoal/native/presentation/charcoal.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -26,10 +27,10 @@ struct spirit_level_segment {
 };
 
 enum { SPIRIT_LEVEL_FOOTER_HEIGHT = 24 };
-#define SPIRIT_LEVEL_BACKGROUND UINT32_C(0xff101010)
-#define SPIRIT_LEVEL_GUIDE UINT32_C(0xff606060)
-#define SPIRIT_LEVEL_LINE UINT32_C(0xffeeeeee)
-#define SPIRIT_LEVEL_MARKER UINT32_C(0xff70e0c0)
+#define SPIRIT_LEVEL_BACKGROUND CHARCOAL_BACKGROUND
+#define SPIRIT_LEVEL_GUIDE CHARCOAL_SECONDARY
+#define SPIRIT_LEVEL_LINE CHARCOAL_TEXT
+#define SPIRIT_LEVEL_MARKER CHARCOAL_SUCCESS
 
 static inline bool spirit_level_surface_valid(struct spirit_level_surface surface)
 {

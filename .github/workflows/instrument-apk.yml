@@ -56,6 +56,15 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
+      - name: Check out the shared charcoal presentation contract
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/android-NDK
+          ref: 38d6899706d855201239d86e1629e2620c0e8821
+          path: .charcoal
+          persist-credentials: false
+      - name: Materialize pinned charcoal launch resources
+        run: cp -R .charcoal/native/presentation/res/. ${{ matrix.app }}/app/src/main/res/
       - name: Check out canonical shared font
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -151,8 +160,8 @@ jobs:
         run: |
           set -eu
           mkdir -p .grease/bin
-          gh api repos/dilapidated-shed/grease/actions/artifacts/12192502970/zip > "$RUNNER_TEMP/conway-grease.zip"
-          printf '%s  %s\n' 295329ec3bb419d90364fcb5937eafe4306b03f68b7aaa63089dadde8082ffb5 "$RUNNER_TEMP/conway-grease.zip" | sha256sum -c -
+          gh api repos/dilapidated-shed/grease/actions/artifacts/13062637698/zip > "$RUNNER_TEMP/conway-grease.zip"
+          printf '%s  %s\n' fb500602a8ad878913e596f734c37769a5c7f3d2ac6941ee69ce22e31f479a19 "$RUNNER_TEMP/conway-grease.zip" | sha256sum -c -
           unzip -p "$RUNNER_TEMP/conway-grease.zip" _bin/cxx-asan/ysh > .grease/bin/ysh
           curl --fail --location --silent --show-error \
             https://github.com/isomorphisms/grease/releases/download/tablet-aarch64-9b3dc8904891/grease-aarch64-termux.tar.gz \
