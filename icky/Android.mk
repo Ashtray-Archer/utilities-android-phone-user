@@ -44,7 +44,7 @@ INCLUDE_accelerometer = -I"$(ROOT)/accelerometer/app/src/main/c" -I"$(ROOT)/acce
 INCLUDE_picker = -I"$(ROOT)/math-characters/app/src/main/c"
 INCLUDE_hardware = -I"$(ROOT)/accelerometer/android" -I"$(ROOT)/accelerometer/model" -I"$(ROOT)/accelerometer/command"
 INCLUDE_clipboard = -I"$(ROOT)/android-clipboard"
-INCLUDE_pasteboard = -I"$(ROOT)/pasteboard/app/src/main/c" -I"$(ROOT)/android-clipboard"
+INCLUDE_pasteboard = -I"$(CHARCOAL_PRESENTATION)" -I"$(ROOT)/pasteboard/app/src/main/c" -I"$(ROOT)/android-clipboard"
 SOURCES = $(SOURCE_$(PROFILE))
 INCLUDES = $(INCLUDE_$(PROFILE)) -isystem "$(GLUE)"
 OBJECTS = $(addprefix $(BUILD)/,$(SOURCES:.c=.o))

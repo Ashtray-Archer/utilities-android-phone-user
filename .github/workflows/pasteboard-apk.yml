@@ -31,6 +31,7 @@ jobs:
     timeout-minutes: 90
     env:
       GREASE: ${{ github.workspace }}/.tools/runtime/.build/grease/bin/grease
+      CHARCOAL_PRESENTATION: ${{ github.workspace }}/.tools/charcoal/native/presentation
       ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
       ANDROID_KEYSTORE_PASSWORD: wegert-debug
       ANDROID_KEY_PASSWORD: wegert-debug
@@ -58,6 +59,12 @@ jobs:
           repository: isomorphisms/android-NDK
           ref: 035452331c0f2b98391a551e0797418da5793eae
           path: .tools/android-NDK
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/android-NDK
+          ref: 3e682fb1175beef5625dbd2418730220e49fc9bd
+          path: .tools/charcoal
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

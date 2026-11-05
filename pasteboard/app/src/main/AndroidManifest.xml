@@ -13,7 +13,7 @@
         android:hasCode="true"
         android:label="Pasteboard"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@style/Theme.Charcoal">
         <meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />
         <provider
             android:name="com.isomorphisms.pasteboard.ShizukuProvider"

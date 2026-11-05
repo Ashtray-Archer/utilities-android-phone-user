@@ -11,6 +11,7 @@
 #include <android/native_window_jni.h>
 #include <android_native_app_glue.h>
 #include <jni.h>
+#include "charcoal.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -27,14 +28,14 @@
 #define LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOG_INFO(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-static const int32_t COLOR_BACKGROUND = (int32_t)0xFF0F1115u;
-static const int32_t COLOR_CARD = (int32_t)0xFF1A1E24u;
-static const int32_t COLOR_CARD_EMPTY = (int32_t)0xFF14171Cu;
-static const int32_t COLOR_BORDER = (int32_t)0xFF343B46u;
-static const int32_t COLOR_TEXT = (int32_t)0xFFF2F4F7u;
-static const int32_t COLOR_MUTED = (int32_t)0xFF8A939Fu;
-static const int32_t COLOR_DOT = (int32_t)0xFF56606Du;
-static const int32_t COLOR_DOT_ACTIVE = (int32_t)0xFFE7EBF0u;
+static const int32_t COLOR_BACKGROUND = (int32_t)CHARCOAL_BACKGROUND;
+static const int32_t COLOR_CARD = (int32_t)CHARCOAL_SURFACE;
+static const int32_t COLOR_CARD_EMPTY = (int32_t)CHARCOAL_SURFACE;
+static const int32_t COLOR_BORDER = (int32_t)CHARCOAL_BORDER;
+static const int32_t COLOR_TEXT = (int32_t)CHARCOAL_TEXT;
+static const int32_t COLOR_MUTED = (int32_t)CHARCOAL_SECONDARY;
+static const int32_t COLOR_DOT = (int32_t)CHARCOAL_DISABLED;
+static const int32_t COLOR_DOT_ACTIVE = (int32_t)CHARCOAL_TEXT;
 
 typedef struct {
     float left;
