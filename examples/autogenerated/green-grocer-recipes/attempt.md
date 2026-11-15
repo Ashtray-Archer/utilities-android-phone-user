@@ -1,5 +1,55 @@
 # Recipe shopping: Idriç implementation attempt
 
+## Continuation type sketch: source links and shopper-selected stores
+
+The recovered October 24 requirements include saved recipes originating in
+TikTok/YouTube videos and a single shopping plan split across stores, with the
+shopper choosing products and stores. This continuation extends the existing
+semantic owner. It does not infer ingredients from a video or perform a retailer
+write.
+
+`RecipeSource` retains an exact source link and a shopper-entered note. A recipe
+has zero or more sources; an empty source link is rejected without changing the
+saved recipe. Editing ingredients or servings must retain the source records.
+No network effect follows from storing a link.
+
+`RequirementStore` binds an ingredient/dimension requirement to an explicit
+store override. The existing selected store is the default; each override wins
+only for its requirement. Returning to the default removes that override.
+Changing either choice invalidates review. Each approval and fresh observation
+must match the store selected for that requirement. Shopping arithmetic remains
+in the existing planner, with no alternate quantity or money model.
+
+`prepare_store_handoffs : ShoppingState → Either Text (List StoreHandoff)`
+partitions the existing fully reviewed handoff by exact retailer and location.
+An unresolved line in any store blocks the whole proposal. Equal SKU/UPC text at
+different stores must never merge. These are pure proposals, not sent orders.
+
+Acceptance will execute independent exact totals, source preservation, store
+overrides, reset-to-default, stale approvals, missing/changed observations and
+store-separated handoff cases, plus compiled deliberate mutations.
+
+### November 15 result
+
+The checked host suite passes all 51 cases on frontend
+`2bce7677f513d711875e978bd6f5ad28b9e54d58`; all six compiled semantic mutations
+fail their intended behavioral assertions. The runtime probe also produces its
+nine independently expected output lines. The first edit used the reserved
+keyword `choice` as a binding; the parser rejected it. Renaming the binding to
+`store_choice` repaired that source error, without a language or backend change.
+
+A fresh canonical android-NDK driver at
+`6ab4818219efa7ea5eda137ca6b76976eb2a4d42`, built with the same frontend, emits
+the actual updated runtime probe via `--directive managed-exports`. No narrowed
+arithmetic, generated C, Java or alternate application model was introduced.
+The earlier recursive Number-helper emission blocker is therefore superseded
+for this probe. ART execution and full renderer/storage integration remain the
+next acceptance boundaries. No new missing language capability is established
+by this continuation; lowering alone does not prove the complete app works.
+
+The older results below remain historical. Current hashes and outputs are in
+`green-grocer/receipts/recipe-stores-2026-11-15/`.
+
 ## Type sketch (written before implementation)
 
 The shopper chooses saved recipes and positive serving counts. Ingredients have

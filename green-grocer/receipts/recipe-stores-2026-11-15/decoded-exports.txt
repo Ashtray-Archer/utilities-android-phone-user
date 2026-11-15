@@ -1,0 +1,77 @@
+.method public static ingredient_store_name(Ljava/lang/String;)Ljava/lang/String;
+    .registers 65
+
+    move-object/from16 v16, p0
+
+    check-cast v16, Ljava/lang/String;
+
+    invoke-static/range {v16 .. v16}, LIdric/Generated;->__idricManaged6(Ljava/lang/Object;)Ljava/lang/Object;
+
+    move-result-object v12
+
+    move-object v0, v12
+
+    check-cast v0, Ljava/lang/String;
+
+    return-object v0
+.end method
+
+.method public static packages_for_grams(I)I
+    .registers 70
+
+    move/from16 v66, p0
+
+    move/from16 v0, v66
+
+    int-to-long v4, v0
+
+    invoke-static {v4, v5}, Ljava/math/BigInteger;->valueOf(J)Ljava/math/BigInteger;
+
+    move-result-object v18
+
+    invoke-static/range {v18 .. v18}, LIdric/Generated;->__idricManaged5(Ljava/lang/Object;)Ljava/lang/Object;
+
+    move-result-object v14
+
+    invoke-static {v14}, LIdric/Generated;->__idricIntExact(Ljava/lang/Object;)I
+
+    move-result v2
+
+    return v2
+.end method
+
+.method public static saved_recipe_name(Ljava/lang/String;)Ljava/lang/String;
+    .registers 65
+
+    move-object/from16 v16, p0
+
+    check-cast v16, Ljava/lang/String;
+
+    invoke-static/range {v16 .. v16}, LIdric/Generated;->__idricManaged4(Ljava/lang/Object;)Ljava/lang/Object;
+
+    move-result-object v12
+
+    move-object v0, v12
+
+    check-cast v0, Ljava/lang/String;
+
+    return-object v0
+.end method
+
+.method public static saved_recipe_source_link(Ljava/lang/String;)Ljava/lang/String;
+    .registers 65
+
+    move-object/from16 v16, p0
+
+    check-cast v16, Ljava/lang/String;
+
+    invoke-static/range {v16 .. v16}, LIdric/Generated;->__idricManaged3(Ljava/lang/Object;)Ljava/lang/Object;
+
+    move-result-object v12
+
+    move-object v0, v12
+
+    check-cast v0, Ljava/lang/String;
+
+    return-object v0
+.end method

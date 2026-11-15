@@ -19,11 +19,21 @@ Android sample application until the Idriç runtime can be integrated.
 - Recipe save/edit/select, servings, pantry, store, observation, match approval,
   navigation/back and final cart-review transitions. Recipes is the initial state.
 - Item-level handoff result values, including unknown outcomes after lost replies.
+- Recipe source links and shopper notes, retained across edits. The sources may
+  be video links, including TikTok/YouTube; no fetch, transcription or ingredient
+  extraction is implemented. Links are retained as text and must be nonempty.
+- A default store plus explicit ingredient/dimension store overrides. Changing
+  the default preserves the overrides; returning an ingredient to the default
+  requires revalidation. No automatic store or product selection is introduced.
+- One fully reviewed plan partitioned into retailer/location-specific handoff
+  proposals. Equal identifier strings across stores remain distinct, and an
+  unresolved line at any store prevents proposing the whole handoff.
 
-`check-recipes.grease` builds and executes 37 independently expected host cases
-and three implementation mutations. The mutations ignore pantry stock, round
-packages down and accept changed prices; each compiles and is rejected by the
-intended behavioral assertion. The test also runs the same runtime probe on
+`check-recipes.grease` builds and executes 51 independently expected host cases
+and six implementation mutations. The mutations ignore pantry stock, round
+packages down, accept changed prices, discard recipe sources, ignore store
+overrides and collapse different-store handoffs. Each compiles and is rejected
+by the intended behavioral assertion. The test also runs the same runtime probe on
 the host. It does not substitute typechecking for execution.
 
 The historical 2264-cent C fixture expectation is included, but the C executable
@@ -36,12 +46,28 @@ number as a partial subtotal and keep unresolved ingredients visible.
 Invoke maintained Grease helpers with explicit absolute repository, frontend,
 driver and fresh evidence paths; each prints its argument interface without
 arguments. Frontend is pinned to
-`740bbf2b1d9e811fd00c719c3473eede17ceea3b`. Host Chez is a semantic control, never
+`2bce7677f513d711875e978bd6f5ad28b9e54d58`. Host Chez is a semantic control, never
 the Android application backend. Some local Grease builds include LeakSanitizer;
 this container needed `ASAN_OPTIONS=detect_leaks=0` because LeakSanitizer cannot
 enumerate the traced process. That setting changes no application test.
 
-## Actual compiler boundary
+## Current compiler boundary
+
+The November 15 continuation freshly builds the canonical DEX driver from
+android-NDK `6ab4818219efa7ea5eda137ca6b76976eb2a4d42`, using the frontend above.
+`check-recipe-dex.grease` selects its existing `managed-exports` directive.
+The actual `RecipeRuntime.idric` now emits DEX successfully, preserving the
+exact Number arithmetic. Its exported probes cover package rounding, recipe
+save/name, source-link retention/refusal and ingredient-store choice. Source
+and executed compiler hashes are recorded in
+`receipts/recipe-stores-2026-11-15/`.
+
+This supersedes the old emission blocker for these probes. It is **not** ART
+execution, full Android shopping behavior, a qualified APK, or a claim that
+every application path has been lowered and executed. The current host suite
+exercises the full split-store planner. Android integration remains separate.
+
+## Historical October 24 compiler failure
 
 `RecipeRuntime.idric` wraps the actual domain operations in legal Int32/Text
 observation exports. Its source checks and runs on the host. The canonical
@@ -73,9 +99,9 @@ recognizing this particular source program would evade the requirement.
 
 | Boundary | State |
 | --- | --- |
-| Idriç recipe decision host execution | PASS: 37 cases, three rejected mutants |
-| Actual recipe rounding through DEX | FAIL: checked recursive Number helper |
-| Recipe-save DEX emission / independent disassembly | PASS; runtime NOT_RUN |
+| Idriç recipe decision host execution | PASS: 51 cases, six rejected mutants |
+| Actual recipe runtime probe DEX emission | PASS; ART NOT_RUN |
+| Historical recipe-save DEX emission / independent disassembly | PASS at old source; current runtime NOT_RUN |
 | Current C oracle differential execution | NOT_RUN |
 | Recipe editor, persistence, renderer and touch integration | NOT_IMPLEMENTED |
 | Live retailer catalog/search/OAuth/cart adapter | NOT_IMPLEMENTED |

@@ -117,12 +117,19 @@ serving_count : Servings → Number
 serving_count value = S value.servings_less_one
 
 public export
+record RecipeSource where
+  constructor FromSource
+  source_link : Text
+  source_note : Text
+
+public export
 record Recipe where
   constructor SavedRecipe
   recipe_identity : Text
   recipe_name : Text
   recipe_servings : Servings
   recipe_ingredients : List Ingredient
+  recipe_sources : List RecipeSource
 
 public export
 record Selection where
@@ -223,6 +230,19 @@ export
 same_store : Store → Store → Bool
 same_store left right = left.retailer_identity ≟ right.retailer_identity &&
   left.store_identity ≟ right.store_identity
+
+public export
+record RequirementStore where
+  constructor BuyAt
+  store_requirement : Requirement
+  chosen_store : Store
+
+export
+store_for : Store → List RequirementStore → Requirement → Store
+store_for default_store choices required =
+  case find (\store_choice ⇒ same_requirement store_choice.store_requirement required) choices of
+    Nothing ⇒ default_store
+    Just store_choice ⇒ store_choice.chosen_store
 
 public export
 choice availability_kind one_of
@@ -371,6 +391,12 @@ shopping_plan : Store → List NetRequirement → List ApprovedMatch → List Pr
 shopping_plan store needed approved fresh = map (plan_requirement store approved fresh) needed
 
 export
+shopping_plan_with_stores : Store → List RequirementStore → List NetRequirement → List ApprovedMatch → List Product → List planned_line
+shopping_plan_with_stores default_store choices needed approved fresh =
+  map (\required ⇒ plan_requirement (store_for default_store choices required.demand)
+    approved fresh required) needed
+
+export
 cart_total : List planned_line → Number
 cart_total [] = 0
 cart_total (ready _ line :: rest) = line.line_cents + cart_total rest
@@ -398,6 +424,7 @@ record ShoppingState where
   selections : List Selection
   pantry : List PantryItem
   selected_store : Maybe Store
+  store_choices : List RequirementStore
   approved_matches : List ApprovedMatch
   fresh_products : List Product
   screen : shopping_screen
@@ -407,7 +434,7 @@ record ShoppingState where
 
 export
 begin_shopping : ShoppingState
-begin_shopping = Shopping [] [] [] Nothing [] [] recipes_screen [] False ""
+begin_shopping = Shopping [] [] [] Nothing [] [] [] recipes_screen [] False ""
 
 export
 current_plan : ShoppingState → Either Text (List planned_line)
@@ -415,7 +442,7 @@ current_plan state = do
   needed ← requirements_for state.saved_recipes state.selections
   case state.selected_store of
     Nothing ⇒ Left "Choose a retailer and store"
-    Just store ⇒ Right (shopping_plan store (map (subtract_pantry state.pantry) needed)
+    Just store ⇒ Right (shopping_plan_with_stores store state.store_choices (map (subtract_pantry state.pantry) needed)
       state.approved_matches state.fresh_products)
 
 public export
@@ -425,6 +452,8 @@ choice user_action one_of
   unselect_recipe Text
   set_pantry (List PantryItem)
   choose_store Store
+  choose_requirement_store Requirement Store
+  use_default_store Requirement
   observe_products (List Product)
   approve_product Requirement Product Bool
   go_to shopping_screen
@@ -436,6 +465,8 @@ transition : user_action → ShoppingState → ShoppingState
 transition (save_recipe recipe) state =
   if recipe.recipe_identity ≟ "" || recipe.recipe_name ≟ ""
     then { notice := "Recipe needs an identity and name" } state
+    else if any (\source ⇒ source.source_link ≟ "") recipe.recipe_sources
+      then { notice := "Recipe source needs a link" } state
     else { saved_recipes := recipe :: filter (\old ⇒ not (old.recipe_identity ≟ recipe.recipe_identity)) state.saved_recipes,
                   review_approved := False, notice := "Recipe saved" } state
 transition (select_recipe selection) state =
@@ -447,14 +478,26 @@ transition (unselect_recipe identity) state =
   { selections := filter (\old ⇒ not (old.selected_recipe ≟ identity)) state.selections,
            review_approved := False, notice := "Recipe removed from this plan" } state
 transition (set_pantry items) state = { pantry := items, review_approved := False, notice := "Pantry updated" } state
-transition (choose_store store) state = { selected_store := Just store, fresh_products := [],
-  review_approved := False, notice := "Revalidate matches at this store" } state
+transition (choose_store store) state =
+  if store.retailer_identity ≟ "" || store.store_identity ≟ ""
+    then { notice := "Choose a retailer and store" } state
+    else { selected_store := Just store, fresh_products := [],
+      review_approved := False, notice := "Revalidate matches at the selected stores" } state
+transition (choose_requirement_store required store) state =
+  if store.retailer_identity ≟ "" || store.store_identity ≟ ""
+    then { notice := "Choose a retailer and store" } state
+    else { store_choices := BuyAt required store :: filter
+      (\store_choice ⇒ not (same_requirement store_choice.store_requirement required)) state.store_choices,
+      review_approved := False, notice := "Revalidate this ingredient at its chosen store" } state
+transition (use_default_store required) state =
+  { store_choices := filter (\store_choice ⇒ not (same_requirement store_choice.store_requirement required)) state.store_choices,
+    review_approved := False, notice := "Revalidate this ingredient at the default store" } state
 transition (observe_products products) state = { fresh_products := products,
   review_approved := False, notice := "Review current prices and availability" } state
 transition (approve_product required product substitution) state =
   case state.selected_store of
     Nothing ⇒ { notice := "Choose a retailer and store" } state
-    Just store ⇒ if not (same_store store product.product_store)
+    Just store ⇒ if not (same_store (store_for store state.store_choices required) product.product_store)
       then { notice := "Product belongs to a different store" } state
       else case approve_match required product substitution of
         Left message ⇒ { notice := message } state
@@ -520,6 +563,23 @@ record_handoff_result : Product → handoff_result → List HandoffItem → List
 record_handoff_result product result = map (\item ⇒
   if same_product product item.handoff_product
     then { handoff_status := result } item else item)
+
+public export
+record StoreHandoff where
+  constructor CartForStore
+  handoff_store : Store
+  store_items : List HandoffItem
+
+group_handoff_item : HandoffItem → List StoreHandoff → List StoreHandoff
+group_handoff_item item [] = [CartForStore item.handoff_product.product_store [item]]
+group_handoff_item item (first :: rest) =
+  if same_store item.handoff_product.product_store first.handoff_store
+    then { store_items := first.store_items ++ [item] } first :: rest
+    else first :: group_handoff_item item rest
+
+export
+prepare_store_handoffs : ShoppingState → Either Text (List StoreHandoff)
+prepare_store_handoffs state = map (foldl (flip group_handoff_item) []) (prepare_handoff state)
 
 -- The C oracle has bounded fields; this checks the explicit projection rather
 -- than narrowing exact recipe arithmetic or dropping overflowing cart lines.

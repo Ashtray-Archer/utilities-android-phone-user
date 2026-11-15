@@ -24,11 +24,11 @@ rice_600 = SaleableProduct "gg-rice-600" store "00012346" (Just "0001111040102")
 
 first_recipe : Recipe
 first_recipe = SavedRecipe "rice-curry" "Rice curry" (Serves 1)
-  [Needs rice "Rice" (measure grams (whole 200)) "rinse" []]
+  [Needs rice "Rice" (measure grams (whole 200)) "rinse" []] []
 
 second_recipe : Recipe
 second_recipe = SavedRecipe "rice-soup" "Rice soup" (Serves 1)
-  [Needs rice "Rice" (measure grams (whole 300)) "" []]
+  [Needs rice "Rice" (measure grams (whole 300)) "" []] []
 
 required_500 : Requirement
 required_500 = Requires rice "Rice" mass (whole 500) []
@@ -68,7 +68,7 @@ scaled = case requirements_for [first_recipe] [Cook "rice-curry" (Serves 2)] of
 fractional_scale : Bool
 fractional_scale = case requirements_for
   [SavedRecipe "thirds" "Thirds" (Serves 2)
-    [Needs rice "Rice" (measure grams (whole 1)) "" []]]
+    [Needs rice "Rice" (measure grams (whole 1)) "" []] []]
   [Cook "thirds" (Serves 0)] of
     Right [required] ⇒ equal_amount required.required_amount (Fraction 1 2)
     _ ⇒ False
@@ -187,11 +187,160 @@ historical_total =
          ShopperApproved cereal_need cereal False] [banana, apples, cereal]
   in plan_complete plan && cart_total plan ≟ 2264 && fits_c_oracle plan
 
+-- Synthetic source references are retained as data; no video was fetched.
+linked_recipe : Recipe
+linked_recipe = { recipe_sources :=
+  [FromSource "https://www.youtube.com/watch?v=fixture-video" "Technique at 1:20",
+   FromSource "https://www.tiktok.com/@fixture/video/000123" "Shopper-entered ingredients"] } first_recipe
+
+source_fixture : Bool
+source_fixture =
+  let saved = transition (save_recipe linked_recipe) begin_shopping
+      edited = transition (save_recipe ({ recipe_name := "My rice curry", recipe_servings := Serves 3 } linked_recipe)) saved
+  in case edited.saved_recipes of
+    [recipe] ⇒ recipe.recipe_name ≟ "My rice curry" && serving_count recipe.recipe_servings ≟ 4 &&
+      case recipe.recipe_sources of
+        [FromSource video note, FromSource short_video short_note] ⇒
+          video ≟ "https://www.youtube.com/watch?v=fixture-video" && note ≟ "Technique at 1:20" &&
+          short_video ≟ "https://www.tiktok.com/@fixture/video/000123" && short_note ≟ "Shopper-entered ingredients"
+        _ ⇒ False
+    _ ⇒ False
+
+invalid_source_fixture : Bool
+invalid_source_fixture =
+  let invalid = { recipe_sources := [FromSource "" "Missing link"] } first_recipe
+      refused = transition (save_recipe invalid) reviewed_state
+  in refused.notice ≟ "Recipe source needs a link" && refused.review_approved &&
+    case current_plan refused of
+      Right plan ⇒ cart_total plan ≟ 398
+      _ ⇒ False
+
+other_store : Store
+other_store = AtStore "other-retailer" "01400751"
+
+required_lentils : Requirement
+required_lentils = Requires lentils "Lentils" mass (whole 500) []
+
+lentil_recipe : Recipe
+lentil_recipe = SavedRecipe "lentil-soup" "Lentil soup" (Serves 1)
+  [Needs lentils "Lentils" (measure grams (whole 500)) "" []] []
+
+-- Deliberately repeat internal/SKU/UPC/location text across retailers. Their
+-- retailer scope must still keep these products and handoffs distinct.
+other_lentils : Product
+other_lentils = { product_store := other_store, product_ingredient := lentils,
+  product_name := "Lentils, 300 g", observed_cents := Just 249 } rice_300
+
+split_state : ShoppingState
+split_state = foldl (flip transition) selected_state
+  [save_recipe lentil_recipe, select_recipe (Cook "lentil-soup" (Serves 1)),
+   choose_requirement_store required_lentils other_store,
+   observe_products [rice_300, other_lentils],
+   approve_product required_lentils other_lentils False, approve_review]
+
+split_fixture : Bool
+split_fixture = split_state.review_approved && case current_plan split_state of
+  Right plan ⇒ plan_complete plan && cart_total plan ≟ 896 && case plan of
+    [ready _ first, ready _ second] ⇒ first.packages ≟ 2 && second.packages ≟ 2 &&
+      same_store first.purchase_product.product_store other_store &&
+      same_store second.purchase_product.product_store store
+    _ ⇒ False
+  _ ⇒ False
+
+split_handoff_fixture : Bool
+split_handoff_fixture = case prepare_store_handoffs split_state of
+  Right [CartForStore first_store [first], CartForStore second_store [second]] ⇒
+    same_store first_store other_store && same_store second_store store &&
+    first.handoff_packages ≟ 2 && second.handoff_packages ≟ 2 &&
+    first.handoff_product.retailer_product_identity ≟ "00012345" &&
+    second.handoff_product.retailer_product_identity ≟ "00012345"
+  _ ⇒ False
+
+local_lentils : Product
+local_lentils = { product_store := store, internal_product_identity := "local-lentils",
+  retailer_product_identity := "00054321" } other_lentils
+
+default_fixture : Bool
+default_fixture =
+  let reset = transition (use_default_store required_lentils) split_state
+      stale = transition approve_review reset
+      repaired = foldl (flip transition) reset
+        [observe_products [rice_300, local_lentils],
+         approve_product required_lentils local_lentils False, approve_review]
+  in not reset.review_approved && not stale.review_approved &&
+    null reset.store_choices && case prepare_store_handoffs repaired of
+      Right [CartForStore chosen items] ⇒ same_store chosen store && length items ≟ 2
+      _ ⇒ False
+
+override_replacement_fixture : Bool
+override_replacement_fixture =
+  let changed = transition (choose_requirement_store required_lentils store) split_state
+      reviewed = transition approve_review changed
+  in not changed.review_approved && not reviewed.review_approved &&
+    length changed.store_choices ≟ 1 &&
+    same_store (store_for other_store changed.store_choices required_lentils) store
+
+wrong_store_approval_fixture : Bool
+wrong_store_approval_fixture =
+  let refused = transition (approve_product required_lentils local_lentils False) split_state
+  in refused.notice ≟ "Product belongs to a different store" &&
+    split_handoff_fixture && case prepare_store_handoffs refused of
+      Right groups ⇒ length groups ≟ 2
+      _ ⇒ False
+
+partial_store_fixture : Bool
+partial_store_fixture =
+  let missing = transition (observe_products [rice_300]) split_state
+      reviewed = transition approve_review missing
+  in not reviewed.review_approved && is_left (prepare_store_handoffs reviewed) &&
+    case current_plan reviewed of
+      Right [unresolved _ product_missing, ready _ _] ⇒ True
+      _ ⇒ False
+
+changed_store_price_fixture : Bool
+changed_store_price_fixture =
+  let refreshed = transition (observe_products [rice_300,
+        { observed_cents := Just 299 } other_lentils]) split_state
+      reviewed = transition approve_review refreshed
+  in not reviewed.review_approved && is_left (prepare_store_handoffs reviewed) &&
+    case current_plan reviewed of
+      Right [unresolved _ price_changed, ready _ _] ⇒ True
+      _ ⇒ False
+
+store_result_fixture : Bool
+store_result_fixture = case prepare_handoff split_state of
+  Right items ⇒ case record_handoff_result other_lentils (add_rejected "fixture rejection") items of
+    [RetailerAdd _ _ (add_rejected _), RetailerAdd _ _ not_sent] ⇒ True
+    _ ⇒ False
+  _ ⇒ False
+
+location_fixture : Bool
+location_fixture =
+  let location = AtStore "kroger" "01400001"
+      product = { product_store := location } other_lentils
+      state = foldl (flip transition) split_state
+        [choose_requirement_store required_lentils location,
+         observe_products [rice_300, product],
+         approve_product required_lentils product False, approve_review]
+  in case prepare_store_handoffs state of
+    Right [CartForStore first_store [first], CartForStore second_store [second]] ⇒
+      same_store first_store location && same_store second_store store &&
+      first.handoff_packages ≟ 2 && second.handoff_packages ≟ 2
+    _ ⇒ False
+
+default_change_fixture : Bool
+default_change_fixture =
+  let new_default = AtStore "kroger" "01400002"
+      state = transition (choose_store new_default) split_state
+  in not state.review_approved && null state.fresh_products &&
+    same_store (store_for new_default state.store_choices required_lentils) other_store &&
+    same_store (store_for new_default state.store_choices required_500) new_default
+
 main : IO ()
 main = do
   expect "shared ingredient combines before package rounding" combined
   expect "selected empty recipe stays an explicit error" (is_left (requirements_for
-    [SavedRecipe "empty" "Empty draft" (Serves 0) []] [Cook "empty" (Serves 0)]))
+    [SavedRecipe "empty" "Empty draft" (Serves 0) [] []] [Cook "empty" (Serves 0)]))
   expect "missing saved recipe stays an explicit error" (is_left (requirements_for [] [Cook "missing" (Serves 0)]))
   expect "servings scale 200 g for two to 300 g for three" scaled
   expect "one third remains an exact rational" fractional_scale
@@ -233,4 +382,21 @@ main = do
     (observe_products [{ observed_cents := Just 299 } rice_300]) reviewed_state)))
   expect "item rejection cannot mark another SKU successful" per_item_fixture
   expect "historical three-product total is 2264 cents" historical_total
+  expect "saved video source links and notes survive recipe edits" source_fixture
+  expect "empty source link refuses save without changing reviewed shopping" invalid_source_fixture
+  expect "explicit store override splits ingredients and preserves exact total" split_fixture
+  expect "same identifiers at different retailers stay in separate handoffs" split_handoff_fixture
+  expect "returning to default store requires a new matching approval" default_fixture
+  expect "replacing store override revokes review and stale product approval" override_replacement_fixture
+  expect "product approval cannot bypass the ingredient store choice" wrong_store_approval_fixture
+  expect "missing observation in one store blocks the entire handoff" partial_store_fixture
+  expect "price change in one store blocks the entire handoff" changed_store_price_fixture
+  expect "retailer rejection leaves equal SKU at other retailer untouched" store_result_fixture
+  expect "invalid store override preserves existing choices" (case
+    (transition (choose_requirement_store required_lentils (AtStore "" "")) split_state).store_choices of
+      [store_choice] ⇒ same_store store_choice.chosen_store other_store; _ ⇒ False)
+  expect "store choices distinguish quantity dimensions" (same_store
+    (store_for store [BuyAt required_500 other_store] ({ required_dimension := count } required_500)) store)
+  expect "same retailer with different locations produces separate handoffs" location_fixture
+  expect "default store change preserves explicit ingredient override" default_change_fixture
   putStrLn "PASS Idric recipe shopping host semantics"

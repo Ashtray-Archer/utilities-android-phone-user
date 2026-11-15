@@ -18,11 +18,32 @@ packages_for_grams grams_needed =
 %export "dex:saved_recipe_name"
 saved_recipe_name : Text → Text
 saved_recipe_name name =
-  let recipe = SavedRecipe "user-recipe" name (Serves 1) []
+  let recipe = SavedRecipe "user-recipe" name (Serves 1) [] []
       state = transition (save_recipe recipe) begin_shopping
   in case state.saved_recipes of
     [saved] ⇒ saved.recipe_name
     _ ⇒ state.notice
+
+%export "dex:saved_recipe_source_link"
+saved_recipe_source_link : Text → Text
+saved_recipe_source_link link =
+  let recipe = SavedRecipe "user-recipe" "User recipe" (Serves 1) []
+        [FromSource link "Shopper source"]
+      state = transition (save_recipe recipe) begin_shopping
+  in case state.saved_recipes of
+    [saved] ⇒ case saved.recipe_sources of
+      [source] ⇒ source.source_link
+      _ ⇒ "Source missing"
+    _ ⇒ state.notice
+
+%export "dex:ingredient_store_name"
+ingredient_store_name : Text → Text
+ingredient_store_name location =
+  let required = Requires (IngredientNamed "rice") "Rice" mass (whole 500) []
+      default_store = AtStore "retailer" "default"
+      state = transition (choose_requirement_store required (AtStore "retailer" location))
+        (transition (choose_store default_store) begin_shopping)
+  in (store_for default_store state.store_choices required).store_identity
 
 main : IO ()
 main = do
@@ -32,3 +53,6 @@ main = do
   putStrLn (show (packages_for_grams 500))
   putStrLn (saved_recipe_name "User-entered soup")
   putStrLn (saved_recipe_name "")
+  putStrLn (saved_recipe_source_link "https://www.youtube.com/watch?v=fixture-video")
+  putStrLn (saved_recipe_source_link "")
+  putStrLn (ingredient_store_name "000042")
