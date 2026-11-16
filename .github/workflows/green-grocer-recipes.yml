@@ -45,6 +45,14 @@ jobs:
           github-token: ${{ github.token }}
           path: grease
       - uses: isomorphisms/ai-ci/.github/actions/charcoal-grease@ebfb667b64009f0c0bdf9dcfafb7884196786ef5
+      - name: Recover the qualified host compiler cache identity
+        id: qualified_ick_cache
+        run: grease/bin/grease .tools/android-NDK/dex/idric/qualified-compiler-cache.grease "$RUNNER_TEMP/ick-host-build/host-runtime-key-input.tsv" "$GITHUB_OUTPUT"
+      - name: Preserve the qualified compiler before later consumer failures
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/ick-host-stage
+          key: ick-host-v1-${{ runner.os }}-${{ runner.arch }}-fbe86e23d55cfec2000c08e61deea2a407fd7175-${{ steps.qualified_ick_cache.outputs.runtime_key }}
       - name: Restore exact frontend bootstrap
         id: frontend
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
