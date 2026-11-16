@@ -28,6 +28,11 @@ Android sample application until the Idriç runtime can be integrated.
 - One fully reviewed plan partitioned into retailer/location-specific handoff
   proposals. Equal identifier strings across stores remain distinct, and an
   unresolved line at any store prevents proposing the whole handoff.
+- A versioned recipe-file encoder/decoder retaining exact ingredient and source
+  fields. Malformed files are refused without changing saved recipes or review;
+  valid restoration uses the existing save transition. See
+  [the storage evidence](receipts/recipe-storage/README.md). Actual file I/O and
+  Android reopening remain separate work.
 
 `check-recipes.grease` builds and executes 51 independently expected host cases
 and six implementation mutations. The mutations ignore pantry stock, round
@@ -100,7 +105,9 @@ recognizing this particular source program would evade the requirement.
 | Boundary | State |
 | --- | --- |
 | Idriç recipe decision host execution | PASS: 51 cases, six rejected mutants |
+| Recipe file codec host execution | PASS: 24 cases, three rejected mutants |
 | Actual recipe runtime probe DEX emission | PASS; ART NOT_RUN |
+| Complete recipe/storage test commands DEX emission | PASS; ART workflow added, runtime not established by source |
 | Historical recipe-save DEX emission / independent disassembly | PASS at old source; current runtime NOT_RUN |
 | Current C oracle differential execution | NOT_RUN |
 | Recipe editor, persistence, renderer and touch integration | NOT_IMPLEMENTED |

@@ -1,0 +1,4 @@
+PASS independent minimal recipe file decodes
+PASS minimal recipe encodes to independently expected bytes
+PASS decoded ingredient quantities dimensions and identities are exact
+FAIL saved sources preserve exact links Unicode whitespace and notes

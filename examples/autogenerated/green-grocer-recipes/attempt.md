@@ -1,5 +1,36 @@
 # Recipe shopping: Idriç implementation attempt
 
+## Saved recipe file type sketch
+
+`encode_recipe : Recipe → Text` and `decode_recipe : Text → Either Text Recipe`
+form a versioned, length-delimited text file boundary for saved recipes. Field
+lengths count decoded characters; the platform file adapter must perform UTF-8
+encoding/decoding without replacement. Length framing preserves newlines,
+colons, source queries, significant whitespace and supplementary characters.
+Ingredient identities, exact rational quantities, dimensions, preparation,
+permitted substitutions, servings and source notes all remain explicit fields.
+No retailer observation, approval, private credential or reviewed-cart flag is
+persisted in a recipe file.
+
+`restore_recipe : Text → ShoppingState → ShoppingState` admits only a complete
+supported file through the existing save transition. Malformed/truncated data,
+invalid numeric fields, zero denominators/servings and trailing fields are
+refused without changing saved recipes, the plan or its review. Successful
+restore replaces the same recipe identity and revokes review. Parsing is pure;
+atomic file replacement and actual Android reopening are separate platform
+effects and must not be claimed by codec tests.
+
+Host result: all 24 storage cases pass and three changed codecs compile and fail
+their intended assertion (source notes erased, fractional denominators lost,
+trailing fields accepted). The complete storage command emits direct DEX and
+independent baksmali decoding succeeds. Source and output hashes are retained
+under `green-grocer/receipts/recipe-storage/`. Actual ART, file I/O and Android
+reopening remain separate until their named observers execute successfully.
+
+The tests must inspect independently expected decoded fields, exercise corrupt
+inputs and show state preservation. An encode/decode self-roundtrip alone is
+insufficient. No alternate application model or JSON format is introduced.
+
 ## Runtime continuation
 
 Run the existing 51 independently expected recipe checks and six altered

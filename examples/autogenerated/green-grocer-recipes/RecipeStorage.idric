@@ -1,0 +1,141 @@
+module RecipeStorage
+
+import RecipeShopping
+import Data.List
+import Data.Text
+
+%unbound_implicits off
+
+-- One ordinary recipe file, with exact text fields and a versioned schema.
+-- Platform storage owns UTF-8 and atomic replacement, not recipe meaning.
+frame : Text → Text
+frame text = show (length (unpack text)) ++ ":" ++ text
+
+frames : List Text → Text
+frames = concat . map frame
+
+dimension_text : dimension_kind → Text
+dimension_text mass = "mass"
+dimension_text volume = "volume"
+dimension_text count = "count"
+
+ingredient_fields : Ingredient → List Text
+ingredient_fields ingredient =
+  [ingredient.ingredient_identity.ingredient_text, ingredient.ingredient_name,
+   dimension_text ingredient.ingredient_measure.dimension,
+   show ingredient.ingredient_measure.base_amount.numerator,
+   show (denominator ingredient.ingredient_measure.base_amount),
+   ingredient.preparation, show (length ingredient.acceptable_substitutions)] ++
+  map ingredient_text ingredient.acceptable_substitutions
+
+source_fields : RecipeSource → List Text
+source_fields source = [source.source_link, source.source_note]
+
+export
+encode_recipe : Recipe → Text
+encode_recipe recipe = frames
+  (["green-grocer-recipe-v1", recipe.recipe_identity, recipe.recipe_name,
+    show (serving_count recipe.recipe_servings), show (length recipe.recipe_ingredients)] ++
+   concatMap ingredient_fields recipe.recipe_ingredients ++
+   [show (length recipe.recipe_sources)] ++ concatMap source_fields recipe.recipe_sources)
+
+read_whole : Text → Either Text Number
+read_whole text = case unpack text of
+  [] ⇒ Left "Empty numeric field"
+  digits ⇒ if all (\digit ⇒ digit >= '0' && digit <= '9') digits
+    then Right (foldl (\number, digit ⇒ number × 10 + cast (ord digit - ord '0')) 0 digits)
+    else Left "Invalid whole-number field"
+
+record ReadField where
+  constructor FieldRead
+  field_text : Text
+  rest_characters : List Char
+
+read_field : List Char → Either Text ReadField
+read_field input = case break (\character ⇒ character ≟ ':') input of
+  (digits, ':' :: contents) ⇒ do
+    size ← read_whole (pack digits)
+    if size > length contents then Left "Truncated recipe field" else do
+      let (value, rest) = splitAt size contents
+      Right (FieldRead (pack value) rest)
+  _ ⇒ Left "Missing recipe field delimiter"
+
+read_frames : Number → List Char → Either Text (List Text)
+read_frames _ [] = Right []
+read_frames 0 _ = Left "Recipe frame budget exhausted"
+read_frames (S fuel) input = do
+  next ← read_field input
+  more ← read_frames fuel next.rest_characters
+  Right (next.field_text :: more)
+
+read_dimension : Text → Either Text dimension_kind
+read_dimension "mass" = Right mass
+read_dimension "volume" = Right volume
+read_dimension "count" = Right count
+read_dimension _ = Left "Unknown ingredient dimension"
+
+read_identities : Number → List Text → Either Text (List IngredientIdentity, List Text)
+read_identities 0 fields = Right ([], fields)
+read_identities (S needed) [] = Left "Missing substitution identity"
+read_identities (S needed) (identity :: fields) = do
+  (more, rest) ← read_identities needed fields
+  Right (IngredientNamed identity :: more, rest)
+
+read_ingredients : Number → List Text → Either Text (List Ingredient, List Text)
+read_ingredients 0 fields = Right ([], fields)
+read_ingredients (S needed) (identity :: name :: dimension :: numerator :: divisor :: preparation :: alternatives :: fields) = do
+  kind ← read_dimension dimension
+  top ← read_whole numerator
+  bottom ← read_whole divisor
+  amount ← case fraction top bottom of
+    Nothing ⇒ Left "Recipe quantity denominator is zero"
+    Just value ⇒ Right value
+  substitution_count ← read_whole alternatives
+  if substitution_count > length fields then Left "Missing substitution fields" else do
+    (substitutions, remaining) ← read_identities substitution_count fields
+    (more, rest) ← read_ingredients needed remaining
+    Right (Needs (IngredientNamed identity) name (Measured kind amount) preparation substitutions :: more, rest)
+read_ingredients (S _) _ = Left "Missing ingredient fields"
+
+read_sources : Number → List Text → Either Text (List RecipeSource, List Text)
+read_sources 0 fields = Right ([], fields)
+read_sources (S needed) (link :: note :: fields) = do
+  (more, rest) ← read_sources needed fields
+  Right (FromSource link note :: more, rest)
+read_sources (S _) _ = Left "Missing source fields"
+
+recipe_from_fields : List Text → Either Text Recipe
+recipe_from_fields ("green-grocer-recipe-v1" :: identity :: name :: servings :: ingredients :: fields) = do
+  portions ← read_whole servings
+  case portions of
+    0 ⇒ Left "Recipe serving count is zero"
+    S portions_less_one ⇒ do
+      ingredient_count ← read_whole ingredients
+      if ingredient_count > length fields then Left "Missing ingredient fields" else do
+        (items, after_ingredients) ← read_ingredients ingredient_count fields
+        case after_ingredients of
+          [] ⇒ Left "Missing recipe sources count"
+          source_count_text :: source_fields ⇒ do
+            source_count ← read_whole source_count_text
+            if source_count > length source_fields then Left "Missing source fields" else do
+              (sources, trailing) ← read_sources source_count source_fields
+              if not (null trailing) then Left "Trailing recipe fields" else do
+                let recipe = SavedRecipe identity name (Serves portions_less_one) items sources
+                    admitted = transition (save_recipe recipe) begin_shopping
+                case admitted.saved_recipes of
+                  [saved] ⇒ Right saved
+                  _ ⇒ Left admitted.notice
+recipe_from_fields _ = Left "Unsupported or incomplete recipe file"
+
+export
+decode_recipe : Text → Either Text Recipe
+decode_recipe text = do
+  let characters = unpack text
+  fields ← read_frames (length characters) characters
+  recipe_from_fields fields
+
+export
+restore_recipe : Text → ShoppingState → ShoppingState
+restore_recipe text state = case decode_recipe text of
+  Left problem ⇒ { notice := "Recipe file refused: " ++ problem } state
+  Right recipe ⇒ transition (save_recipe recipe) state

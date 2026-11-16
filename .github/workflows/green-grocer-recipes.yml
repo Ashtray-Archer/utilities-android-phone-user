@@ -70,6 +70,8 @@ jobs:
             .tools/Idric/_/build
       - name: Provision the pinned independent assembler
         run: grease/bin/grease green-grocer/_/prepare-recipe-tools.grease "$RUNNER_TEMP/recipe-tools"
+      - name: Execute the independent unchanged C cart specimen
+        run: grease/bin/grease green-grocer/_/check-cart-host.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.ick-host-source" "${{ steps.ick.outputs.compiler }}" "$RUNNER_TEMP/cart-host"
       - name: Execute host checks and compile actual checked recipes and mutants
         run: grease/bin/grease green-grocer/_/prepare-recipe-art.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$GITHUB_WORKSPACE/.tools/android-NDK" "$GITHUB_WORKSPACE/grease/bin/grease" "$RUNNER_TEMP/recipe-tools/smali.jar" "$RUNNER_TEMP/recipe-acceptance"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -80,6 +82,7 @@ jobs:
           path: |
             ${{ runner.temp }}/recipe-acceptance
             ${{ runner.temp }}/recipe-tools
+            ${{ runner.temp }}/cart-host
   art:
     needs: prepare
     runs-on: ubuntu-24.04
@@ -117,7 +120,7 @@ jobs:
           arch: x86_64
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -memory 2048 -gpu swiftshader_indirect
           disable-animations: true
-          script: grease/bin/grease green-grocer/_/observe-recipe-art.grease "$ANDROID_HOME/platform-tools/adb" emulator-5554 "$GITHUB_WORKSPACE/inputs/recipe-acceptance" "$RUNNER_TEMP/recipe-art"
+          script: grease/bin/grease green-grocer/_/observe-recipe-art.grease "$ANDROID_HOME/platform-tools/adb" emulator-5554 "$GITHUB_WORKSPACE/inputs/recipe-acceptance" "$RUNNER_TEMP/recipe-art" "${{ matrix.api }}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

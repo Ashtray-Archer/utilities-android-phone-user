@@ -1,0 +1,4 @@
+recipe_storage_host	PASS
+checks	24
+compiled_mutants	3_REJECTED
+Android_file_IO	NOT_RUN
