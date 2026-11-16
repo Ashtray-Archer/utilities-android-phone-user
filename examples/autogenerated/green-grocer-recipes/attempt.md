@@ -1,5 +1,20 @@
 # Recipe shopping: Idriç implementation attempt
 
+## Runtime continuation
+
+Run the existing 51 independently expected recipe checks and six altered
+implementations through the same canonical direct DEX compiler, then execute
+them under Android ART. Export the existing checked test command as an IO Unit
+entrypoint; keep every assertion and application operation in Idriç. The
+positive command must return its expected lines and exit zero. Each compiled
+mutation must fail at its original assertion, rather than at verification or
+loading. This extends acceptance and does not supply Android UI evidence.
+
+An external observer will also call the four actual runtime exports with
+changing boundary/Unicode/empty inputs. Its expected results are independent
+constants. Assembly, compiler output, device fingerprint, bytes transferred,
+process status and actual output must remain separately inspectable.
+
 ## Continuation type sketch: source links and shopper-selected stores
 
 The recovered October 24 requirements include saved recipes originating in

@@ -1,0 +1,12 @@
+#!/usr/bin/env grease
+if (len(ARGV) !== 1 or ARGV[0][0] !== '/') { echo 'usage: grease prepare-recipe-tools.grease ABS_NEW_OUTPUT' >&2; exit 2 }
+var output = ARGV[0]
+test ! -e "$output"
+mkdir -p "$output"
+curl -fL --retry 3 https://github.com/baksmali/smali/releases/download/3.0.10/smali-3.0.10-fat-release.jar -o "$output/smali.jar"
+printf '32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a  %s\n' "$output/smali.jar" | sha256sum -c -
+if ! command -v rg {
+  sudo apt-get update -qq
+  sudo apt-get install -y --no-install-recommends ripgrep
+}
+command -v rg

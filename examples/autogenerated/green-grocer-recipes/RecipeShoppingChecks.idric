@@ -336,6 +336,7 @@ default_change_fixture =
     same_store (store_for new_default state.store_choices required_lentils) other_store &&
     same_store (store_for new_default state.store_choices required_500) new_default
 
+%export "dex:recipe_checks"
 main : IO ()
 main = do
   expect "shared ingredient combines before package rounding" combined
