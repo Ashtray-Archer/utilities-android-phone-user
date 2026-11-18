@@ -119,6 +119,11 @@ jobs:
           github-token: ${{ github.token }}
           path: grease
       - uses: isomorphisms/ai-ci/.github/actions/charcoal-grease@ebfb667b64009f0c0bdf9dcfafb7884196786ef5
+      - name: Provision and verify the ART observer's runner dependency
+        run: |
+          grease/bin/grease -c 'sudo apt-get update -qq'
+          grease/bin/grease -c 'sudo apt-get install -y --no-install-recommends ripgrep'
+          grease/bin/grease -c 'rg --version'
       - name: Enable emulator acceleration
         run: grease/bin/grease -c 'sudo chmod 666 /dev/kvm'
       - uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d

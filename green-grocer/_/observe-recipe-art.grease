@@ -11,6 +11,7 @@ for path in ([adb, input, output]) {
 }
 test ! -e "$output"
 mkdir -p "$output"
+printf 'stage\trunner_preflight\n' > "$output/stage.tsv"
 "$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r' | rg -x 1
 "$adb" -s "$serial" shell getprop ro.product.cpu.abi | tr -d '\r' | rg -x x86_64
 "$adb" -s "$serial" shell getprop ro.build.version.sdk > "$output/api.txt"
@@ -44,6 +45,7 @@ proc execute(name, classpath, class) {
   var status = _error.code
   printf '%s\n' "$status" > "$output/$name.exit"
   cat "$output/$name.stdout"
+  cat "$output/$name.stderr" >&2
 }
 execute positive "$remote/positive.dex" Idric.Generated
 test "$(cat "$output/positive.exit")" = 0
