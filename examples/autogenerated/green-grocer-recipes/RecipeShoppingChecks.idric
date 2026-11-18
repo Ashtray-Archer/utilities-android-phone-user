@@ -351,6 +351,8 @@ main = do
   expect "500 g selects two 300 g packages and 100 g surplus" package_fixture
   expect "package boundary needs no extra package" (package_count (whole 600) (whole 300) ≟ Just 2)
   expect "fractional package arithmetic is exact" (package_count (Fraction 7 1) (Fraction 3 1) ≟ Just 3)
+  expect "package counts above uint64 remain exact" (package_count
+    (whole 18446744073709551617000) (whole 300) ≟ Just 61489146912365172057)
   expect "zero package is rejected" (package_count (whole 1) (whole 0) ≟ Nothing)
   expect "pantry reduces demand and preserves all product identifiers" pantry_fixture
   expect "excess pantry remains visible as covered" (case shopping_plan store

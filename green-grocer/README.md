@@ -6,13 +6,15 @@ quantities, pantry subtraction, approved store-specific matches, package counts,
 review invalidation and screen transitions. See [recipe-idric.md](recipe-idric.md)
 for scope, test commands and Android integration boundaries. Saved recipe source
 links and explicit per-ingredient store choices are supported in that model;
-51 host cases and six deliberately broken implementations exercise it. The
+52 host cases and six deliberately broken implementations exercise it. The
 recipe file codec has another 24 host checks and three deliberately broken
 variants. It preserves ingredient quantities and source notes, rejects corrupt
 files, and restores through the existing save transition. Actual filesystem I/O
 and Android reopening remain unimplemented. The current recipe runtime probe
-and full test commands emit direct DEX; their ART workflow must establish
-runtime behavior. This model is
+and full test commands have emitted direct DEX. Android execution exposed a
+stack overflow in recursive division for large package counts; the source now
+uses exact arbitrary-precision division. See [the execution evidence](receipts/recipe-art/README.md)
+and the current workflow for qualification of that repair. This model is
 **not yet connected to the Android renderer**; the existing APK described below
 still runs the sample C cart. No recipe-first APK or retailer integration is
 claimed by this branch.

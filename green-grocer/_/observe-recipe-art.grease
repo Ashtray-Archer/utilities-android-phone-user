@@ -69,5 +69,5 @@ for mutation in sources rational trailing {
   test "$(cat "$output/storage-mutant-$mutation.exit")" = 1
   cmp "$input/storage-host/mutant-$mutation/execution.txt" "$output/storage-mutant-$mutation.stdout"
 }
-printf 'recipe_checks_ART\tPASS\nrecipe_checks\t51\nrecipe_storage_checks_ART\tPASS\nrecipe_storage_checks\t24\nchanging_export_inputs_ART\tPASS\ncompiled_semantic_mutants\t9_REJECTED\nrecipe_APK\tNOT_RUN\nAndroid_file_IO\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$output/result.tsv"
+printf 'recipe_checks_ART\tPASS\nrecipe_checks\t52\nrecipe_storage_checks_ART\tPASS\nrecipe_storage_checks\t24\nchanging_export_inputs_ART\tPASS\ncompiled_semantic_mutants\t9_REJECTED\nrecipe_APK\tNOT_RUN\nAndroid_file_IO\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$output/result.tsv"
 printf '\033[32mPASS\033[0m complete recipe and storage checks and nine semantic mutants on x86_64 ART\n'

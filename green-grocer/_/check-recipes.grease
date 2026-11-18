@@ -53,7 +53,7 @@ rg -q -x -F 'PASS Idric recipe shopping host semantics' "$output/recipes/executi
 
 compile_host "$source" RecipeRuntime.idric runtime-control
 env CHEZ="$scheme" "$output/runtime-control/runtime-control" > "$output/runtime-control/execution.txt" 2>&1
-printf '0\n1\n2\n2\nUser-entered soup\nRecipe needs an identity and name\nhttps://www.youtube.com/watch?v=fixture-video\nRecipe source needs a link\n000042\n' > "$output/runtime-control/expected.txt"
+printf '%s\n' -1 0 1 2 2 7158279 'User-entered soup' 'Recipe needs an identity and name' 'https://www.youtube.com/watch?v=fixture-video' 'Recipe source needs a link' 000042 > "$output/runtime-control/expected.txt"
 cmp "$output/runtime-control/expected.txt" "$output/runtime-control/execution.txt"
 
 # Change the actual implementation, compile it, and require a behavioral
@@ -66,7 +66,7 @@ for mutation in pantry rounding price source store grouping {
     sed 's/in AfterPantry required owned (subtract_owned required.required_amount owned)/in AfterPantry required owned required.required_amount/' \
       "$source/RecipeShopping.idric" > "$directory/RecipeShopping.idric"
   } elif (mutation === 'rounding') {
-    sed 's/divNatNZ (top + bottom_less_one)/divNatNZ top/' \
+    sed 's/cast (top + bottom_less_one)/cast top/' \
       "$source/RecipeShopping.idric" > "$directory/RecipeShopping.idric"
   } elif (mutation === 'price') {
     sed 's/if current ≟ previous then Right product else Left price_changed/if True then Right product else Left price_changed/' \

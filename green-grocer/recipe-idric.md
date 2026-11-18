@@ -34,16 +34,17 @@ Android sample application until the Idriç runtime can be integrated.
   [the storage evidence](receipts/recipe-storage/README.md). Actual file I/O and
   Android reopening remain separate work.
 
-`check-recipes.grease` builds and executes 51 independently expected host cases
+`check-recipes.grease` builds and executes 52 independently expected host cases
 and six implementation mutations. The mutations ignore pantry stock, round
 packages down, accept changed prices, discard recipe sources, ignore store
 overrides and collapse different-store handoffs. Each compiles and is rejected
 by the intended behavioral assertion. The test also runs the same runtime probe on
 the host. It does not substitute typechecking for execution.
 
-The historical 2264-cent C fixture expectation is included, but the C executable
-was **not rerun** in this environment: no qualified pinned ICK/NDK installation
-was present. Full C-oracle comparison remains required. `fits_c_oracle` checks a
+The historical 2264-cent C fixture expectation is included. The unchanged C
+regression was executed through qualified host ICK in the November 18 hosted
+checkpoints; see [the execution evidence](receipts/recipe-art/README.md).
+Full C-oracle comparison remains required. `fits_c_oracle` checks a
 conservative bounded projection; its bounds do not limit recipe-domain values.
 `cart_total` sums resolved lines only; an incomplete plan must display that
 number as a partial subtotal and keep unresolved ingredients visible.
@@ -67,10 +68,21 @@ save/name, source-link retention/refusal and ingredient-store choice. Source
 and executed compiler hashes are recorded in
 `receipts/recipe-stores-2026-11-15/`.
 
-This supersedes the old emission blocker for these probes. It is **not** ART
-execution, full Android shopping behavior, a qualified APK, or a claim that
-every application path has been lowered and executed. The current host suite
-exercises the full split-store planner. Android integration remains separate.
+This supersedes the old emission blocker for these probes. November 18 hosted
+execution also passed all 51 then-existing recipe cases on API29 and API34 ART.
+The separate changing-input caller exposed a stack overflow at the maximum
+Int32 demand: the emitted `Data.Nat.div'` helper recurses once per package.
+`ceiling_ratio` now embeds its nonnegative whole counts into arbitrary-precision
+Integer, divides by its constructed positive denominator, and returns the exact
+whole quotient. No width limit or Float conversion is introduced. The large
+changing-input case remains required, and a new case expects a package count
+above uint64. Current-head qualification belongs to the maintained workflow.
+See [the execution evidence](receipts/recipe-art/README.md) for checkpoint
+identities, observed failures and the current review link.
+
+These runtime commands do not establish full Android shopping behavior or a
+qualified APK. The host suite exercises the full split-store planner; renderer,
+touch and actual Android file integration remain separate.
 
 ## Historical October 24 compiler failure
 
@@ -102,12 +114,12 @@ recognizing this particular source program would evade the requirement.
 
 ## Remaining completion gates
 
-| Boundary | State |
+| Boundary | Required evidence / implementation state |
 | --- | --- |
-| Idriç recipe decision host execution | PASS: 51 cases, six rejected mutants |
-| Recipe file codec host execution | PASS: 24 cases, three rejected mutants |
-| Actual recipe runtime probe DEX emission | PASS; ART NOT_RUN |
-| Complete recipe/storage test commands DEX emission | PASS; ART workflow added, runtime not established by source |
+| Idriç recipe decision host execution | 52 cases and six rejected mutants; current-head workflow |
+| Recipe file codec host execution | 24 cases and three rejected mutants; current-head workflow |
+| Actual recipe runtime probe DEX/ART | 14 changing inputs, including maximum Int32; current-head workflow |
+| Complete recipe/storage test commands on ART | 52 recipe and 24 storage cases, exact host output, all nine mutants rejected at their assertions; API29/API34 |
 | Historical recipe-save DEX emission / independent disassembly | PASS at old source; current runtime NOT_RUN |
 | Current C oracle differential execution | NOT_RUN |
 | Recipe editor, persistence, renderer and touch integration | NOT_IMPLEMENTED |
@@ -115,7 +127,7 @@ recognizing this particular source program would evade the requirement.
 | Stable producer registration and recipe-first signed APKs | NOT_RUN |
 | Physical MIRO A1 and MIRO C67 recipe acceptance | NOT_RUN |
 
-No ADB, emulator or ART runtime was available in this execution environment.
+Host preparation and Android runtime checks run in separate hosted jobs.
 No authorized Kroger application/customer session was supplied or exercised.
 Retain the existing package `org.isomorphisms.greengrocer` and signer recorded
 in `README.md` when packaging becomes possible. Never pass the old product

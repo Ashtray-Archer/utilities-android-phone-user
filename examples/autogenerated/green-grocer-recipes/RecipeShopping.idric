@@ -294,11 +294,15 @@ approve_match required product substitution =
           then Right (ShopperApproved required product True)
           else Left "Substitution needs an acceptable ingredient and explicit approval"
 
--- Positive divisor is supplied by the denominator representation. Idriç's
--- Prelude divNatNZ supplies total exact division without Float conversion.
+-- The denominator representation supplies a positive divisor. Embed the whole
+-- counts into arbitrary-precision Integer for division, then return the exact
+-- nonnegative quotient. Recursive unit subtraction exhausts the Android stack
+-- for large counts; neither a fixed-width bound nor Float rounding is needed.
 ceiling_ratio : Number → Number → Number
 ceiling_ratio top bottom_less_one =
-  divNatNZ (top + bottom_less_one) (S bottom_less_one) ItIsSucc
+  let rounded_numerator : Integer = cast (top + bottom_less_one)
+      positive_denominator : Integer = cast (S bottom_less_one)
+  in cast (div rounded_numerator positive_denominator)
 
 export
 package_count : RationalAmount → RationalAmount → Maybe Number

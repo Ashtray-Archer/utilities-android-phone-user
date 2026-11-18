@@ -47,10 +47,12 @@ ingredient_store_name location =
 
 main : IO ()
 main = do
+  putStrLn (show (packages_for_grams (-1)))
   putStrLn (show (packages_for_grams 0))
   putStrLn (show (packages_for_grams 300))
   putStrLn (show (packages_for_grams 301))
   putStrLn (show (packages_for_grams 500))
+  putStrLn (show (packages_for_grams 2147483647))
   putStrLn (saved_recipe_name "User-entered soup")
   putStrLn (saved_recipe_name "")
   putStrLn (saved_recipe_source_link "https://www.youtube.com/watch?v=fixture-video")
