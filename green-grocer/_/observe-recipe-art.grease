@@ -37,6 +37,8 @@ for mutation in sources rational trailing {
   transfer "$input/storage-mutant-$mutation/checks.dex" "storage-mutant-$mutation"
 }
 proc execute(name, classpath, class) {
+  printf 'stage\t%s\n' "$name" > "$output/stage.tsv"
+  "$adb" -s "$serial" logcat -c
   try {
     timeout 120 "$adb" -s "$serial" shell -T \
       "CLASSPATH=$classpath app_process /system/bin $class" \
@@ -44,6 +46,7 @@ proc execute(name, classpath, class) {
   }
   var status = _error.code
   printf '%s\n' "$status" > "$output/$name.exit"
+  "$adb" -s "$serial" logcat -d -v threadtime > "$output/$name.logcat"
   cat "$output/$name.stdout"
   cat "$output/$name.stderr" >&2
 }
