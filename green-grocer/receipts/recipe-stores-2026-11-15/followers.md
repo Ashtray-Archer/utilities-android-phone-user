@@ -1,10 +1,14 @@
 # Remaining recipe application acceptance
 
-Follow source commit `d652f78d2a5211bbbc9955b7c7ab50c3db284edc` in
-`Ashtray-Archer/utilities-android-phone-user`, branch `recipe/idric-shopping`.
-This supersedes the unfinished runtime/UI/device obligations previously bound
-to `7a37ff999080152aa0b6da0f87538f32f3c8e948`; those obligations remain required.
-The new source adds the saved-recipe codec and complete Android acceptance.
+These obligations originated at source commit
+`d652f78d2a5211bbbc9955b7c7ab50c3db284edc`, superseding the unfinished
+runtime/UI/device obligations at `7a37ff999080152aa0b6da0f87538f32f3c8e948`.
+That checkpoint added the saved-recipe codec and complete Android acceptance
+commands. Qualify the live `recipe/idric-shopping` head, including the later
+large-count repair; do not rerun the older checkpoint as current evidence.
+[Ashtray-Archer/utilities-android-phone-user PR #88, “Implement Idriç recipe planning and exact saved recipe files”](https://github.com/Ashtray-Archer/utilities-android-phone-user/pull/88)
+records the exact current head and its verification. The historical obligations
+remain required.
 
 | Identified target / boundary | State | Required evidence |
 | --- | --- | --- |
