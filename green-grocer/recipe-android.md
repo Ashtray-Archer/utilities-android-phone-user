@@ -109,8 +109,10 @@ without arguments:
 Only the x86_64 acceptance candidate enables model-view hashes and native hit-box
 logs and is debuggable. The independent Smali SDK observer compares full-view
 String hashes to checked host projections, taps actual native bounds, requires
-visible native background/button pixels in every screenshot, and verifies
-private file bytes. It does not replace app logic.
+visible native background/button pixels in every screenshot (up to four RGB
+levels per channel for observed capture quantization), and verifies private
+file bytes. Failed pixel checks retain the captured image. It does not replace
+app logic.
 Emulator results do not establish physical phone acceptance, a live provider
 grant, retailer access or independent producer registration.
 

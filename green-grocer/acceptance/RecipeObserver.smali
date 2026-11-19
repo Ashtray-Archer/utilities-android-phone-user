@@ -197,11 +197,7 @@
     invoke-static {v4}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
   :image
     invoke-static {v0}, Lacceptance/RecipeObserver;->visible_canvas(Landroid/graphics/Bitmap;)Z
-    move-result v4
-    if-nez v4, :visible
-    const-string v4, "FAIL native recipe pixels missing from screenshot"
-    invoke-static {v4}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
-  :visible
+    move-result v5
     invoke-virtual {p0}, Landroid/app/Instrumentation;->getTargetContext()Landroid/content/Context;
     move-result-object v1
     invoke-virtual {v1}, Landroid/content/Context;->getCacheDir()Ljava/io/File;
@@ -222,11 +218,44 @@
     move-result v2
     invoke-virtual {v1}, Ljava/io/FileOutputStream;->close()V
     invoke-virtual {v0}, Landroid/graphics/Bitmap;->recycle()V
-    if-nez v2, :done
+    if-nez v2, :encoded
     const-string v0, "FAIL recipe screenshot encoding"
+    invoke-static {v0}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
+  :encoded
+    if-nez v5, :done
+    const-string v0, "FAIL native recipe pixels missing from screenshot"
     invoke-static {v0}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
   :done
     return-void
+.end method
+
+# Captured API34 RGB values have lower precision than the painted RGB values:
+# green (57,86,61) is (58,85,58). Permit at most four levels per channel while
+# still requiring opaque pixels; black and dimmed/obscured screens cannot match.
+.method private static close_color(II)Z
+    .registers 8
+    ushr-int/lit8 v0, p0, 24
+    const/16 v1, 255
+    if-ne v0, v1, :different
+    const/4 v2, 0
+  :channel
+    ushr-int v0, p0, v2
+    and-int/lit16 v0, v0, 255
+    ushr-int v3, p1, v2
+    and-int/lit16 v3, v3, 255
+    sub-int/2addr v0, v3
+    const/4 v4, 4
+    if-gt v0, v4, :different
+    const/4 v4, -4
+    if-lt v0, v4, :different
+    add-int/lit8 v2, v2, 8
+    const/16 v4, 24
+    if-lt v2, v4, :channel
+    const/4 v0, 1
+    return v0
+  :different
+    const/4 v0, 0
+    return v0
 .end method
 
 # Independently observe the displayed pixels. A correct model hash and a valid
@@ -248,11 +277,15 @@
     invoke-virtual {p0, v2, v3}, Landroid/graphics/Bitmap;->getPixel(II)I
     move-result v4
     const v7, 0xff39563d
-    if-ne v4, v7, :background
+    invoke-static {v4, v7}, Lacceptance/RecipeObserver;->close_color(II)Z
+    move-result v8
+    if-eqz v8, :background
     const/4 v5, 1
   :background
     const v7, 0xff202521
-    if-ne v4, v7, :observed
+    invoke-static {v4, v7}, Lacceptance/RecipeObserver;->close_color(II)Z
+    move-result v8
+    if-eqz v8, :observed
     const/4 v6, 1
   :observed
     and-int v8, v5, v6
