@@ -50,7 +50,8 @@ independent Smali caller. API29/API34 x86_64 jobs exercise:
   another process then invokes the production loader and must recover the
   preceding good recipe. This qualifies loader recovery, not an installed
   Activity's lifecycle or an injected interruption within the production writer.
-- Byte/text budgets, an invalid Unicode write, and a 16 KiB text round trip.
+- Byte/text budgets, an invalid Unicode write, and an exact round trip at the
+  maximum accepted 262144 UTF-16 units, including whitespace, NUL and Unicode.
 - A compiled mutation using a replacement-decoding reader. It must execute and
   fail the original invalid-UTF-8 state-preservation assertion; a compiler,
   verifier or process-loading failure cannot count as its rejection.

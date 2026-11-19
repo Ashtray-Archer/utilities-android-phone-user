@@ -256,19 +256,20 @@
     const-string v0, ".long"
     invoke-static {p0, v0}, Lacceptance/RecipeFileObserver;->suffix(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
     move-result-object v0
-    const/16 v1, 16384
+    # Seven UTF-16 prefix units plus this body reach the accepted limit exactly.
+    const v1, 262137
     new-array v1, v1, [C
     const/16 v2, 120
     invoke-static {v1, v2}, Ljava/util/Arrays;->fill([CC)V
     new-instance v2, Ljava/lang/String;
     invoke-direct {v2, v1}, Ljava/lang/String;-><init>([C)V
-    const-string v1, "λ🦉\u0000\n"
+    const-string v1, " \nλ🦉\u0000\n"
     invoke-virtual {v1, v2}, Ljava/lang/String;->concat(Ljava/lang/String;)Ljava/lang/String;
     move-result-object v1
     invoke-static {v0, v1}, LIdric/Generated;->write_recipe_file_text(Ljava/lang/String;Ljava/lang/String;)V
     invoke-static {v0}, LIdric/Generated;->read_recipe_file_text(Ljava/lang/String;)Ljava/lang/String;
     move-result-object v2
-    const-string v3, "FAIL long Unicode file without recursive stack growth"
+    const-string v3, "FAIL accepted text budget round trip preserves exact Unicode"
     invoke-static {v1, v2, v3}, Lacceptance/RecipeFileObserver;->equal(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
     invoke-static {v0, v1}, Lacceptance/RecipeFileObserver;->disk_equals(Ljava/lang/String;Ljava/lang/String;)V
     return-void
