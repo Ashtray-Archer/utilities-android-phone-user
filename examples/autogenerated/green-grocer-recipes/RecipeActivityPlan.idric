@@ -1,0 +1,29 @@
+module RecipeActivityPlan
+
+import Backend.DEX.FrameworkClasses
+import System
+
+-- A checked platform callback shell only. Idriç's recipe program is separately
+-- emitted direct DEX; the native method transports the chosen document URI.
+activity : FrameworkClass
+activity = Subclass "Lorg/isomorphisms/greengrocer/RecipeActivity;"
+  "Landroid/app/NativeActivity;" (Just "green_grocer")
+  [Callback "onActivityResult" "V" ["I", "I", "Landroid/content/Intent;"]]
+
+picker_request : FrameworkClass
+picker_request = Subclass "Lorg/isomorphisms/greengrocer/RecipeDocumentRequest;"
+  "Ljava/lang/Object;" Nothing [Callback "run" "V" []]
+
+-- The reusable framework-plan writer exposes a covering file/validation API.
+covering
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_, destination] ⇒ do
+      result ← write_framework_classes_implementing
+        [(activity, []), (picker_request, ["Ljava/lang/Runnable;"])] destination
+      case result of
+        Left problem ⇒ do putStrLn problem; exitFailure
+        Right () ⇒ putStrLn "PASS checked Green Grocer NativeActivity document callback emitted"
+    _ ⇒ do putStrLn "usage: recipe-activity-plan OUTPUT.dex"; exitFailure

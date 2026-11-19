@@ -1,0 +1,152 @@
+module RecipeScreenChecks
+
+import RecipeShopping
+import RecipeStorage
+import RecipeSession
+import RecipeScreen
+import Data.List
+import Data.Text
+import System
+
+rice : Ingredient
+rice = Needs (IngredientNamed "rice") "Rice" (measure grams (whole 500)) "rinse" []
+
+soup : Recipe
+soup = SavedRecipe "soup" "Soup λ🦉" (Serves 1) [rice]
+  [FromSource "https://example.org/source#t=80" ("食事\n" ++ pack [chr 0] ++ "notes")]
+
+side : Recipe
+side = SavedRecipe "side" "Side" (Serves 1)
+  [{ ingredient_measure := measure grams (whole 250) } rice] []
+
+saved : ShoppingState
+saved = transition (save_recipe side) (transition (save_recipe soup) begin_shopping)
+
+click : List Text → ShoppingState → ShoppingState
+click action = activate_control (encode_fields action)
+
+selected : ShoppingState
+selected = click ["toggle", "soup"] (click ["toggle", "side"] saved)
+
+planning : ShoppingState
+planning = click ["ingredients"] selected
+
+scaled : ShoppingState
+scaled = click ["servings-more", "soup"] planning
+
+owned : ShoppingState
+owned = click ["pantry-more", "rice", "mass"] scaled
+
+needed_is : Number → ShoppingState → Bool
+needed_is amount state = case requirements_for state.saved_recipes state.selections of
+  Right [required] ⇒ equal_amount (subtract_pantry state.pantry required).remaining_amount (whole amount)
+  _ ⇒ False
+
+store : Store
+store = AtStore "retailer" "location"
+
+required : Requirement
+required = Requires (IngredientNamed "rice") "Rice" mass (whole 500) [IngredientNamed "lentils"]
+
+product : Product
+product = SaleableProduct "internal" store "retailer-product" (Just "checkout")
+  (IngredientNamed "rice") "Rice 🦉" (measure grams (whole 250))
+  (Just 18446744073709551617) in_stock "observation"
+
+complete_state : ShoppingState
+complete_state = { selected_store := Just (AtStore "default-retailer" "default-location"),
+  store_choices := [BuyAt required store],
+  approved_matches := [ShopperApproved required product True],
+  fresh_products := [product, SaleableProduct "other" store "milk-product" Nothing
+    (IngredientNamed "milk") "Milk" (Measured volume (Fraction 1 1)) Nothing availability_unknown "unpriced"],
+  pantry := owned.pantry ++ [HaveAtHome (IngredientNamed "eggs") (measure each (whole 2))],
+  previous_screens := [recipe_editor "soup", stores_screen, matches_screen],
+  review_approved := True, notice := "retained\n" ++ pack [chr 0] ++ "🦉" } owned
+
+-- Observe restored meanings independently of the encoder. Re-encoding alone
+-- would miss a field which both sides accidentally omit or replace.
+full_restore_observed : ShoppingState → Bool
+full_restore_observed restored =
+  restored.review_approved && needed_is 900 restored &&
+  restored.notice ≟ ("retained\n" ++ pack [chr 0] ++ "🦉") &&
+  (recipe_view restored).title ≟ "Ingredients and pantry" &&
+  (case restored.previous_screens of
+    [recipe_editor "soup", stores_screen, matches_screen] ⇒ True
+    _ ⇒ False) &&
+  (case find (\recipe ⇒ recipe.recipe_identity ≟ "soup") restored.saved_recipes of
+    Just saved ⇒ saved.recipe_name ≟ "Soup λ🦉" &&
+      (case saved.recipe_sources of
+        [source] ⇒ source.source_link ≟ "https://example.org/source#t=80" &&
+          source.source_note ≟ ("食事\n" ++ pack [chr 0] ++ "notes")
+        _ ⇒ False)
+    _ ⇒ False) &&
+  (case restored.selected_store of
+    Just location ⇒ same_store location (AtStore "default-retailer" "default-location")
+    _ ⇒ False) &&
+  (case (restored.store_choices, restored.approved_matches, restored.fresh_products) of
+    ([chosen], [approved], [observed, unpriced]) ⇒
+      same_store chosen.chosen_store store &&
+      equal_amount chosen.store_requirement.required_amount (whole 500) &&
+      map ingredient_text chosen.store_requirement.permitted_substitutions ≟ ["lentils"] &&
+      approved.substitution_approved && observed.internal_product_identity ≟ "internal" &&
+      observed.retailer_product_identity ≟ "retailer-product" &&
+      observed.checkout_identity ≟ Just "checkout" && observed.product_name ≟ "Rice 🦉" &&
+      observed.observation_identity ≟ "observation" &&
+      unpriced.checkout_identity ≟ Nothing && unpriced.observed_cents ≟ Nothing &&
+      same_dimension unpriced.package_measure.dimension volume &&
+      equal_amount unpriced.package_measure.base_amount (Fraction 1 1) &&
+      (case unpriced.availability of availability_unknown ⇒ True; _ ⇒ False)
+    _ ⇒ False) &&
+  (case find (\item ⇒ item.pantry_ingredient.ingredient_text ≟ "eggs") restored.pantry of
+    Just eggs ⇒ same_dimension eggs.pantry_measure.dimension count &&
+      equal_amount eggs.pantry_measure.base_amount (whole 2)
+    _ ⇒ False) &&
+  (case current_plan restored of
+    Right [ready _ purchase] ⇒ purchase.packages ≟ 4 && purchase.line_cents ≟ 73786976294838206468
+    _ ⇒ False) &&
+  (case prepare_store_handoffs restored of
+    Right [handoff] ⇒ same_store handoff.handoff_store store && length handoff.store_items ≟ 1
+    _ ⇒ False)
+
+checks : List (Text, Bool)
+checks =
+  [("Recipes is the cold-start screen", (recipe_view begin_shopping).title ≟ "Recipes"),
+   ("empty screen offers a real file import", visible_action "platform:import-recipe-file" begin_shopping),
+   ("recipe identities select the real model", length selected.selections ≟ 2),
+   ("ingredient navigation exposes the planned screen", (recipe_view planning).title ≟ "Ingredients and pantry"),
+   ("shared ingredients combine before shopping", needed_is 750 planning),
+   ("serving touch scales the existing recipe", needed_is 1000 scaled),
+   ("pantry touch subtracts from combined demand", needed_is 900 owned),
+   ("pantry decrement restores exact demand", needed_is 1000 (click ["pantry-less", "rice", "mass"] owned)),
+   ("servings never fall below one", case
+      find (\selection ⇒ selection.selected_recipe ≟ "soup")
+        (click ["servings-less", "soup"] (click ["servings-less", "soup"] planning)).selections of
+          Just selection ⇒ serving_count selection.selected_servings ≟ 1
+          Nothing ⇒ False),
+   ("navigation returns through canonical history", (recipe_view (click ["back"]
+      (click ["review"] planning))).title ≟ "Ingredients and pantry"),
+   ("missing store refuses cart approval", not (click ["approve-review"]
+      (click ["review"] planning)).review_approved),
+   ("off-screen control does not change selections", encode_session
+      (click ["servings-more", "soup"] saved) ≟ encode_session
+        ({ notice := "Action is no longer on this screen" } saved)),
+   ("full session restores independent semantic observations", case
+      decode_session (encode_session complete_state) of
+        Right restored ⇒ full_restore_observed restored
+        Left _ ⇒ False),
+   ("empty and unsupported sessions refuse", case (decode_session "", decode_session "4:fake") of
+      (Left _, Left _) ⇒ True
+      _ ⇒ False),
+   ("session trailing data refuses", case decode_session (encode_session complete_state ++ "1:x") of
+      Left _ ⇒ True
+      Right _ ⇒ False),
+   ("view has independently framed Unicode and action tokens", case
+      decode_fields (encode_view (recipe_view saved)) of
+        Right ["green-grocer-view-v1", "Recipes", "Recipe saved", rows] ⇒ not (rows ≟ "")
+        _ ⇒ False)]
+
+%export "dex:recipe_screen_checks"
+main : IO ()
+main = do
+  traverse_ (\(name, passed) ⇒ putStrLn ((if passed then "PASS " else "FAIL ") ++ name)) checks
+  if all snd checks then putStrLn "recipe_screen_checks 16" else exitFailure

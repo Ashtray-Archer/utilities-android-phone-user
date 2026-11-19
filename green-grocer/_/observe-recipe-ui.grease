@@ -1,0 +1,129 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 5) {
+  echo 'usage: grease observe-recipe-ui.grease ADB EMULATOR_SERIAL PREPARATION FRESH_OUTPUT API' >&2
+  exit 2
+}
+var adb = ARGV[0]
+var serial = ARGV[1]
+var inputs = ARGV[2]
+var output = ARGV[3]
+var api = ARGV[4]
+for path in ([adb, inputs, output]) { if (path[0] !== '/') { echo 'FAIL absolute observer paths required' >&2; exit 2 } }
+test ! -e "$output"
+mkdir -p "$output"
+proc device { "$adb" -s "$serial" @ARGV }
+test "$(device shell -T -n getprop ro.kernel.qemu | tr -d '\r\n')" = 1
+test "$(device shell -T -n getprop ro.build.version.sdk | tr -d '\r\n')" = "$api"
+test "$(device shell -T -n getprop ro.product.cpu.abi | tr -d '\r\n')" = x86_64
+cp "$inputs/application-revision.txt" "$output/application-revision.txt"
+device shell -T -n getprop ro.build.fingerprint > "$output/fingerprint.txt"
+device shell -T -n id > "$output/shell-uid.txt"
+"$adb" version > "$output/adb-version.txt"
+cd "$inputs"
+sha256sum -c artifacts.sha256 > "$output/input-verification.txt"
+var remote = '/data/local/tmp/greengrocer-recipe-ui'
+device shell -T -n mkdir "$remote"
+proc transfer(source, name) {
+  device push "$source" "$remote/$name" > "$output/transfer-$name.txt" 2>&1
+  device pull "$remote/$name" "$output/received-$name" >> "$output/transfer-$name.txt" 2>&1
+  cmp "$source" "$output/received-$name"
+}
+proc command(name, artifact) {
+  transfer "$artifact" "$name.dex"
+  try {
+    timeout 120 "$adb" -s "$serial" shell -T -n "CLASSPATH=$remote/$name.dex" \
+      app_process / Idric.Generated > "$output/$name.stdout" 2> "$output/$name.stderr"
+  }
+  var status = _error.code
+  printf '%s\n' "$status" > "$output/$name.exit"
+}
+command screen "$inputs/checks/checks.dex"
+test "$(cat "$output/screen.exit")" = 0
+cmp "$inputs/host/stdout.txt" "$output/screen.stdout"
+for mutation in pantry navigation review {
+  command "screen-$mutation" "$inputs/mutant-$mutation/checks.dex"
+  test "$(cat "$output/screen-$mutation.exit")" = 1
+  var assertion = $(cat "$inputs/mutant-$mutation/assertion.txt")
+  rg -x -F "$assertion" "$output/screen-$mutation.stdout"
+}
+transfer "$inputs/view-check" view-check
+transfer "$inputs/view-mutant" view-mutant
+device shell -T -n chmod 755 "$remote/view-check" "$remote/view-mutant"
+device shell -T -n "$remote/view-check" > "$output/native-view.stdout" 2> "$output/native-view.stderr"
+rg -x -F 'PASS native recipe view Unicode, NUL, controls, prefix refusals, schema, surrogate and budget checks' "$output/native-view.stdout"
+try { device shell -T -n "$remote/view-mutant" > "$output/native-mutant.stdout" 2> "$output/native-mutant.stderr" }
+var status = _error.code
+printf '%s\n' "$status" > "$output/native-mutant.exit"
+test "$status" = 81
+rg -x -F 'FAIL native recipe view transport: Unicode/NUL fixture admitted' "$output/native-mutant.stderr"
+
+var package = 'org.isomorphisms.greengrocer'
+var apk = "$inputs/apk-x86_64/green-grocer-recipes-x86_64.apk"
+device shell -T -n wm dismiss-keyguard
+device shell -T -n settings put system screen_off_timeout 2147483647
+device install --no-incremental -r "$apk" > "$output/install.txt" 2>&1
+device install --no-incremental -r "$inputs/observer/recipe-observer.apk" > "$output/observer-install.txt" 2>&1
+device shell -T -n pm clear "$package" > "$output/clear-fixture-state.txt"
+device shell -T -n dumpsys package "$package" > "$output/package.txt"
+device shell -T -n run-as "$package" id > "$output/application-uid.txt"
+var installed = $(device shell -T -n pm path "$package" | sed -n 's/^package://p' | tr -d '\r')
+test -n "$installed"
+device pull "$installed" "$output/installed.apk" > "$output/installed-transfer.txt" 2>&1
+cmp "$apk" "$output/installed.apk"
+
+try {
+  timeout 240 "$adb" -s "$serial" shell -T -n am instrument -w -r \
+    org.isomorphisms.greengrocer.acceptance/acceptance.RecipeObserver \
+    > "$output/instrumentation.txt" 2> "$output/instrumentation.stderr"
+}
+var instrument_status = _error.code
+printf '%s\n' "$instrument_status" > "$output/instrumentation.exit"
+device logcat -d -v threadtime > "$output/installed.logcat"
+for phase in empty imported selected ingredients scaled pantry review refused back recipes details saved failure {
+  try { device exec-out run-as "$package" cat "cache/gg-$phase.png" > "$output/$phase.png" 2> "$output/$phase-pull.stderr" }
+  var pull_status = _error.code
+  if (pull_status !== 0) { rm -f "$output/$phase.png" }
+}
+cat "$output/instrumentation.txt"
+test "$instrument_status" = 0
+rg -x -F 'INSTRUMENTATION_CODE: -1' "$output/instrumentation.txt"
+rg -F 'PASS installed native recipe import callback, selection, servings, pantry, review refusal, back and save' "$output/instrumentation.txt"
+var filename = $(device shell -T -n run-as "$package" ls files/recipes | tr -d '\r\n')
+if ! printf '%s\n' "$filename" | rg -q '^[0-9]+\.recipe$' { echo 'FAIL expected one owned recipe filename' >&2; exit 1 }
+device exec-out run-as "$package" cat "files/recipes/$filename" > "$output/saved.recipe"
+cmp "$inputs/observer/assets/fixture.recipe" "$output/saved.recipe"
+
+# Instrumentation completion may end its process. Force-stop provides an
+# explicit cold boundary even when an Android version leaves it running.
+try { device shell -T -n pidof "$package" > "$output/before-stop.pid" }
+awk '$6 == "GGRecipeView:" {print $3; exit}' "$output/installed.logcat" > "$output/observed-application.pid"
+test -s "$output/observed-application.pid"
+device shell -T -n am force-stop "$package"
+device logcat -c
+transfer "$inputs/observer/archive/classes.dex" hash-observer.dex
+transfer "$inputs/callback/classes.dex" callback.dex
+transfer "$inputs/observer/assets/expected/imported.view" imported.view
+device shell -T -n "CLASSPATH=$remote/hash-observer.dex:$remote/callback.dex" app_process / \
+  acceptance.RecipeViewHash "$remote/imported.view" > "$output/expected-cold-hash.txt" 2> "$output/expected-cold-hash.stderr"
+var expected = $(cat "$output/expected-cold-hash.txt")
+if ! printf '%s\n' "$expected" | rg -q '^hash=[0-9a-f]{8}$' { echo 'FAIL independent cold-view hash observation' >&2; exit 1 }
+device shell -T -n am start -W -n "$package/org.isomorphisms.greengrocer.RecipeActivity" > "$output/cold-launch.txt"
+var reopened = false
+for attempt in @(seq 1 60) {
+  device logcat -d -v brief -s GGRecipeView:I GGRecipeBounds:I AndroidRuntime:E > "$output/cold.logcat"
+  if rg -q -F "$expected" "$output/cold.logcat" { setvar reopened = true; break }
+  sleep 1
+}
+if (not reopened) { echo 'FAIL cold process did not restore the owned recipe file' >&2; exit 1 }
+device shell -T -n pidof "$package" > "$output/after-stop.pid"
+test -s "$output/after-stop.pid"
+if cmp -s "$output/observed-application.pid" "$output/after-stop.pid" { echo 'FAIL cold process reused the observed application PID' >&2; exit 1 }
+if test -s "$output/before-stop.pid" {
+  if cmp -s "$output/before-stop.pid" "$output/after-stop.pid" { echo 'FAIL cold process identity unchanged' >&2; exit 1 }
+}
+device exec-out screencap -p > "$output/cold-reopen.png"
+device exec-out run-as "$package" cat "files/recipes/$filename" > "$output/reopened.recipe"
+cmp "$output/saved.recipe" "$output/reopened.recipe"
+printf 'recipe_screen_ART\t16_PASS\nsource_UI_mutants\t3_REJECTED\nnative_UTF16_transport\tPASS\ncompiled_transport_mutant\tREJECTED\ninstalled_native_recipe_UI\tPASS\nfile_result_callback\tINJECTED_SDK_FILE_URI_PASS\nservings_and_pantry_touch\tPASS\nmissing_store_review\tREFUSED\nprivate_recipe_file\tEXACT_UTF8_PASS\ncold_process_reopen\tPASS\nretailer_writes\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\nproducer_approval\tNOT_RUN\n' > "$output/result.tsv"
+printf '\033[32mPASS\033[0m installed recipe UI and private-file reopening on API%s x86_64 emulator\n' "$api"

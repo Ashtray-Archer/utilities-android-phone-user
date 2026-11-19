@@ -5,6 +5,7 @@
 #include <android/native_window.h>
 #include <jni.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /* Disposable Android drawing boundary. All JNI references belong to one frame. */
@@ -26,5 +27,9 @@ void gg_canvas_rect(gg_canvas *canvas, float x, float y, float width,
 void gg_canvas_text(gg_canvas *canvas, const char *text, float x,
                     float baseline, float size, uint32_t color);
 float gg_canvas_measure(gg_canvas *canvas, const char *text, float size);
+void gg_canvas_text16(gg_canvas *canvas, const uint16_t *text, size_t units,
+                      float x, float baseline, float size, uint32_t color);
+float gg_canvas_measure16(gg_canvas *canvas, const uint16_t *text, size_t units,
+                         float size);
 
 #endif

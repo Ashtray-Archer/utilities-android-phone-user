@@ -134,6 +134,20 @@ decode_recipe text = do
   fields ← read_frames (length characters) characters
   recipe_from_fields fields
 
+-- The native port transports checked values as opaque, length-framed text.
+-- These operations preserve character boundaries, including NUL and emoji.
+export
+encode_fields : List Text → Text
+encode_fields = frames
+
+export
+decode_fields : Text → Either Text (List Text)
+decode_fields text = read_frames (length (unpack text)) (unpack text)
+
+export
+decode_whole : Text → Either Text Number
+decode_whole = read_whole
+
 export
 restore_recipe : Text → ShoppingState → ShoppingState
 restore_recipe text state = case decode_recipe text of

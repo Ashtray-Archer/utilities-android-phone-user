@@ -14,7 +14,7 @@ for path in ([application, frontend, backend, grease, smali, output]) {
   if (len(path) === 0 or path[0] !== '/') { echo 'FAIL absolute paths required' >&2; exit 2 }
 }
 test ! -e "$output"
-test "$(git -C "$backend" rev-parse HEAD)" = dfcf2cb22c0ebcc4ce999189cc2f066593bf3689
+test "$(git -C "$backend" rev-parse HEAD)" = f4e68eb012a69a7648ff5991cd320ec61feb5eaf
 git -C "$backend" diff --quiet HEAD
 mkdir -p "$output"
 git -C "$application" rev-parse HEAD > "$output/application-revision.txt"

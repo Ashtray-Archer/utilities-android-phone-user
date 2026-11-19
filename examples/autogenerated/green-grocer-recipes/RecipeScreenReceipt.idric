@@ -1,0 +1,56 @@
+module RecipeScreenReceipt
+
+import RecipeShopping
+import RecipeStorage
+import RecipeScreen
+import Data.Text
+import System
+import System.File
+
+-- Independent input bytes, also consumed by the Android observer. The expected
+-- projections come from the checked host model, not from the native adapter.
+fixture : Text
+fixture = "22:green-grocer-recipe-v14:soup7:Soup λ🦉1:21:14:rice4:Rice4:mass3:5001:15:rinse1:01:131:https://example.org/source#t=809:食事\n" ++ pack [chr 0] ++ "notes"
+
+click : List Text → ShoppingState → ShoppingState
+click action = activate_control (encode_fields action)
+
+snapshots : Recipe → List (Text, ShoppingState)
+snapshots recipe =
+  let imported = transition (save_recipe recipe) begin_shopping
+      selected = click ["toggle", "soup"] imported
+      ingredients = click ["ingredients"] selected
+      scaled = click ["servings-more", "soup"] ingredients
+      pantry = click ["pantry-more", "rice", "mass"] scaled
+      review = click ["review"] pantry
+      refused = click ["approve-review"] review
+      back = transition go_back refused
+      recipes = click ["recipes"] back
+      details = click ["details", "soup"] recipes
+      saved = transition (save_recipe recipe) details
+  in [("empty", begin_shopping), ("imported", imported), ("selected", selected),
+      ("ingredients", ingredients), ("scaled", scaled), ("pantry", pantry),
+      ("review", review), ("refused", refused), ("back", back),
+      ("recipes", recipes), ("details", details), ("saved", saved)]
+
+write_checked : Text → Text → IO ()
+write_checked path contents = do
+  result ← writeFile path contents
+  case result of
+    Left error ⇒ do putStrLn ("FAIL recipe screen receipt write: " ++ show error); exitFailure
+    Right () ⇒ pure ()
+
+covering
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_, directory] ⇒ do
+      write_checked (directory ++ "/fixture.recipe") fixture
+      case decode_recipe fixture of
+        Left problem ⇒ do putStrLn ("FAIL independent recipe fixture: " ++ problem); exitFailure
+        Right recipe ⇒ do
+          traverse_ (\(name, state) ⇒ write_checked (directory ++ "/expected/" ++ name ++ ".view")
+            (encode_view (recipe_view state))) (snapshots recipe)
+          putStrLn "PASS checked host recipe projections and independent import bytes written"
+    _ ⇒ do putStrLn ("FAIL recipe receipt arguments: " ++ show arguments); exitFailure

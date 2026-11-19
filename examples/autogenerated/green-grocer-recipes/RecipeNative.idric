@@ -1,0 +1,118 @@
+module RecipeNative
+
+import RecipeShopping
+import RecipeStorage
+import RecipeSession
+import RecipeScreen
+import RecipeFiles
+import RecipeFilePlatform
+import Data.IORef
+import Data.List
+import Data.Text
+
+-- Only filesystem naming/ownership lives here. Recipe actions and quantities
+-- remain in the checked model; C retains the returned session without decoding it.
+data FileReference : Type where [external]
+
+%foreign "dex:construct:Ljava/io/File;:<init>:(Ljava/lang/String;)V"
+file_at : Text → PrimIO FileReference
+%foreign "dex:virtual:Ljava/io/File;:exists:()Z"
+file_exists : FileReference → PrimIO Int32
+
+recipe_path : Text → Recipe → IO Text
+recipe_path directory recipe = pure (directory ++ "/" ++
+  show (foldl fingerprint 0 (unpack recipe.recipe_identity)) ++ ".recipe")
+  where
+    -- A bounded filename key, not an authentication hash or recipe identity.
+    -- The full identity is stored in the file and checked before replacement.
+    -- Collisions refuse; they never merge or overwrite different recipes.
+    fingerprint : Integer → Char → Integer
+    fingerprint previous character = mod (previous × 131 + cast (ord character))
+      340282366920938463463374607431768211456
+
+save_owned_recipe : Text → Recipe → ShoppingState → IO ShoppingState
+save_owned_recipe directory recipe state = do
+  result ← newIORef state
+  try_recipe_file (do
+    path ← recipe_path directory recipe
+    case recipe_file path of
+      Left message ⇒ writeIORef result ({ notice := message } state)
+      Right file ⇒ do
+        base ← primIO (file_at path)
+        backup ← primIO (file_at (path ++ ".bak"))
+        base_exists ← primIO (file_exists base)
+        backup_exists ← primIO (file_exists backup)
+        allowed ← if base_exists ≟ 0 && backup_exists ≟ 0 then pure True else do
+          previous ← read_recipe_text path
+          pure (case decode_recipe previous of
+            Right saved ⇒ saved.recipe_identity ≟ recipe.recipe_identity
+            Left _ ⇒ False)
+        if allowed
+          then do
+            saved ← save_recipe_file file recipe state
+            writeIORef result saved
+          else writeIORef result ({ notice := "Existing recipe file has a different or unreadable identity" } state))
+    (writeIORef result ({ notice := "Recipe save could not be confirmed; current recipes retained" } state))
+  readIORef result
+
+%export "dex:recipe_session_valid"
+recipe_session_valid : Text → Bool
+recipe_session_valid encoded = case decode_session encoded of
+  Left _ ⇒ False
+  Right _ ⇒ True
+
+%export "dex:recipe_session_can_go_back"
+recipe_session_can_go_back : Text → Bool
+recipe_session_can_go_back encoded = case decode_session encoded of
+  Left _ ⇒ False
+  Right state ⇒ not (null state.previous_screens)
+
+%export "dex:recipe_session_start"
+recipe_session_start : Text
+recipe_session_start = encode_session begin_shopping
+
+%export "dex:recipe_session_view"
+recipe_session_view : Text → Text
+recipe_session_view encoded = case decode_session encoded of
+  Left message ⇒ encode_view (View "Recipe session refused" message [])
+  Right state ⇒ encode_view (recipe_view state)
+
+%export "dex:recipe_session_restore"
+recipe_session_restore : Text → Text → IO Text
+recipe_session_restore encoded path = case (decode_session encoded, recipe_file path) of
+  (Right state, Right file) ⇒ map encode_session (load_recipe_file file state)
+  _ ⇒ pure encoded
+
+%export "dex:recipe_session_import"
+recipe_session_import : Text → Text → Text → IO Text
+recipe_session_import encoded path directory = case decode_session encoded of
+  Left _ ⇒ pure encoded
+  Right state ⇒ do
+    result ← newIORef state
+    try_recipe_file (do
+      source ← read_recipe_text path
+      case decode_recipe source of
+        Left problem ⇒ writeIORef result ({ notice := "Recipe file refused: " ++ problem } state)
+        Right recipe ⇒ do
+          saved ← save_owned_recipe directory recipe state
+          writeIORef result saved)
+      (writeIORef result ({ notice := "Recipe import failed; previous recipes retained" } state))
+    map encode_session (readIORef result)
+
+%export "dex:recipe_session_action"
+recipe_session_action : Text → Text → Text → IO Text
+recipe_session_action encoded token directory = case decode_session encoded of
+  Left _ ⇒ pure encoded
+  Right state ⇒
+    if token ≟ "system:back" then pure (encode_session (transition go_back state))
+    else if not (visible_action token state) then pure
+      (encode_session ({ notice := "Action is no longer on this screen" } state))
+    else case decode_fields token of
+      Right ["save", identity] ⇒ case find
+        (\recipe ⇒ recipe.recipe_identity ≟ identity) state.saved_recipes of
+          Nothing ⇒ pure (encode_session ({ notice := "Saved recipe is missing" } state))
+          Just recipe ⇒ map encode_session (save_owned_recipe directory recipe state)
+      _ ⇒ pure (encode_session (activate_control token state))
+
+main : IO ()
+main = pure ()

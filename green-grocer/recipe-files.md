@@ -83,7 +83,7 @@ Frontend remains `2bce7677f513d711875e978bd6f5ad28b9e54d58`. Existing recipe gat
 are rerun with the changed backend rather than carrying old results forward.
 
 Current exact-head results are recorded in
-[Ashtray-Archer/utilities-android-phone-user PR #88, “Implement Idriç recipe planning and exact saved recipe files”](https://github.com/Ashtray-Archer/utilities-android-phone-user/pull/88).
+[Ashtray-Archer/utilities-android-phone-user PR #88, “Connect Idriç recipes to native Android screens and saved files”](https://github.com/Ashtray-Archer/utilities-android-phone-user/pull/88).
 Source presence and local DEX emission are not Android file execution.
 
 ## Accepted-budget regression
@@ -103,7 +103,14 @@ The repair replaces the per-character effect recursion with bounded bulk SDK
 reading. The exact full-budget fixture and rejection thresholds remain in
 place. Its new current-head workflow must requalify the complete suite.
 
-The recipe editor, native renderer/input connection, app-private directory
-integration, installed-APK reopening, stable signed recipe APK and physical
-A1/C67 acceptance remain unfinished. The existing sample-cart APK is not this
-recipe implementation. No retailer account, cart or order is touched.
+The subsequent [native recipe candidate](recipe-android.md) implements the
+renderer/input connection, app-private directory integration, signed recipe APK
+and installed-app reopening gate. Its workflow now pins the packaging dependency
+`f4e68eb012a69a7648ff5991cd320ec61feb5eaf`, which retains the file compiler
+surface above. The file-only ART gate remains separate and is rerun. The earlier
+full-budget bulk-reader repair passed API29/API34 at
+`acd21f15d1d1de22b4d9ab9f838c6522925e2d86` in
+[run 44506213266](https://github.com/Ashtray-Archer/utilities-android-phone-user/actions/runs/44506213266).
+
+Recipe creation/editing, independent producer promotion and physical A1/C67
+acceptance remain unfinished. No retailer account, cart or order is touched.

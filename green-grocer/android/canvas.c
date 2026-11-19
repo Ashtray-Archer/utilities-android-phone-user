@@ -106,3 +106,26 @@ float gg_canvas_measure(gg_canvas *canvas, const char *text, float size) {
     (*canvas->env)->DeleteLocalRef(canvas->env, value);
     return width;
 }
+
+void gg_canvas_text16(gg_canvas *canvas, const uint16_t *text, size_t units,
+                      float x, float baseline, float size, uint32_t color) {
+    if (units > INT32_MAX) return;
+    paint(canvas, size, color);
+    jstring value = (*canvas->env)->NewString(canvas->env, text, (jsize)units);
+    if (value == NULL || exception(canvas)) return;
+    (*canvas->env)->CallVoidMethod(canvas->env, canvas->canvas, canvas->text,
+                                  value, x, baseline, canvas->paint);
+    (*canvas->env)->DeleteLocalRef(canvas->env, value);
+}
+
+float gg_canvas_measure16(gg_canvas *canvas, const uint16_t *text, size_t units,
+                         float size) {
+    if (units > INT32_MAX) return 0;
+    paint(canvas, size, 0);
+    jstring value = (*canvas->env)->NewString(canvas->env, text, (jsize)units);
+    if (value == NULL || exception(canvas)) return 0;
+    float width = (*canvas->env)->CallFloatMethod(canvas->env, canvas->paint,
+                                               canvas->measure, value);
+    (*canvas->env)->DeleteLocalRef(canvas->env, value);
+    return width;
+}
