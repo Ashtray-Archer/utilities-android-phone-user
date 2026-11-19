@@ -16,6 +16,7 @@ typedef struct {
     struct android_app *app;
     gg_recipe_engine engine;
     gg_recipe_view view;
+    gg_canvas_window drawable;
     bool available, redraw, touching, dragging, scroll_gesture;
     float density, scroll, max_scroll, down_x, down_y, last_y;
     int32_t pointer;
@@ -94,7 +95,7 @@ static void viewport(screen *state) {
 static void render(screen *state) {
     viewport(state);
     gg_canvas canvas;
-    if (!gg_canvas_begin(&canvas, state->app->activity, state->app->window)) return;
+    if (!gg_canvas_begin(&canvas, &state->drawable, state->app->activity, state->app->window)) return;
     float d = state->density;
     rect view = state->viewport;
     float header_height = 92 * d, footer_height = 112 * d;
@@ -224,6 +225,7 @@ static int32_t input(struct android_app *app, AInputEvent *event) {
 
 static void command(struct android_app *app, int32_t kind) {
     screen *state = app->userData;
+    if (kind == APP_CMD_TERM_WINDOW) (void)gg_canvas_window_release(&state->drawable);
     if (kind == APP_CMD_TERM_WINDOW || kind == APP_CMD_LOST_FOCUS || kind == APP_CMD_PAUSE ||
         kind == APP_CMD_WINDOW_RESIZED || kind == APP_CMD_CONTENT_RECT_CHANGED || kind == APP_CMD_CONFIG_CHANGED)
         state->touching = false;
@@ -274,6 +276,7 @@ void android_main(struct android_app *app) {
         if (state->redraw && app->window != NULL) { state->redraw = false; render(state); }
     }
     gg_recipe_document_unlisten(app->looper);
+    (void)gg_canvas_window_release(&state->drawable);
     gg_recipe_view_dispose(&state->view);
     gg_recipe_engine_close(&state->engine);
     app->userData = NULL;

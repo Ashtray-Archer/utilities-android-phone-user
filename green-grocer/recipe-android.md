@@ -37,7 +37,10 @@ Transport budgets are 1048576 UTF-16 units, 512 rows and three controls per row.
 They do not narrow recipe-domain arithmetic.
 
 `recipes_main.c` and the existing canvas implement drawing, wrapping, scrolling,
-hit boxes and native lifecycle/input. They do not calculate recipe quantities,
+hit boxes and native lifecycle/input. Each native window retains one Java Surface
+and producer connection across frames; window termination and activity exit
+release it explicitly. Frame-local paint/canvas references remain disposable.
+They do not calculate recipe quantities,
 prices or shopping decisions. The recipe APK links no `model/cart.c` or sample
 catalog. Checked Idriç framework plans emit the NativeActivity subclass and
 Runnable callback classes; no Java/Kotlin application source, Gradle, framework

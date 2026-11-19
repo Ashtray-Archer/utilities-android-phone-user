@@ -20,22 +20,41 @@ void gg_canvas_end(gg_canvas *canvas) {
                                           canvas->unlock, canvas->canvas);
             (void)exception(canvas);
         }
-        /* Each ANativeWindow_toSurface wrapper owns a producer connection.
-         * Releasing only its JNI local reference defers native cleanup until
-         * GC and can make the very next frame fail with already-connected. */
-        if (canvas->surface != NULL && canvas->release != NULL) {
-            (*canvas->env)->CallVoidMethod(canvas->env, canvas->surface, canvas->release);
-            (void)exception(canvas);
-        }
         if (canvas->frame) (*canvas->env)->PopLocalFrame(canvas->env, NULL);
     }
     if (canvas->detach) (*canvas->vm)->DetachCurrentThread(canvas->vm);
     memset(canvas, 0, sizeof(*canvas));
 }
 
-bool gg_canvas_begin(gg_canvas *canvas, ANativeActivity *activity,
+bool gg_canvas_window_release(gg_canvas_window *window) {
+    if (window->surface == NULL) return true;
+    JNIEnv *env = NULL;
+    bool detach = false;
+    jint status = (*window->vm)->GetEnv(window->vm, (void **)&env, JNI_VERSION_1_6);
+    if (status == JNI_EDETACHED) {
+        if ((*window->vm)->AttachCurrentThread(window->vm, &env, NULL) != JNI_OK) return false;
+        detach = true;
+    } else if (status != JNI_OK) return false;
+    (*env)->CallVoidMethod(env, window->surface, window->release);
+    bool success = (*env)->ExceptionCheck(env) == JNI_FALSE;
+    if (!success) {
+        __android_log_print(ANDROID_LOG_ERROR, "GreenGrocer", "Android Surface release failed");
+        (*env)->ExceptionDescribe(env);
+        (*env)->ExceptionClear(env);
+    }
+    (*env)->DeleteGlobalRef(env, window->surface);
+    ANativeWindow_release(window->window);
+    if (detach) (*window->vm)->DetachCurrentThread(window->vm);
+    memset(window, 0, sizeof(*window));
+    return success;
+}
+
+bool gg_canvas_begin(gg_canvas *canvas, gg_canvas_window *retained, ANativeActivity *activity,
                      ANativeWindow *window) {
     memset(canvas, 0, sizeof(*canvas));
+    if (retained->surface != NULL && (retained->window != window || retained->vm != activity->vm)) {
+        if (!gg_canvas_window_release(retained)) return false;
+    }
     canvas->vm = activity->vm;
     jint status = (*canvas->vm)->GetEnv(canvas->vm, (void **)&canvas->env, JNI_VERSION_1_6);
     if (status == JNI_EDETACHED) {
@@ -46,8 +65,19 @@ bool gg_canvas_begin(gg_canvas *canvas, ANativeActivity *activity,
     JNIEnv *env = canvas->env;
     if ((*env)->PushLocalFrame(env, 32) != JNI_OK) goto failed;
     canvas->frame = true;
-    canvas->surface = ANativeWindow_toSurface(env, window);
-    if (canvas->surface == NULL || exception(canvas)) goto failed;
+    if (retained->surface == NULL) {
+        jobject created = ANativeWindow_toSurface(env, window);
+        if (created == NULL || exception(canvas)) goto failed;
+        jclass type = (*env)->GetObjectClass(env, created);
+        if (type == NULL || exception(canvas)) goto failed;
+        jmethodID release = (*env)->GetMethodID(env, type, "release", "()V");
+        if (release == NULL || exception(canvas)) goto failed;
+        jobject global = (*env)->NewGlobalRef(env, created);
+        if (global == NULL || exception(canvas)) goto failed;
+        ANativeWindow_acquire(window);
+        *retained = (gg_canvas_window){activity->vm, window, global, release};
+    }
+    canvas->surface = retained->surface;
     jclass surface = (*env)->GetObjectClass(env, canvas->surface);
     if (surface == NULL || exception(canvas)) goto failed;
     jclass graphics = (*env)->FindClass(env, "android/graphics/Canvas");
@@ -60,7 +90,6 @@ bool gg_canvas_begin(gg_canvas *canvas, ANativeActivity *activity,
     jmethodID lock, constructor;
     METHOD(lock, surface, "lockCanvas", "(Landroid/graphics/Rect;)Landroid/graphics/Canvas;");
     METHOD(canvas->unlock, surface, "unlockCanvasAndPost", "(Landroid/graphics/Canvas;)V");
-    METHOD(canvas->release, surface, "release", "()V");
     METHOD(constructor, paint, "<init>", "(I)V");
     METHOD(canvas->color, graphics, "drawColor", "(I)V");
     METHOD(canvas->rectangle, graphics, "drawRect", "(FFFFLandroid/graphics/Paint;)V");

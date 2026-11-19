@@ -8,17 +8,26 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Disposable Android drawing boundary. All JNI references belong to one frame. */
+/* Keep one Surface/producer connection for the native window's lifetime. */
+typedef struct {
+    JavaVM *vm;
+    ANativeWindow *window;
+    jobject surface;
+    jmethodID release;
+} gg_canvas_window;
+
+/* Other drawing references belong to one frame. */
 typedef struct {
     JNIEnv *env;
     JavaVM *vm;
     bool detach;
     bool frame;
     jobject surface, canvas, paint;
-    jmethodID unlock, release, color, rectangle, text, paint_color, paint_size, measure;
+    jmethodID unlock, color, rectangle, text, paint_color, paint_size, measure;
 } gg_canvas;
 
-bool gg_canvas_begin(gg_canvas *canvas, ANativeActivity *activity,
+bool gg_canvas_window_release(gg_canvas_window *window);
+bool gg_canvas_begin(gg_canvas *canvas, gg_canvas_window *retained, ANativeActivity *activity,
                      ANativeWindow *window);
 void gg_canvas_end(gg_canvas *canvas);
 void gg_canvas_clear(gg_canvas *canvas, uint32_t color);
