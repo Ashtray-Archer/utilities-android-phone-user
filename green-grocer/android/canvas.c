@@ -20,6 +20,13 @@ void gg_canvas_end(gg_canvas *canvas) {
                                           canvas->unlock, canvas->canvas);
             (void)exception(canvas);
         }
+        /* Each ANativeWindow_toSurface wrapper owns a producer connection.
+         * Releasing only its JNI local reference defers native cleanup until
+         * GC and can make the very next frame fail with already-connected. */
+        if (canvas->surface != NULL && canvas->release != NULL) {
+            (*canvas->env)->CallVoidMethod(canvas->env, canvas->surface, canvas->release);
+            (void)exception(canvas);
+        }
         if (canvas->frame) (*canvas->env)->PopLocalFrame(canvas->env, NULL);
     }
     if (canvas->detach) (*canvas->vm)->DetachCurrentThread(canvas->vm);
@@ -53,6 +60,7 @@ bool gg_canvas_begin(gg_canvas *canvas, ANativeActivity *activity,
     jmethodID lock, constructor;
     METHOD(lock, surface, "lockCanvas", "(Landroid/graphics/Rect;)Landroid/graphics/Canvas;");
     METHOD(canvas->unlock, surface, "unlockCanvasAndPost", "(Landroid/graphics/Canvas;)V");
+    METHOD(canvas->release, surface, "release", "()V");
     METHOD(constructor, paint, "<init>", "(I)V");
     METHOD(canvas->color, graphics, "drawColor", "(I)V");
     METHOD(canvas->rectangle, graphics, "drawRect", "(FFFFLandroid/graphics/Paint;)V");

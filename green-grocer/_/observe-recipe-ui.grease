@@ -81,14 +81,18 @@ var instrument_status = _error.code
 printf '%s\n' "$instrument_status" > "$output/instrumentation.exit"
 device logcat -d -v threadtime > "$output/installed.logcat"
 for phase in empty imported selected ingredients scaled pantry review refused back recipes details saved failure {
-  try { device exec-out run-as "$package" cat "cache/gg-$phase.png" > "$output/$phase.png" 2> "$output/$phase-pull.stderr" }
+  try { device shell -T -n run-as "$package" cat "cache/gg-$phase.png" > "$output/$phase.png" 2> "$output/$phase-pull.stderr" }
   var pull_status = _error.code
-  if (pull_status !== 0) { rm -f "$output/$phase.png" }
+  var signature = $(od -An -tx1 -N8 "$output/$phase.png" | tr -d ' \n')
+  if (pull_status !== 0 or signature !== '89504e470d0a1a0a') { rm -f "$output/$phase.png" }
 }
 cat "$output/instrumentation.txt"
 test "$instrument_status" = 0
 rg -x -F 'INSTRUMENTATION_CODE: -1' "$output/instrumentation.txt"
 rg -F 'PASS installed native recipe import callback, selection, servings, pantry, review refusal, back and save' "$output/instrumentation.txt"
+for phase in empty imported selected ingredients scaled pantry review refused back recipes details saved {
+  test -s "$output/$phase.png"
+}
 var filename = $(device shell -T -n run-as "$package" ls files/recipes | tr -d '\r\n')
 if ! printf '%s\n' "$filename" | rg -q '^[0-9]+\.recipe$' { echo 'FAIL expected one owned recipe filename' >&2; exit 1 }
 device exec-out run-as "$package" cat "files/recipes/$filename" > "$output/saved.recipe"

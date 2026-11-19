@@ -27,6 +27,11 @@ if (_error.code !== 1) { cat "$output/host/compiler.txt"; exit 1 }
 cp "$frontend/_/build/exec/idris2_app/libidris2_support.so" "$output/host/receipt_app/"
 "$output/host/receipt" "$output/assets" > "$output/host/result.txt"
 cat "$output/host/result.txt"
+# An independent byte literal catches truncation at the host C-string boundary.
+# The final source note contains an actual NUL followed by five more characters.
+printf '22:green-grocer-recipe-v14:soup7:Soup λ🦉1:21:14:rice4:Rice4:mass3:5001:15:rinse1:01:131:https://example.org/source#t=809:食事\n\000notes' \
+  > "$output/expected-fixture.recipe"
+cmp "$output/expected-fixture.recipe" "$output/assets/fixture.recipe"
 java -jar "$smali" assemble "$application/green-grocer/acceptance" -o "$output/archive/classes.dex"
 var tools = "$sdk/build-tools/36.0.0"
 "$tools/dexdump" -c "$output/archive/classes.dex" > "$output/dex-integrity.txt"

@@ -15,7 +15,7 @@ typedef struct {
     bool detach;
     bool frame;
     jobject surface, canvas, paint;
-    jmethodID unlock, color, rectangle, text, paint_color, paint_size, measure;
+    jmethodID unlock, release, color, rectangle, text, paint_color, paint_size, measure;
 } gg_canvas;
 
 bool gg_canvas_begin(gg_canvas *canvas, ANativeActivity *activity,

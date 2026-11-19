@@ -4,8 +4,10 @@ import RecipeShopping
 import RecipeStorage
 import RecipeScreen
 import Data.Text
+import Data.Buffer
 import System
 import System.File
+import System.File.Buffer
 
 -- Independent input bytes, also consumed by the Android observer. The expected
 -- projections come from the checked host model, not from the native adapter.
@@ -35,10 +37,18 @@ snapshots recipe =
 
 write_checked : Text → Text → IO ()
 write_checked path contents = do
-  result ← writeFile path contents
-  case result of
-    Left error ⇒ do putStrLn ("FAIL recipe screen receipt write: " ++ show error); exitFailure
-    Right () ⇒ pure ()
+  -- The host's C-string writeFile boundary stops at NUL. Use the maintained
+  -- Chez UTF-8 buffer and explicit byte count for these binary-safe fixtures.
+  let size = stringByteLength contents
+  allocated ← newBuffer size
+  case allocated of
+    Nothing ⇒ do putStrLn "FAIL recipe screen receipt buffer allocation"; exitFailure
+    Just buffer ⇒ do
+      setString buffer 0 contents
+      result ← writeBufferToFile path buffer size
+      case result of
+        Left error ⇒ do putStrLn ("FAIL recipe screen receipt write: " ++ show error); exitFailure
+        Right () ⇒ pure ()
 
 covering
 main : IO ()
