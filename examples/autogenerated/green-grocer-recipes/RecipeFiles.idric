@@ -25,7 +25,7 @@ save_recipe_file (SavedRecipeAt path) recipe current =
       try_recipe_file (do
         write_recipe_text path (encode_recipe admitted)
         writeIORef result (transition (save_recipe admitted) current))
-        (writeIORef result ({ notice := "Recipe could not be saved; previous recipes retained" } current))
+        (writeIORef result ({ notice := "Recipe save could not be confirmed; current recipes retained" } current))
       readIORef result
 
 export

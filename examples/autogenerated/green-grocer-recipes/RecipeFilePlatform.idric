@@ -12,13 +12,16 @@ data OutputReference : Type where [external]
 data InputStreamReference : Type where [external]
 data OutputStreamReference : Type where [external]
 data ReaderReference : Type where [external]
+data ReadableReference : Type where [external]
+data ScannerReference : Type where [external]
+data ReadFailureReference : Type where [external]
+data ObjectReference : Type where [external]
 data WriterReference : Type where [external]
 data CharsetReference : Type where [external]
 data DecoderReference : Type where [external]
 data EncoderReference : Type where [external]
 data ChannelReference : Type where [external]
 data DescriptorReference : Type where [external]
-data BuilderReference : Type where [external]
 data FailureReference : Type where [external]
 data ThrowableReference : Type where [external]
 
@@ -52,8 +55,26 @@ can_encode : EncoderReference → Text → PrimIO Int32
 input_stream : InputReference → InputStreamReference
 %foreign "dex:construct:Ljava/io/InputStreamReader;:<init>:(Ljava/io/InputStream;Ljava/nio/charset/CharsetDecoder;)V"
 strict_reader : InputStreamReference → DecoderReference → PrimIO ReaderReference
-%foreign "dex:virtual:Ljava/io/InputStreamReader;:read:()I"
-read_character : ReaderReference → PrimIO Int32
+%foreign "dex:cast:Ljava/io/InputStreamReader;:Ljava/lang/Readable;"
+readable_source : ReaderReference → ReadableReference
+%foreign "dex:construct:Ljava/util/Scanner;:<init>:(Ljava/lang/Readable;)V"
+make_scanner : ReadableReference → PrimIO ScannerReference
+%foreign "dex:virtual:Ljava/util/Scanner;:useDelimiter:(Ljava/lang/String;)Ljava/util/Scanner;"
+scan_entire_input : ScannerReference → Text → PrimIO ScannerReference
+%foreign "dex:virtual:Ljava/util/Scanner;:hasNext:()Z"
+has_text : ScannerReference → PrimIO Int32
+%foreign "dex:virtual:Ljava/util/Scanner;:next:()Ljava/lang/String;"
+scanner_text : ScannerReference → PrimIO Text
+%foreign "dex:virtual:Ljava/util/Scanner;:close:()V"
+close_scanner : ScannerReference → PrimIO ()
+%foreign "dex:virtual:Ljava/util/Scanner;:ioException:()Ljava/io/IOException;"
+read_failure : ScannerReference → PrimIO ReadFailureReference
+%foreign "dex:cast:Ljava/io/IOException;:Ljava/lang/Object;"
+failure_object : ReadFailureReference → ObjectReference
+%foreign "dex:reference-is-null"
+reference_is_null : ObjectReference → Int32
+%foreign "dex:cast:Ljava/io/IOException;:Ljava/lang/Throwable;"
+read_failure_throwable : ReadFailureReference → ThrowableReference
 %foreign "dex:cast:Ljava/io/FileOutputStream;:Ljava/io/OutputStream;"
 output_stream : OutputReference → OutputStreamReference
 %foreign "dex:construct:Ljava/io/OutputStreamWriter;:<init>:(Ljava/io/OutputStream;Ljava/nio/charset/CharsetEncoder;)V"
@@ -66,12 +87,6 @@ flush_writer : WriterReference → PrimIO ()
 output_descriptor : OutputReference → PrimIO DescriptorReference
 %foreign "dex:virtual:Ljava/io/FileDescriptor;:sync:()V"
 sync_output : DescriptorReference → PrimIO ()
-%foreign "dex:construct:Ljava/lang/StringBuilder;:<init>:()V"
-make_builder : PrimIO BuilderReference
-%foreign "dex:virtual:Ljava/lang/StringBuilder;:appendCodePoint:(I)Ljava/lang/StringBuilder;"
-append_character : BuilderReference → Int32 → PrimIO BuilderReference
-%foreign "dex:virtual:Ljava/lang/StringBuilder;:toString:()Ljava/lang/String;"
-builder_text : BuilderReference → PrimIO Text
 %foreign "dex:virtual:Ljava/lang/String;:length:()I"
 text_units : Text → PrimIO Int32
 %foreign "dex:construct:Ljava/lang/IllegalArgumentException;:<init>:(Ljava/lang/String;)V"
@@ -93,17 +108,24 @@ raise message = do
   primIO (throw_failure (failure_throwable failure))
 
 -- A phone resource budget, not a bound on recipe quantities or identifiers.
--- Read at most 262144 UTF-16 units and refuse files above 1 MiB before decoding.
-read_characters : Number → ReaderReference → BuilderReference → IO Text
-read_characters 0 reader builder = do
-  next ← primIO (read_character reader)
-  if next < 0 then primIO (builder_text builder)
-    else do raise "Recipe file exceeds text budget"; pure ""
-read_characters (S remaining) reader builder = do
-  next ← primIO (read_character reader)
-  if next < 0 then primIO (builder_text builder) else do
-    _ ← primIO (append_character builder next)
-    read_characters remaining reader builder
+-- Refuse files above 1 MiB before decoding and accept at most 262144 UTF-16
+-- units. The SDK consumes the bounded file without one Idriç call per unit.
+-- Scanner treats an IOException as EOF: explicitly rethrow it so that a valid
+-- prefix of a damaged file can never become a successfully restored recipe.
+read_all_text : ReaderReference → IO Text
+read_all_text reader = do
+  scanner ← primIO (make_scanner (readable_source reader))
+  _ ← primIO (scan_entire_input scanner "\\A")
+  available ← primIO (has_text scanner)
+  text ← if available ≟ 0 then pure "" else primIO (scanner_text scanner)
+  primIO (close_scanner scanner)
+  failure ← primIO (read_failure scanner)
+  if reference_is_null (failure_object failure) ≟ 0
+    then do primIO (throw_failure (read_failure_throwable failure)); pure ""
+    else do
+      units ← primIO (text_units text)
+      if units > 262144 then do raise "Recipe file exceeds text budget"; pure ""
+        else pure text
 
 export
 read_recipe_text : Text → IO Text
@@ -119,8 +141,7 @@ read_recipe_text path = do
       charset ← primIO (charset_named "UTF-8")
       decoder ← primIO (new_decoder charset)
       reader ← primIO (strict_reader (input_stream stream) decoder)
-      builder ← primIO make_builder
-      text ← read_characters 262144 reader builder
+      text ← read_all_text reader
       writeIORef result text)
     (primIO (close_input stream)))
   readIORef result

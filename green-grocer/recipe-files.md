@@ -21,6 +21,11 @@ a different recipe. NUL, newlines, whitespace and supplementary characters are
 data. The adapter does not use JNI modified UTF-8, Java/Kotlin source, Gradle,
 SQLite or a second recipe implementation.
 
+The bulk SDK reader uses only the beginning-of-input delimiter, preserving the
+whole text. It explicitly checks Scanner's recorded I/O exception before
+accepting data, including any failure during close. A valid prefix followed by
+malformed bytes must be refused rather than mistaken for a complete file.
+
 The resource boundary refuses files above 1 MiB and text above 262144 UTF-16
 units. This bounds file work on the phone, independently of the domain's exact
 quantity values. Recipe quantities and identifiers are not narrowed. Callers
@@ -34,6 +39,8 @@ Platform contracts:
 - [CharsetDecoder](https://developer.android.com/reference/java/nio/charset/CharsetDecoder)
   and [CharsetEncoder](https://developer.android.com/reference/java/nio/charset/CharsetEncoder)
   define strict decoded/encoded character handling.
+- [Scanner](https://developer.android.com/reference/java/util/Scanner) retains
+  an underlying read failure through `ioException()`; the adapter rethrows it.
 
 ## Verification boundary
 
@@ -46,6 +53,8 @@ independent Smali caller. API29/API34 x86_64 jobs exercise:
 - Reading the file from a new ART process, rather than reusing in-memory state.
 - Invalid UTF-8, corrupt schemas, missing files, invalid recipes, relative paths
   and failed writes with the existing recipes and review retained.
+- Empty files and a damaged byte after a complete valid recipe, exercising
+  empty-input handling and preventing acceptance of a truncated valid prefix.
 - A real unfinished AtomicFile write created by an independent SDK caller;
   another process then invokes the production loader and must recover the
   preceding good recipe. This qualifies loader recovery, not an installed
@@ -55,9 +64,13 @@ independent Smali caller. API29/API34 x86_64 jobs exercise:
 - A compiled mutation using a replacement-decoding reader. It must execute and
   fail the original invalid-UTF-8 state-preservation assertion; a compiler,
   verifier or process-loading failure cannot count as its rejection.
+- A second compiled mutation ignores the SDK reader's recorded I/O error. It
+  must fail the raw strict-decoding assertion, even if the codec independently
+  refuses an empty or incomplete prefix. A codec refusal alone would not prove
+  that the UTF-8 adapter reported the read failure.
 
 The previous 52 recipe cases, 24 codec cases, 14 changing-input observations and
-nine compiled mutants remain required. The file mutant brings the total to ten.
+nine compiled mutants remain required. The two file mutants bring the total to eleven.
 Every stage retains exits, stdout/stderr, PID-tagged calls, Android logcat,
 source/DEX digests and the exact application revision.
 
@@ -72,6 +85,23 @@ are rerun with the changed backend rather than carrying old results forward.
 Current exact-head results are recorded in
 [Ashtray-Archer/utilities-android-phone-user PR #88, “Implement Idriç recipe planning and exact saved recipe files”](https://github.com/Ashtray-Archer/utilities-android-phone-user/pull/88).
 Source presence and local DEX emission are not Android file execution.
+
+## Accepted-budget regression
+
+Checkpoint `c939b9e451f6607c6c8531e26db61326d71abf46` passed the original file
+suite, including 16 KiB text, on API29/API34 in
+[run 44501798607](https://github.com/Ashtray-Archer/utilities-android-phone-user/actions/runs/44501798607).
+The strengthened checkpoint `96a5778eea3fa40eed841948377b6d2dc77ddeff` exercised
+the full accepted 262144 UTF-16 units in
+[run 44503510769](https://github.com/Ashtray-Archer/utilities-android-phone-user/actions/runs/44503510769)
+and failed on both targets during that round trip. API34 PID 2649's logcat
+records `StackOverflowError: stack size 8188KB`, with repeated generated
+read-loop/closure dispatch beneath `InputStreamReader.read`. The diagnostic is
+retained in [artifact 14518452796](https://github.com/Ashtray-Archer/utilities-android-phone-user/actions/runs/44503510769/artifacts/14518452796).
+
+The repair replaces the per-character effect recursion with bounded bulk SDK
+reading. The exact full-budget fixture and rejection thresholds remain in
+place. Its new current-head workflow must requalify the complete suite.
 
 The recipe editor, native renderer/input connection, app-private directory
 integration, installed-APK reopening, stable signed recipe APK and physical

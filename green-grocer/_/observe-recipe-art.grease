@@ -32,6 +32,7 @@ transfer "$input/observer.dex" observer
 transfer "$input/storage/checks.dex" storage
 transfer "$input/files/files.dex" files
 transfer "$input/files-lenient/files.dex" files-lenient
+transfer "$input/files-unreported/files.dex" files-unreported
 transfer "$input/file-observer.dex" file-observer
 for mutation in pantry rounding price source store grouping {
   transfer "$input/mutant-$mutation/checks.dex" "mutant-$mutation"
@@ -88,5 +89,9 @@ execute file-mutant-utf8 "$remote/files-lenient.dex:$remote/file-observer.dex" \
   "acceptance.RecipeFileObserver $file refusals"
 test "$(cat "$output/file-mutant-utf8.exit")" = 83
 rg -x -F 'FAIL invalid UTF-8 preserves recipes and review' "$output/file-mutant-utf8.stderr"
-printf 'recipe_checks_ART\tPASS\nrecipe_checks\t52\nrecipe_storage_checks_ART\tPASS\nrecipe_storage_checks\t24\nchanging_export_inputs_ART\tPASS\ncompiled_semantic_mutants\t10_REJECTED\nrecipe_file_IO_ART\tPASS\nfile_reopening\tSEPARATE_ART_PROCESSES_PASS\nunfinished_write_recovery\tPASS\nrecipe_APK\tNOT_RUN\nAndroid_recipe_UI_file_integration\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$output/result.tsv"
-printf '\033[32mPASS\033[0m recipes, storage, real file I/O and ten semantic mutants on x86_64 ART\n'
+execute file-mutant-ioerror "$remote/files-unreported.dex:$remote/file-observer.dex" \
+  "acceptance.RecipeFileObserver $file refusals"
+test "$(cat "$output/file-mutant-ioerror.exit")" = 83
+rg -x -F 'FAIL strict UTF-8 read rethrows a decoder error' "$output/file-mutant-ioerror.stderr"
+printf 'recipe_checks_ART\tPASS\nrecipe_checks\t52\nrecipe_storage_checks_ART\tPASS\nrecipe_storage_checks\t24\nchanging_export_inputs_ART\tPASS\ncompiled_semantic_mutants\t11_REJECTED\nrecipe_file_IO_ART\tPASS\nfile_reopening\tSEPARATE_ART_PROCESSES_PASS\nunfinished_write_recovery\tPASS\naccepted_text_budget\t262144_UTF16_UNITS_PASS\nrecipe_APK\tNOT_RUN\nAndroid_recipe_UI_file_integration\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$output/result.tsv"
+printf '\033[32mPASS\033[0m recipes, storage, real file I/O and eleven semantic mutants on x86_64 ART\n'

@@ -88,7 +88,19 @@ emit_files "$directory" files-lenient
 if cmp -s "$output/files/files.dex" "$output/files-lenient/files.dex" {
   echo 'FAIL lenient UTF-8 mutant retained candidate bytes' >&2; exit 1
 }
+setvar directory = "$output/files-unreported-source"
+mkdir -p "$directory"
+cp -R "$source/." "$directory/"
+sed 's/if reference_is_null (failure_object failure) ≟ 0/if False/' \
+  "$source/RecipeFilePlatform.idric" > "$directory/RecipeFilePlatform.idric"
+if cmp -s "$source/RecipeFilePlatform.idric" "$directory/RecipeFilePlatform.idric" {
+  echo 'FAIL I/O error mutation did not change the reader' >&2; exit 1
+}
+emit_files "$directory" files-unreported
+if cmp -s "$output/files/files.dex" "$output/files-unreported/files.dex" {
+  echo 'FAIL unreported I/O mutant retained candidate bytes' >&2; exit 1
+}
 java -jar "$smali" assemble "$source/RecipeFileObserver.smali" -o "$output/file-observer.dex"
 sha256sum "$output/file-observer.dex" "$source/RecipeFileObserver.smali" > "$output/file-observer-digests.txt"
-printf 'host_semantics\tPASS\nsource_to_dex\tPASS\ncompiled_mutants\t10\nART\tNOT_RUN\n' > "$output/preparation.tsv"
-printf '\033[32mPASS\033[0m recipes, file operations, host controls, direct DEX and ten compiled mutants prepared\n'
+printf 'host_semantics\tPASS\nsource_to_dex\tPASS\ncompiled_mutants\t11\nART\tNOT_RUN\n' > "$output/preparation.tsv"
+printf '\033[32mPASS\033[0m recipes, file operations, host controls, direct DEX and eleven compiled mutants prepared\n'

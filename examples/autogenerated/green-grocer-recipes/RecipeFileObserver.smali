@@ -128,6 +128,42 @@
     sget-object v4, Lacceptance/RecipeFileObserver;->seed:Ljava/lang/String;
     const-string v5, "FAIL invalid UTF-8 preserves recipes and review"
     invoke-static {v4, v3, v5}, Lacceptance/RecipeFileObserver;->equal(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+  :decoder_start
+    invoke-static {v0}, LIdric/Generated;->read_recipe_file_text(Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v3
+  :decoder_end
+    const-string v3, "no decoder error"
+    goto :decoder_checked
+    .catch Ljava/nio/charset/CharacterCodingException; {:decoder_start .. :decoder_end} :decoder_refused
+  :decoder_refused
+    move-exception v3
+    const-string v3, "decoder error"
+  :decoder_checked
+    const-string v5, "decoder error"
+    const-string v6, "FAIL strict UTF-8 read rethrows a decoder error"
+    invoke-static {v5, v3, v6}, Lacceptance/RecipeFileObserver;->equal(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+    # A valid complete recipe followed by a damaged byte must also be refused.
+    const-string v3, "UTF-8"
+    invoke-virtual {v1, v3}, Ljava/lang/String;->getBytes(Ljava/lang/String;)[B
+    move-result-object v2
+    array-length v3, v2
+    add-int/lit8 v6, v3, 1
+    invoke-static {v2, v6}, Ljava/util/Arrays;->copyOf([BI)[B
+    move-result-object v2
+    const/4 v6, -1
+    aput-byte v6, v2, v3
+    invoke-static {v0, v2}, Lacceptance/RecipeFileObserver;->write_bytes(Ljava/lang/String;[B)V
+    invoke-static {v0}, LIdric/Generated;->restore_recipe_file(Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v3
+    const-string v5, "FAIL invalid UTF-8 suffix cannot restore a valid prefix"
+    invoke-static {v4, v3, v5}, Lacceptance/RecipeFileObserver;->equal(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+    const/4 v3, 0
+    new-array v3, v3, [B
+    invoke-static {v0, v3}, Lacceptance/RecipeFileObserver;->write_bytes(Ljava/lang/String;[B)V
+    invoke-static {v0}, LIdric/Generated;->restore_recipe_file(Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v3
+    const-string v5, "FAIL empty file preserves recipes and review"
+    invoke-static {v4, v3, v5}, Lacceptance/RecipeFileObserver;->equal(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
     const-string v3, "3:bad"
     const-string v5, "UTF-8"
     invoke-virtual {v3, v5}, Ljava/lang/String;->getBytes(Ljava/lang/String;)[B
