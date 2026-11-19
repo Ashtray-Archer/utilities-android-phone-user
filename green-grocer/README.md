@@ -9,8 +9,11 @@ links and explicit per-ingredient store choices are supported in that model;
 52 host cases and six deliberately broken implementations exercise it. The
 recipe file codec has another 24 host checks and three deliberately broken
 variants. It preserves ingredient quantities and source notes, rejects corrupt
-files, and restores through the existing save transition. Actual filesystem I/O
-and Android reopening remain unimplemented. The current recipe runtime probe
+files, and restores through the existing save transition. The
+[Android file adapter](recipe-files.md) now connects the codec to strict UTF-8,
+atomic replacement and reopening in separate ART processes; its exact-head
+workflow must qualify those effects. Installed-app integration remains
+unfinished. The current recipe runtime probe
 and full test commands have emitted direct DEX. Android execution exposed a
 stack overflow in recursive division for large package counts; the source now
 uses exact arbitrary-precision division. See [the execution evidence](receipts/recipe-art/README.md)

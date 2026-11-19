@@ -31,8 +31,10 @@ Android sample application until the Idriç runtime can be integrated.
 - A versioned recipe-file encoder/decoder retaining exact ingredient and source
   fields. Malformed files are refused without changing saved recipes or review;
   valid restoration uses the existing save transition. See
-  [the storage evidence](receipts/recipe-storage/README.md). Actual file I/O and
-  Android reopening remain separate work.
+  [the storage evidence](receipts/recipe-storage/README.md). The subsequent
+  [Android file adapter](recipe-files.md) implements strict UTF-8 and atomic file
+  replacement; current-head ART execution and installed-app integration remain
+  separate evidence boundaries.
 
 `check-recipes.grease` builds and executes 52 independently expected host cases
 and six implementation mutations. The mutations ignore pantry stock, round
@@ -122,7 +124,8 @@ recognizing this particular source program would evade the requirement.
 | Complete recipe/storage test commands on ART | 52 recipe and 24 storage cases, exact host output, all nine mutants rejected at their assertions; API29/API34 |
 | Historical recipe-save DEX emission / independent disassembly | PASS at old source; current runtime NOT_RUN |
 | Current C oracle differential execution | NOT_RUN |
-| Recipe editor, persistence, renderer and touch integration | NOT_IMPLEMENTED |
+| Android recipe file I/O and separate-process reopening | Adapter implemented; current-head ART qualification required, see recipe-files.md |
+| Recipe editor, private-file integration, renderer and touch | NOT_IMPLEMENTED |
 | Live retailer catalog/search/OAuth/cart adapter | NOT_IMPLEMENTED |
 | Stable producer registration and recipe-first signed APKs | NOT_RUN |
 | Physical MIRO A1 and MIRO C67 recipe acceptance | NOT_RUN |

@@ -30,6 +30,9 @@ transfer "$input/positive/checks.dex" positive
 transfer "$input/probes/recipes.dex" probes
 transfer "$input/observer.dex" observer
 transfer "$input/storage/checks.dex" storage
+transfer "$input/files/files.dex" files
+transfer "$input/files-lenient/files.dex" files-lenient
+transfer "$input/file-observer.dex" file-observer
 for mutation in pantry rounding price source store grouping {
   transfer "$input/mutant-$mutation/checks.dex" "mutant-$mutation"
 }
@@ -69,5 +72,21 @@ for mutation in sources rational trailing {
   test "$(cat "$output/storage-mutant-$mutation.exit")" = 1
   cmp "$input/storage-host/mutant-$mutation/execution.txt" "$output/storage-mutant-$mutation.stdout"
 }
-printf 'recipe_checks_ART\tPASS\nrecipe_checks\t52\nrecipe_storage_checks_ART\tPASS\nrecipe_storage_checks\t24\nchanging_export_inputs_ART\tPASS\ncompiled_semantic_mutants\t9_REJECTED\nrecipe_APK\tNOT_RUN\nAndroid_file_IO\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$output/result.tsv"
-printf '\033[32mPASS\033[0m complete recipe and storage checks and nine semantic mutants on x86_64 ART\n'
+"$adb" -s "$serial" shell mkdir "$remote/recipe-files"
+var file = "$remote/recipe-files/saved.gg"
+for phase in write reopen refusals interrupt recover limits long {
+  var mode = phase
+  if (phase === 'recover') { setvar mode = 'reopen' }
+  execute "file-$phase" "$remote/files.dex:$remote/file-observer.dex" \
+    "acceptance.RecipeFileObserver $file $mode"
+  test "$(cat "$output/file-$phase.exit")" = 0
+  if (phase !== 'interrupt') {
+    rg -x -F "PASS recipe file phase $mode" "$output/file-$phase.stdout"
+  }
+}
+execute file-mutant-utf8 "$remote/files-lenient.dex:$remote/file-observer.dex" \
+  "acceptance.RecipeFileObserver $file refusals"
+test "$(cat "$output/file-mutant-utf8.exit")" = 83
+rg -x -F 'FAIL invalid UTF-8 preserves recipes and review' "$output/file-mutant-utf8.stderr"
+printf 'recipe_checks_ART\tPASS\nrecipe_checks\t52\nrecipe_storage_checks_ART\tPASS\nrecipe_storage_checks\t24\nchanging_export_inputs_ART\tPASS\ncompiled_semantic_mutants\t10_REJECTED\nrecipe_file_IO_ART\tPASS\nfile_reopening\tSEPARATE_ART_PROCESSES_PASS\nunfinished_write_recovery\tPASS\nrecipe_APK\tNOT_RUN\nAndroid_recipe_UI_file_integration\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$output/result.tsv"
+printf '\033[32mPASS\033[0m recipes, storage, real file I/O and ten semantic mutants on x86_64 ART\n'

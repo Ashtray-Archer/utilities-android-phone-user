@@ -1,0 +1,44 @@
+module RecipeFileProbe
+
+import RecipeShopping
+import RecipeStorage
+import RecipeFiles
+import RecipeFilePlatform
+import Data.Text
+
+-- Independent caller observations only; production loading/saving is imported.
+-- A pre-reviewed seed makes accidental review invalidation on refusal visible.
+seed : ShoppingState
+seed = { review_approved := True }
+  (transition (save_recipe (SavedRecipe "r1" "Soup" (Serves 1) [] [])) begin_shopping)
+
+snapshot : ShoppingState → Text
+snapshot state = show state.review_approved ++ "|" ++
+  concat (map encode_recipe state.saved_recipes)
+
+%export "dex:store_recipe_file"
+store_recipe_file : Text → Text → IO Text
+store_recipe_file path encoded = case (recipe_file path, decode_recipe encoded) of
+  (Right file, Right recipe) ⇒ do
+    saved ← save_recipe_file file recipe seed
+    pure (snapshot saved)
+  _ ⇒ pure (snapshot seed)
+
+%export "dex:restore_recipe_file"
+restore_recipe_file : Text → IO Text
+restore_recipe_file path = case recipe_file path of
+  Right file ⇒ do
+    restored ← load_recipe_file file seed
+    pure (snapshot restored)
+  Left _ ⇒ pure (snapshot seed)
+
+%export "dex:read_recipe_file_text"
+read_recipe_file_text : Text → IO Text
+read_recipe_file_text = read_recipe_text
+
+%export "dex:write_recipe_file_text"
+write_recipe_file_text : Text → Text → IO ()
+write_recipe_file_text = write_recipe_text
+
+main : IO ()
+main = pure ()

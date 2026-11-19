@@ -1,5 +1,10 @@
 # Exact recipe file boundary
 
+This checkpoint records the pure codec. The subsequent
+[Android file adapter](../../recipe-files.md) adds actual UTF-8/atomic-file
+operations and separate-process tests; its current-head evidence is tracked
+separately. Installed-app file/UI integration remains unfinished.
+
 `RecipeStorage.idric` implements a versioned length-delimited text format for a
 single saved recipe. It retains identities, names, serving counts, dimensions,
 exact rational quantities, preparation text, acceptable substitution identities,

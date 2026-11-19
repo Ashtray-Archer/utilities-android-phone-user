@@ -1,0 +1,158 @@
+module RecipeFilePlatform
+
+import Data.Text
+import Data.IORef
+
+-- Android owns streams, UTF-8 and atomic replacement. Recipe meaning remains
+-- in RecipeStorage and RecipeShopping. No Java source or native semantic copy.
+data FileReference : Type where [external]
+data AtomicReference : Type where [external]
+data InputReference : Type where [external]
+data OutputReference : Type where [external]
+data InputStreamReference : Type where [external]
+data OutputStreamReference : Type where [external]
+data ReaderReference : Type where [external]
+data WriterReference : Type where [external]
+data CharsetReference : Type where [external]
+data DecoderReference : Type where [external]
+data EncoderReference : Type where [external]
+data ChannelReference : Type where [external]
+data DescriptorReference : Type where [external]
+data BuilderReference : Type where [external]
+data FailureReference : Type where [external]
+data ThrowableReference : Type where [external]
+
+%foreign "dex:construct:Ljava/io/File;:<init>:(Ljava/lang/String;)V"
+make_file : Text → PrimIO FileReference
+%foreign "dex:construct:Landroid/util/AtomicFile;:<init>:(Ljava/io/File;)V"
+make_atomic : FileReference → PrimIO AtomicReference
+%foreign "dex:virtual:Landroid/util/AtomicFile;:openRead:()Ljava/io/FileInputStream;"
+open_input : AtomicReference → PrimIO InputReference
+%foreign "dex:virtual:Landroid/util/AtomicFile;:startWrite:()Ljava/io/FileOutputStream;"
+open_output : AtomicReference → PrimIO OutputReference
+%foreign "dex:virtual:Landroid/util/AtomicFile;:finishWrite:(Ljava/io/FileOutputStream;)V"
+finish_output : AtomicReference → OutputReference → PrimIO ()
+%foreign "dex:virtual:Landroid/util/AtomicFile;:failWrite:(Ljava/io/FileOutputStream;)V"
+abort_output : AtomicReference → OutputReference → PrimIO ()
+%foreign "dex:virtual:Ljava/io/FileInputStream;:close:()V"
+close_input : InputReference → PrimIO ()
+%foreign "dex:virtual:Ljava/io/FileInputStream;:getChannel:()Ljava/nio/channels/FileChannel;"
+input_channel : InputReference → PrimIO ChannelReference
+%foreign "dex:virtual:Ljava/nio/channels/FileChannel;:size:()J"
+channel_size : ChannelReference → PrimIO Int64
+%foreign "dex:static:Ljava/nio/charset/Charset;:forName:(Ljava/lang/String;)Ljava/nio/charset/Charset;"
+charset_named : Text → PrimIO CharsetReference
+%foreign "dex:virtual:Ljava/nio/charset/Charset;:newDecoder:()Ljava/nio/charset/CharsetDecoder;"
+new_decoder : CharsetReference → PrimIO DecoderReference
+%foreign "dex:virtual:Ljava/nio/charset/Charset;:newEncoder:()Ljava/nio/charset/CharsetEncoder;"
+new_encoder : CharsetReference → PrimIO EncoderReference
+%foreign "dex:virtual:Ljava/nio/charset/CharsetEncoder;:canEncode:(Ljava/lang/CharSequence;)Z"
+can_encode : EncoderReference → Text → PrimIO Int32
+%foreign "dex:cast:Ljava/io/FileInputStream;:Ljava/io/InputStream;"
+input_stream : InputReference → InputStreamReference
+%foreign "dex:construct:Ljava/io/InputStreamReader;:<init>:(Ljava/io/InputStream;Ljava/nio/charset/CharsetDecoder;)V"
+strict_reader : InputStreamReference → DecoderReference → PrimIO ReaderReference
+%foreign "dex:virtual:Ljava/io/InputStreamReader;:read:()I"
+read_character : ReaderReference → PrimIO Int32
+%foreign "dex:cast:Ljava/io/FileOutputStream;:Ljava/io/OutputStream;"
+output_stream : OutputReference → OutputStreamReference
+%foreign "dex:construct:Ljava/io/OutputStreamWriter;:<init>:(Ljava/io/OutputStream;Ljava/nio/charset/CharsetEncoder;)V"
+strict_writer : OutputStreamReference → EncoderReference → PrimIO WriterReference
+%foreign "dex:virtual:Ljava/io/OutputStreamWriter;:write:(Ljava/lang/String;)V"
+write_characters : WriterReference → Text → PrimIO ()
+%foreign "dex:virtual:Ljava/io/OutputStreamWriter;:flush:()V"
+flush_writer : WriterReference → PrimIO ()
+%foreign "dex:virtual:Ljava/io/FileOutputStream;:getFD:()Ljava/io/FileDescriptor;"
+output_descriptor : OutputReference → PrimIO DescriptorReference
+%foreign "dex:virtual:Ljava/io/FileDescriptor;:sync:()V"
+sync_output : DescriptorReference → PrimIO ()
+%foreign "dex:construct:Ljava/lang/StringBuilder;:<init>:()V"
+make_builder : PrimIO BuilderReference
+%foreign "dex:virtual:Ljava/lang/StringBuilder;:appendCodePoint:(I)Ljava/lang/StringBuilder;"
+append_character : BuilderReference → Int32 → PrimIO BuilderReference
+%foreign "dex:virtual:Ljava/lang/StringBuilder;:toString:()Ljava/lang/String;"
+builder_text : BuilderReference → PrimIO Text
+%foreign "dex:virtual:Ljava/lang/String;:length:()I"
+text_units : Text → PrimIO Int32
+%foreign "dex:construct:Ljava/lang/IllegalArgumentException;:<init>:(Ljava/lang/String;)V"
+make_failure : Text → PrimIO FailureReference
+%foreign "dex:cast:Ljava/lang/IllegalArgumentException;:Ljava/lang/Throwable;"
+failure_throwable : FailureReference → ThrowableReference
+%foreign "dex:throw-throwable"
+throw_failure : ThrowableReference → PrimIO ()
+%foreign "dex:catch-io-unit"
+catch_unit : IO () → (ThrowableReference → IO ()) → PrimIO ()
+%foreign "dex:finally-io-unit"
+finally_unit : IO () → IO () → PrimIO ()
+%foreign "dex:static:Landroid/util/Log;:e:(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I"
+log_file_failure : Text → Text → ThrowableReference → PrimIO Int32
+
+raise : Text → IO ()
+raise message = do
+  failure ← primIO (make_failure message)
+  primIO (throw_failure (failure_throwable failure))
+
+-- A phone resource budget, not a bound on recipe quantities or identifiers.
+-- Read at most 262144 UTF-16 units and refuse files above 1 MiB before decoding.
+read_characters : Number → ReaderReference → BuilderReference → IO Text
+read_characters 0 reader builder = do
+  next ← primIO (read_character reader)
+  if next < 0 then primIO (builder_text builder)
+    else do raise "Recipe file exceeds text budget"; pure ""
+read_characters (S remaining) reader builder = do
+  next ← primIO (read_character reader)
+  if next < 0 then primIO (builder_text builder) else do
+    _ ← primIO (append_character builder next)
+    read_characters remaining reader builder
+
+export
+read_recipe_text : Text → IO Text
+read_recipe_text path = do
+  file ← primIO (make_file path)
+  atomic ← primIO (make_atomic file)
+  stream ← primIO (open_input atomic)
+  result ← newIORef ""
+  primIO (finally_unit (do
+    channel ← primIO (input_channel stream)
+    size ← primIO (channel_size channel)
+    if size < 0 || size > 1048576 then raise "Recipe file exceeds byte budget" else do
+      charset ← primIO (charset_named "UTF-8")
+      decoder ← primIO (new_decoder charset)
+      reader ← primIO (strict_reader (input_stream stream) decoder)
+      builder ← primIO make_builder
+      text ← read_characters 262144 reader builder
+      writeIORef result text)
+    (primIO (close_input stream)))
+  readIORef result
+
+export
+write_recipe_text : Text → Text → IO ()
+write_recipe_text path text = do
+  units ← primIO (text_units text)
+  if units > 262144 then raise "Recipe file exceeds text budget" else do
+    charset ← primIO (charset_named "UTF-8")
+    encoder ← primIO (new_encoder charset)
+    valid ← primIO (can_encode encoder text)
+    if valid ≟ 0 then raise "Recipe text is not valid Unicode" else do
+      file ← primIO (make_file path)
+      atomic ← primIO (make_atomic file)
+      stream ← primIO (open_output atomic)
+      primIO (catch_unit (do
+        encoder ← primIO (new_encoder charset)
+        writer ← primIO (strict_writer (output_stream stream) encoder)
+        primIO (write_characters writer text)
+        primIO (flush_writer writer)
+        descriptor ← primIO (output_descriptor stream)
+        primIO (sync_output descriptor)
+        primIO (finish_output atomic stream))
+        (\failure ⇒ do
+          primIO (abort_output atomic stream)
+          primIO (throw_failure failure)))
+      observed ← read_recipe_text path
+      if observed ≟ text then pure () else raise "Recipe replacement could not be verified"
+
+export
+try_recipe_file : IO () → IO () → IO ()
+try_recipe_file action refused = primIO (catch_unit action (\failure ⇒ do
+  _ ← primIO (log_file_failure "GreenGrocerRecipeFiles" "Recipe file operation refused" failure)
+  refused))

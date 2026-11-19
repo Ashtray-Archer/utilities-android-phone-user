@@ -14,7 +14,7 @@ for path in ([application, frontend, backend, grease, smali, output]) {
   if (len(path) === 0 or path[0] !== '/') { echo 'FAIL absolute paths required' >&2; exit 2 }
 }
 test ! -e "$output"
-test "$(git -C "$backend" rev-parse HEAD)" = 6ab4818219efa7ea5eda137ca6b76976eb2a4d42
+test "$(git -C "$backend" rev-parse HEAD)" = dfcf2cb22c0ebcc4ce999189cc2f066593bf3689
 git -C "$backend" diff --quiet HEAD
 mkdir -p "$output"
 git -C "$application" rev-parse HEAD > "$output/application-revision.txt"
@@ -60,5 +60,35 @@ for mutation in sources rational trailing {
 printf '32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a  %s\n' "$smali" | sha256sum -c -
 java -jar "$smali" assemble "$source/RecipeRuntimeObserver.smali" -o "$output/observer.dex"
 sha256sum "$output/observer.dex" "$source/RecipeRuntimeObserver.smali" > "$output/observer-digests.txt"
-printf 'host_semantics\tPASS\nsource_to_dex\tPASS\ncompiled_mutants\t9\nART\tNOT_RUN\n' > "$output/preparation.tsv"
-printf '\033[32mPASS\033[0m recipe source, storage, host controls, direct DEX and nine compiled mutants prepared\n'
+
+proc emit_files(directory, name) {
+  mkdir -p "$output/$name"
+  "$driver" --cg dex --directive managed-exports --source-dir "$directory" \
+    --build-dir "$output/$name/build" --output-dir "$output/$name" \
+    "$directory/RecipeFileProbe.idric" -o files > "$output/$name/compiler.txt" 2>&1
+  if rg -n '^[[:space:]]*(Error:|INTERNAL ERROR)' "$output/$name/compiler.txt" {
+    echo 'FAIL recipe file DEX diagnostics' >&2; exit 1
+  }
+  test -s "$output/$name/files.dex"
+  sha256sum "$directory/RecipeFiles.idric" "$directory/RecipeFilePlatform.idric" \
+    "$directory/RecipeFileProbe.idric" "$output/$name/files.dex" > "$output/$name/digests.txt"
+}
+emit_files "$source" files
+var directory = "$output/files-lenient-source"
+mkdir -p "$directory"
+cp -R "$source/." "$directory/"
+sed -e 's@Ljava/nio/charset/CharsetDecoder;)V@Ljava/nio/charset/Charset;)V@' \
+  -e 's/strict_reader : InputStreamReference → DecoderReference/strict_reader : InputStreamReference → CharsetReference/' \
+  -e 's/(input_stream stream) decoder/(input_stream stream) charset/' \
+  "$source/RecipeFilePlatform.idric" > "$directory/RecipeFilePlatform.idric"
+if cmp -s "$source/RecipeFilePlatform.idric" "$directory/RecipeFilePlatform.idric" {
+  echo 'FAIL UTF-8 mutation did not change the reader' >&2; exit 1
+}
+emit_files "$directory" files-lenient
+if cmp -s "$output/files/files.dex" "$output/files-lenient/files.dex" {
+  echo 'FAIL lenient UTF-8 mutant retained candidate bytes' >&2; exit 1
+}
+java -jar "$smali" assemble "$source/RecipeFileObserver.smali" -o "$output/file-observer.dex"
+sha256sum "$output/file-observer.dex" "$source/RecipeFileObserver.smali" > "$output/file-observer-digests.txt"
+printf 'host_semantics\tPASS\nsource_to_dex\tPASS\ncompiled_mutants\t10\nART\tNOT_RUN\n' > "$output/preparation.tsv"
+printf '\033[32mPASS\033[0m recipes, file operations, host controls, direct DEX and ten compiled mutants prepared\n'
