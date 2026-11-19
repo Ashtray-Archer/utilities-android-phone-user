@@ -196,6 +196,12 @@
     const-string v4, "FAIL installed recipe screenshot"
     invoke-static {v4}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
   :image
+    invoke-static {v0}, Lacceptance/RecipeObserver;->visible_canvas(Landroid/graphics/Bitmap;)Z
+    move-result v4
+    if-nez v4, :visible
+    const-string v4, "FAIL native recipe pixels missing from screenshot"
+    invoke-static {v4}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
+  :visible
     invoke-virtual {p0}, Landroid/app/Instrumentation;->getTargetContext()Landroid/content/Context;
     move-result-object v1
     invoke-virtual {v1}, Landroid/content/Context;->getCacheDir()Ljava/io/File;
@@ -221,6 +227,47 @@
     invoke-static {v0}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
   :done
     return-void
+.end method
+
+# Independently observe the displayed pixels. A correct model hash and a valid
+# PNG must not admit a blank Surface or an obscuring system dialog.
+.method public static visible_canvas(Landroid/graphics/Bitmap;)Z
+    .registers 10
+    invoke-virtual {p0}, Landroid/graphics/Bitmap;->getWidth()I
+    move-result v0
+    invoke-virtual {p0}, Landroid/graphics/Bitmap;->getHeight()I
+    move-result v1
+    const/4 v5, 0
+    const/4 v6, 0
+    const/4 v3, 0
+  :row
+    if-ge v3, v1, :missing
+    const/4 v2, 0
+  :column
+    if-ge v2, v0, :next
+    invoke-virtual {p0, v2, v3}, Landroid/graphics/Bitmap;->getPixel(II)I
+    move-result v4
+    const v7, 0xff39563d
+    if-ne v4, v7, :background
+    const/4 v5, 1
+  :background
+    const v7, 0xff202521
+    if-ne v4, v7, :observed
+    const/4 v6, 1
+  :observed
+    and-int v8, v5, v6
+    if-nez v8, :found
+    add-int/lit8 v2, v2, 16
+    goto :column
+  :next
+    add-int/lit8 v3, v3, 16
+    goto :row
+  :found
+    const/4 v0, 1
+    return v0
+  :missing
+    const/4 v0, 0
+    return v0
 .end method
 
 .method private static inject(Landroid/app/UiAutomation;IFF)V

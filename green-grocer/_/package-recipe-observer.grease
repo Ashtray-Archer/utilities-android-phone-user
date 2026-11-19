@@ -49,6 +49,7 @@ git -C "$application" rev-parse HEAD > "$output/application-revision.txt"
 sha256sum "$application/green-grocer/acceptance/RecipeObserver.smali" \
   "$application/green-grocer/acceptance/RecipeDeliver.smali" \
   "$application/green-grocer/acceptance/RecipeViewHash.smali" \
+  "$application/green-grocer/acceptance/RecipeScreenshotCheck.smali" \
   "$source/RecipeScreenReceipt.idric" "$output/archive/classes.dex" "$output/recipe-observer.apk" \
   > "$output/digests.txt"
 printf '\033[32mPASS\033[0m independent SDK observer APK and checked host projection receipts prepared\n'

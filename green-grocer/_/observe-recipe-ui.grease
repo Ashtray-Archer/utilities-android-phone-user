@@ -94,7 +94,8 @@ for phase in empty imported selected ingredients scaled pantry review refused ba
   test -s "$output/$phase.png"
 }
 var filename = $(device shell -T -n run-as "$package" ls files/recipes | tr -d '\r\n')
-if ! printf '%s\n' "$filename" | rg -q '^[0-9]+\.recipe$' { echo 'FAIL expected one owned recipe filename' >&2; exit 1 }
+printf '%s\n' "$filename" > "$output/saved-filename.txt"
+if ! rg -q '^[0-9]+\.recipe$' "$output/saved-filename.txt" { echo 'FAIL expected one owned recipe filename' >&2; exit 1 }
 device exec-out run-as "$package" cat "files/recipes/$filename" > "$output/saved.recipe"
 cmp "$inputs/observer/assets/fixture.recipe" "$output/saved.recipe"
 
@@ -111,12 +112,14 @@ transfer "$inputs/observer/assets/expected/imported.view" imported.view
 device shell -T -n "CLASSPATH=$remote/hash-observer.dex:$remote/callback.dex" app_process / \
   acceptance.RecipeViewHash "$remote/imported.view" > "$output/expected-cold-hash.txt" 2> "$output/expected-cold-hash.stderr"
 var expected = $(cat "$output/expected-cold-hash.txt")
-if ! printf '%s\n' "$expected" | rg -q '^hash=[0-9a-f]{8}$' { echo 'FAIL independent cold-view hash observation' >&2; exit 1 }
+if ! rg -q '^hash=[0-9a-f]{8}$' "$output/expected-cold-hash.txt" { echo 'FAIL independent cold-view hash observation' >&2; exit 1 }
 device shell -T -n am start -W -n "$package/org.isomorphisms.greengrocer.RecipeActivity" > "$output/cold-launch.txt"
 var reopened = false
 for attempt in @(seq 1 60) {
   device logcat -d -v brief -s GGRecipeView:I GGRecipeBounds:I AndroidRuntime:E > "$output/cold.logcat"
-  if rg -q -F "$expected" "$output/cold.logcat" { setvar reopened = true; break }
+  if rg -q -F "$expected" "$output/cold.logcat" {
+    if rg -q -F 'control=0 x=' "$output/cold.logcat" { setvar reopened = true; break }
+  }
   sleep 1
 }
 if (not reopened) { echo 'FAIL cold process did not restore the owned recipe file' >&2; exit 1 }
@@ -126,7 +129,13 @@ if cmp -s "$output/observed-application.pid" "$output/after-stop.pid" { echo 'FA
 if test -s "$output/before-stop.pid" {
   if cmp -s "$output/before-stop.pid" "$output/after-stop.pid" { echo 'FAIL cold process identity unchanged' >&2; exit 1 }
 }
+sleep 1
 device exec-out screencap -p > "$output/cold-reopen.png"
+transfer "$output/cold-reopen.png" cold-reopen.png
+device shell -T -n "CLASSPATH=$remote/hash-observer.dex:$remote/callback.dex" app_process / \
+  acceptance.RecipeScreenshotCheck "$remote/cold-reopen.png" \
+  > "$output/cold-pixels.stdout" 2> "$output/cold-pixels.stderr"
+rg -x -F 'PASS native recipe background and button pixels visible' "$output/cold-pixels.stdout"
 device exec-out run-as "$package" cat "files/recipes/$filename" > "$output/reopened.recipe"
 cmp "$output/saved.recipe" "$output/reopened.recipe"
 printf 'recipe_screen_ART\t16_PASS\nsource_UI_mutants\t3_REJECTED\nnative_UTF16_transport\tPASS\ncompiled_transport_mutant\tREJECTED\ninstalled_native_recipe_UI\tPASS\nfile_result_callback\tINJECTED_SDK_FILE_URI_PASS\nservings_and_pantry_touch\tPASS\nmissing_store_review\tREFUSED\nprivate_recipe_file\tEXACT_UTF8_PASS\ncold_process_reopen\tPASS\nretailer_writes\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\nproducer_approval\tNOT_RUN\n' > "$output/result.tsv"
