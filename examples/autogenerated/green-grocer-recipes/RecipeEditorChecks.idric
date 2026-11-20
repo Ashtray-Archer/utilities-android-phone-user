@@ -216,5 +216,10 @@ checks =
 %export "dex:recipe_editor_checks"
 main : IO ()
 main = do
-  traverse_ (\(name, passed) ⇒ putStrLn ((if passed then "PASS " else "FAIL ") ++ name)) checks
-  if all snd checks then putStrLn ("recipe_editor_checks " ++ show (length checks)) else exitFailure
+  -- A nullary checked DEX function is not a memoized host CAF. Retain the
+  -- observed booleans rather than evaluating the large fixtures again for
+  -- the final verdict and then once more merely to count the cases.
+  observed ← traverse (\(name, passed) ⇒ do
+    putStrLn ((if passed then "PASS " else "FAIL ") ++ name)
+    pure passed) checks
+  if all id observed then putStrLn ("recipe_editor_checks " ++ show (length observed)) else exitFailure

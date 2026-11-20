@@ -174,7 +174,7 @@ sha256sum "$source/RecipeSession.idric" "$source/RecipeScreen.idric" "$source/Re
   "$source/RecipeScreenChecks.idric" "$source/RecipeActivityPlan.idric" \
   "$output/recipes/recipes.dex" "$output/checks/checks.dex" "$output/callback/classes.dex" \
   "$output/view-check" "$output/view-mutant" > "$output/digests.txt"
-printf 'recipe_screen_host\t16_PASS\nUI_mutants\t3_COMPILED\nnative_transport_mutant\tCOMPILED\nrecipe_ABIs\ta1_c67_x86_64_BUILT\nrecipe_APKs\tSTABLE_TEST_SIGNER_PASS\ninstalled_recipe_UI\tNOT_RUN\n' > "$output/result.tsv"
+printf 'recipe_screen_host\t16_PASS\nrecipe_editor_host\t37_PASS\neditor_mutants\t2_HOST_REJECTED_AND_DEX_COMPILED\nUI_mutants\t3_COMPILED\nnative_transport_mutant\tCOMPILED\nrecipe_ABIs\ta1_c67_x86_64_BUILT\nrecipe_APKs\tSTABLE_TEST_SIGNER_PASS\ninstalled_recipe_UI\tNOT_RUN\ninstalled_recipe_editor\tNOT_RUN\n' > "$output/result.tsv"
 printf '\033[32mPASS\033[0m checked recipe UI, source mutation controls, native boundary and three signed APK candidates prepared\n'
 cd "$output"
 sha256sum checks/checks.dex recipes/recipes.dex callback/classes.dex host/stdout.txt \
