@@ -141,6 +141,7 @@ jobs:
           script: |
             grease/bin/grease green-grocer/_/observe-recipe-art.grease "$ANDROID_HOME/platform-tools/adb" emulator-5554 "$GITHUB_WORKSPACE/inputs/recipe-acceptance" "$RUNNER_TEMP/recipe-art" "${{ matrix.api }}"
             grease/bin/grease green-grocer/_/observe-recipe-ui.grease "$ANDROID_HOME/platform-tools/adb" emulator-5554 "$GITHUB_WORKSPACE/inputs/recipe-ui" "$RUNNER_TEMP/recipe-ui-observed" "${{ matrix.api }}"
+            grease/bin/grease green-grocer/_/observe-recipe-editor.grease "$ANDROID_HOME/platform-tools/adb" emulator-5554 "$GITHUB_WORKSPACE/inputs/recipe-ui" "$RUNNER_TEMP/recipe-editor-observed" "${{ matrix.api }}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -149,3 +150,4 @@ jobs:
           path: |
             ${{ runner.temp }}/recipe-art
             ${{ runner.temp }}/recipe-ui-observed
+            ${{ runner.temp }}/recipe-editor-observed

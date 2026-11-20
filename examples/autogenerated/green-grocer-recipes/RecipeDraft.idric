@@ -1,0 +1,230 @@
+module RecipeDraft
+
+import RecipeShopping
+import RecipeStorage
+import RecipeText
+import Data.List
+import Data.Text
+
+%unbound_implicits off
+
+public export
+record DraftIngredient where
+  constructor IngredientDraft
+  identity : IngredientIdentity
+  name : Text
+  quantity : Text
+  dimension : dimension_kind
+  preparation : Text
+  substitutions : List IngredientIdentity
+
+public export
+choice draft_field one_of
+  recipe_name_field
+  recipe_servings_field
+  ingredient_name_field Number
+  ingredient_quantity_field Number
+  ingredient_preparation_field Number
+  source_link_field Number
+  source_note_field Number
+
+public export
+choice editor_page one_of
+  draft_overview Number
+  ingredient_page Number
+  source_page Number
+  ingredient_picker Number Number
+  typing_field draft_field TextSelection
+  discard_prompt
+
+public export
+record RecipeDraft where
+  constructor DraftRecipe
+  identity : Text
+  existing : Bool
+  name : Text
+  servings : Text
+  ingredients : List DraftIngredient
+  sources : List RecipeSource
+  page : editor_page
+  dirty : Bool
+  notice : Text
+
+public export
+record EditorSession where
+  constructor RecipeApp
+  shopping : ShoppingState
+  draft : Maybe RecipeDraft
+  input_serial : Number
+
+public export
+record IngredientOption where
+  constructor ExistingIngredient
+  ingredient : Ingredient
+  recipe_name : Text
+
+export
+amount_spelling : RationalAmount → Text
+amount_spelling amount = if denominator amount ≟ 1 then show amount.numerator
+  else show amount.numerator ++ "/" ++ show (denominator amount)
+
+export
+draft_from_recipe : Recipe → RecipeDraft
+draft_from_recipe recipe = DraftRecipe recipe.recipe_identity True recipe.recipe_name
+  (show (serving_count recipe.recipe_servings)) (map from_ingredient recipe.recipe_ingredients)
+  recipe.recipe_sources (draft_overview 0) False ""
+  where
+    from_ingredient : Ingredient → DraftIngredient
+    from_ingredient ingredient = IngredientDraft ingredient.ingredient_identity ingredient.ingredient_name
+      (amount_spelling ingredient.ingredient_measure.base_amount) ingredient.ingredient_measure.dimension
+      ingredient.preparation ingredient.acceptable_substitutions
+
+export
+fresh_identity : Text → List Text → Text
+fresh_identity prefix used = search (S (length used)) 1
+  where
+    search : Number → Number → Text
+    search 0 candidate = prefix ++ show candidate
+    search (S fuel) candidate =
+      let proposed = prefix ++ show candidate
+      in if elem proposed used then search fuel (S candidate) else proposed
+
+export
+new_recipe_draft : ShoppingState → RecipeDraft
+new_recipe_draft state = DraftRecipe
+  (fresh_identity "recipe-" (map recipe_identity state.saved_recipes)) False "" "1"
+  [] [] (draft_overview 0) False ""
+
+export
+ingredient_keys : ShoppingState → List Text
+ingredient_keys state =
+  concatMap (\recipe ⇒ concatMap (\ingredient ⇒ ingredient.ingredient_identity.ingredient_text ::
+    map ingredient_text ingredient.acceptable_substitutions) recipe.recipe_ingredients) state.saved_recipes ++
+  map (ingredient_text . pantry_ingredient) state.pantry ++
+  map (ingredient_text . product_ingredient) state.fresh_products ++
+  concatMap (\approved ⇒ approved.matched_requirement.required_ingredient.ingredient_text ::
+    approved.matched_product.product_ingredient.ingredient_text ::
+    map ingredient_text approved.matched_requirement.permitted_substitutions) state.approved_matches ++
+  concatMap (\store_choice ⇒ store_choice.store_requirement.required_ingredient.ingredient_text ::
+    map ingredient_text store_choice.store_requirement.permitted_substitutions) state.store_choices
+
+export
+new_draft_ingredient : EditorSession → RecipeDraft → DraftIngredient
+new_draft_ingredient session draft = IngredientDraft
+  (IngredientNamed (fresh_identity "ingredient-" (ingredient_keys session.shopping ++
+    concatMap (\ingredient ⇒ ingredient.identity.ingredient_text :: map ingredient_text ingredient.substitutions) draft.ingredients)))
+  "" "" mass "" []
+
+export
+available_ingredients : ShoppingState → List IngredientOption
+available_ingredients state = foldl insert []
+  (concatMap (\recipe ⇒ map (\ingredient ⇒ ExistingIngredient ingredient recipe.recipe_name) recipe.recipe_ingredients) state.saved_recipes)
+  where
+    insert : List IngredientOption → IngredientOption → List IngredientOption
+    insert known candidate = if candidate.ingredient.ingredient_identity.ingredient_text ≟ "" ||
+      candidate.ingredient.ingredient_name ≟ "" || any (\previous ⇒
+        same_ingredient previous.ingredient.ingredient_identity candidate.ingredient.ingredient_identity &&
+        same_dimension previous.ingredient.ingredient_measure.dimension candidate.ingredient.ingredient_measure.dimension) known
+      then known else known ++ [candidate]
+
+export
+at_index : {0 item_type : Type} → Number → List item_type → Maybe item_type
+at_index _ [] = Nothing
+at_index 0 (first :: _) = Just first
+at_index (S index) (_ :: rest) = at_index index rest
+
+export
+change_at : {0 item_type : Type} → Number → (item_type → item_type) → List item_type → List item_type
+change_at _ _ [] = []
+change_at 0 change (first :: rest) = change first :: rest
+change_at (S index) change (first :: rest) = first :: change_at index change rest
+
+export
+remove_at : {0 item_type : Type} → Number → List item_type → List item_type
+remove_at _ [] = []
+remove_at 0 (_ :: rest) = rest
+remove_at (S index) (first :: rest) = first :: remove_at index rest
+
+export
+field_text : draft_field → RecipeDraft → Maybe Text
+field_text recipe_name_field draft = Just draft.name
+field_text recipe_servings_field draft = Just draft.servings
+field_text (ingredient_name_field index) draft = map name (at_index index draft.ingredients)
+field_text (ingredient_quantity_field index) draft = map quantity (at_index index draft.ingredients)
+field_text (ingredient_preparation_field index) draft = map preparation (at_index index draft.ingredients)
+field_text (source_link_field index) draft = map source_link (at_index index draft.sources)
+field_text (source_note_field index) draft = map source_note (at_index index draft.sources)
+
+export
+change_field : draft_field → Text → RecipeDraft → RecipeDraft
+change_field recipe_name_field text draft = { name := text } draft
+change_field recipe_servings_field text draft = { servings := text } draft
+change_field (ingredient_name_field index) text draft =
+  { ingredients := change_at index (\ingredient ⇒ { name := text } ingredient) draft.ingredients } draft
+change_field (ingredient_quantity_field index) text draft =
+  { ingredients := change_at index (\ingredient ⇒ { quantity := text } ingredient) draft.ingredients } draft
+change_field (ingredient_preparation_field index) text draft =
+  { ingredients := change_at index (\ingredient ⇒ { preparation := text } ingredient) draft.ingredients } draft
+change_field (source_link_field index) text draft =
+  { sources := change_at index (\source ⇒ { source_link := text } source) draft.sources } draft
+change_field (source_note_field index) text draft =
+  { sources := change_at index (\source ⇒ { source_note := text } source) draft.sources } draft
+
+export
+field_parent : draft_field → editor_page
+field_parent recipe_name_field = draft_overview 0
+field_parent recipe_servings_field = draft_overview 0
+field_parent (ingredient_name_field index) = ingredient_page index
+field_parent (ingredient_quantity_field index) = ingredient_page index
+field_parent (ingredient_preparation_field index) = ingredient_page index
+field_parent (source_link_field index) = source_page index
+field_parent (source_note_field index) = source_page index
+
+export
+field_name : draft_field → Text
+field_name recipe_name_field = "Recipe name"
+field_name recipe_servings_field = "Recipe servings"
+field_name (ingredient_name_field _) = "Ingredient name"
+field_name (ingredient_quantity_field _) = "Ingredient quantity"
+field_name (ingredient_preparation_field _) = "Preparation"
+field_name (source_link_field _) = "Source link"
+field_name (source_note_field _) = "Source note"
+
+-- Parsing quantity spelling is part of the recipe model. Decimal digits become
+-- an exact rational; neither Float nor a fixed-width machine count participates.
+export
+parse_quantity : Text → Either Text RationalAmount
+parse_quantity text = case break (≟ '/') (unpack text) of
+  (top, '/' :: bottom) ⇒ do
+    numerator ← decode_whole (pack top)
+    denominator ← decode_whole (pack bottom)
+    case fraction numerator denominator of
+      Nothing ⇒ Left "Quantity denominator must be positive"
+      Just amount ⇒ Right amount
+  _ ⇒ case break (≟ '.') (unpack text) of
+    (whole_part, '.' :: places) ⇒ do
+      numerator ← decode_whole (pack (if null whole_part then '0' :: places else whole_part ++ places))
+      if null places then Left "A decimal needs digits after the point"
+        else Right (Fraction numerator (minus (foldl (\scale, _ ⇒ scale × 10) 1 places) 1))
+    _ ⇒ map whole (decode_whole text)
+
+export
+validate_draft : RecipeDraft → Either Text Recipe
+validate_draft draft = do
+  if draft.name ≟ "" then Left "Enter a recipe name" else Right ()
+  portions ← decode_whole draft.servings
+  servings ← case portions of
+    0 ⇒ Left "Servings must be a positive whole number"
+    S previous ⇒ Right (Serves previous)
+  ingredients ← traverse admit_ingredient draft.ingredients
+  if any (\source ⇒ source.source_link ≟ "") draft.sources
+    then Left "Enter a link for every source, or remove the empty source" else Right ()
+  Right (SavedRecipe draft.identity draft.name servings ingredients draft.sources)
+  where
+    admit_ingredient : DraftIngredient → Either Text Ingredient
+    admit_ingredient ingredient = do
+      if ingredient.name ≟ "" then Left "Enter a name for every ingredient" else Right ()
+      amount ← parse_quantity ingredient.quantity
+      if amount.numerator ≟ 0 then Left "Ingredient quantity must be positive" else Right ()
+      Right (Needs ingredient.identity ingredient.name (Measured ingredient.dimension amount)
+        ingredient.preparation ingredient.substitutions)

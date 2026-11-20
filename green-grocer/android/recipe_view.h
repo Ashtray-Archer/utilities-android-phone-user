@@ -7,6 +7,9 @@
 
 /* Transport/presentation only. UTF-16 lengths are explicit; NUL is data. */
 typedef struct { uint16_t *characters; size_t length; } gg_text;
+typedef struct { const uint16_t *text; size_t units, cursor; } gg_recipe_fields;
+/* Borrow one scalar-framed field, preserving explicit UTF-16 length. */
+bool gg_recipe_field(gg_recipe_fields *input, gg_recipe_fields *output);
 typedef struct { gg_text label, token; } gg_recipe_control;
 typedef struct {
     gg_text text;

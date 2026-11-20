@@ -3,6 +3,8 @@ module RecipeScreenReceipt
 import RecipeShopping
 import RecipeStorage
 import RecipeScreen
+import RecipeDraft
+import RecipeEditorScreen
 import Data.Text
 import Data.Buffer
 import System
@@ -35,6 +37,7 @@ snapshots recipe =
       ("review", review), ("refused", refused), ("back", back),
       ("recipes", recipes), ("details", details), ("saved", saved)]
 
+export
 write_checked : Text → Text → IO ()
 write_checked path contents = do
   -- The host's C-string writeFile boundary stops at NUL. Use the maintained
@@ -61,6 +64,6 @@ main = do
         Left problem ⇒ do putStrLn ("FAIL independent recipe fixture: " ++ problem); exitFailure
         Right recipe ⇒ do
           traverse_ (\(name, state) ⇒ write_checked (directory ++ "/expected/" ++ name ++ ".view")
-            (encode_view (recipe_view state))) (snapshots recipe)
+            (encode_view (editor_view (RecipeApp state Nothing 0)))) (snapshots recipe)
           putStrLn "PASS checked host recipe projections and independent import bytes written"
     _ ⇒ do putStrLn ("FAIL recipe receipt arguments: " ++ show arguments); exitFailure

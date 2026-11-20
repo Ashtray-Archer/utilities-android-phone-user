@@ -1,6 +1,7 @@
 #include "canvas.h"
 #include "recipe_document.h"
 #include "recipe_engine.h"
+#include "recipe_input.h"
 
 #include <android/configuration.h>
 #include <android/input.h>
@@ -98,10 +99,18 @@ static void render(screen *state) {
     if (!gg_canvas_begin(&canvas, &state->drawable, state->app->activity, state->app->window)) return;
     float d = state->density;
     rect view = state->viewport;
-    float header_height = 92 * d, footer_height = 112 * d;
+    bool editing = false;
+    for (size_t row = 0; row < state->view.row_count; ++row)
+        for (size_t control = 0; control < state->view.rows[row].control_count; ++control)
+            if (gg_text_is_ascii(&state->view.rows[row].controls[control].token, "platform:paste-recipe-field")) editing = true;
+    float header_height = (editing ? 72 : 92) * d, footer_height = (editing ? 44 : 112) * d;
     state->body = (rect){view.x, view.y + header_height, view.width,
         view.height - header_height - footer_height};
     if (state->body.height < 0) state->body.height = 0;
+#ifdef GG_RECIPE_OBSERVE
+    __android_log_print(ANDROID_LOG_INFO, "GGRecipeBounds", "viewport top=%d bottom=%d",
+        (int)state->body.y, (int)(state->body.y + state->body.height));
+#endif
     state->button_count = 0;
     gg_canvas_clear(&canvas, background);
     float x = view.x + 16 * d, width = view.width - 32 * d;
@@ -153,6 +162,10 @@ static void apply(screen *state, button pressed) {
     if (gg_text_is_ascii(token, "platform:import-recipe-file")) {
         state->platform_notice = gg_recipe_document_request(state->app->activity, state->engine.env)
             ? "Choose a recipe file" : "A file import is already pending";
+    } else if (gg_text_is_ascii(token, "platform:recipe-keyboard")) {
+        state->platform_notice = gg_recipe_input_refresh(state->engine.env, true) ? NULL : "Keyboard could not be opened";
+    } else if (gg_text_is_ascii(token, "platform:paste-recipe-field")) {
+        state->platform_notice = gg_recipe_input_paste(state->engine.env) ? NULL : "Clipboard text could not be pasted";
     } else {
         gg_recipe_view candidate = {0};
         if (gg_recipe_engine_action(&state->engine, token, &candidate)) {
@@ -161,6 +174,7 @@ static void apply(screen *state, button pressed) {
             state->view = candidate;
             ++state->generation;
             state->platform_notice = NULL;
+            (void)gg_recipe_input_refresh(state->engine.env, false);
         } else state->platform_notice = "Recipe action failed; previous screen retained";
     }
     state->redraw = true;
@@ -180,10 +194,13 @@ static int32_t input(struct android_app *app, AInputEvent *event) {
                 state->platform_notice = NULL;
                 ++state->generation;
                 state->redraw = true;
+                (void)gg_recipe_input_refresh(state->engine.env, false);
             } else state->platform_notice = "Back navigation failed; previous screen retained";
         }
         return 1;
     }
+    if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY)
+        return gg_recipe_input_key(state->engine.env, event) ? 1 : 0;
     if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) return 0;
     int32_t kind = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
     if (kind == AMOTION_EVENT_ACTION_CANCEL || AMotionEvent_getPointerCount(event) != 1) {
@@ -246,6 +263,7 @@ static void completed_document(screen *state) {
             state->scroll = 0;
             ++state->generation;
             state->platform_notice = NULL;
+            (void)gg_recipe_input_refresh(state->engine.env, false);
         } else state->platform_notice = "Recipe import failed; previous screen retained";
     } else state->platform_notice = result == GG_DOCUMENT_CANCELLED ? "Import cancelled" : "Recipe file could not be opened";
     if (path != NULL) { (void)unlink(path); free(path); }
@@ -260,12 +278,26 @@ void android_main(struct android_app *app) {
     state->redraw = true;
     state->density = 1;
     state->available = gg_recipe_engine_open(&state->engine, app->activity, &state->view);
+    if (state->available && !gg_recipe_input_open(app->activity, state->engine.env))
+        state->platform_notice = "Keyboard could not be initialized";
     app->userData = state;
     app->onAppCmd = command;
     app->onInputEvent = input;
     gg_recipe_document_listen(app->looper);
+    gg_recipe_engine_listen(app->looper);
+    if (state->available) (void)gg_recipe_input_refresh(state->engine.env, false);
     while (app->destroyRequested == 0) {
         completed_document(state);
+        if (state->available) {
+            int refreshed = gg_recipe_engine_refresh(&state->engine, &state->view);
+            if (refreshed > 0) {
+                ++state->generation;
+                state->touching = false;
+                state->redraw = true;
+                state->platform_notice = NULL;
+                (void)gg_recipe_input_refresh(state->engine.env, false);
+            }
+        }
         int events;
         struct android_poll_source *source = NULL;
         int identifier = ALooper_pollOnce(state->redraw && app->window != NULL ? 0 : -1,
@@ -276,6 +308,8 @@ void android_main(struct android_app *app) {
         if (state->redraw && app->window != NULL) { state->redraw = false; render(state); }
     }
     gg_recipe_document_unlisten(app->looper);
+    gg_recipe_engine_unlisten(app->looper);
+    gg_recipe_input_close(state->engine.env);
     (void)gg_canvas_window_release(&state->drawable);
     gg_recipe_view_dispose(&state->view);
     gg_recipe_engine_close(&state->engine);

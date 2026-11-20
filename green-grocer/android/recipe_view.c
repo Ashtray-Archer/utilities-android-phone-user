@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct { const uint16_t *text; size_t units, cursor; } fields;
+typedef gg_recipe_fields fields;
 
-static bool field(fields *input, fields *output) {
+bool gg_recipe_field(fields *input, fields *output) {
     size_t characters = 0;
     bool digit = false;
     while (input->cursor < input->units) {
@@ -36,7 +36,7 @@ static bool field(fields *input, fields *output) {
 
 static bool text_field(fields *input, gg_text *output) {
     fields value;
-    if (!field(input, &value)) return false;
+    if (!gg_recipe_field(input, &value)) return false;
     uint16_t *copy = malloc((value.units + 1) * sizeof(*copy));
     if (copy == NULL) return false;
     if (value.units != 0) memcpy(copy, value.text, value.units * sizeof(*copy));
@@ -79,7 +79,7 @@ static bool controls(fields *input, gg_recipe_row *row) {
         gg_recipe_control *button = &grown[row->control_count++];
         memset(button, 0, sizeof(*button));
         fields pair;
-        if (!field(input, &pair) || !text_field(&pair, &button->label) ||
+        if (!gg_recipe_field(input, &pair) || !text_field(&pair, &button->label) ||
             !text_field(&pair, &button->token) || pair.cursor != pair.units ||
             button->token.length == 0) return false;
     }
@@ -95,7 +95,7 @@ bool gg_recipe_view_decode(const uint16_t *input, size_t units,
     bool valid = false;
     if (!text_field(&top, &version) || !gg_text_is_ascii(&version, "green-grocer-view-v1") ||
         !text_field(&top, &candidate.title) || !text_field(&top, &candidate.notice) ||
-        !field(&top, &rows) || top.cursor != top.units) goto done;
+        !gg_recipe_field(&top, &rows) || top.cursor != top.units) goto done;
     while (rows.cursor != rows.units) {
         if (candidate.row_count == GG_RECIPE_VIEW_ROWS) goto done;
         gg_recipe_row *grown = realloc(candidate.rows,
@@ -105,8 +105,8 @@ bool gg_recipe_view_decode(const uint16_t *input, size_t units,
         gg_recipe_row *row = &grown[candidate.row_count++];
         memset(row, 0, sizeof(*row));
         fields encoded, buttons;
-        if (!field(&rows, &encoded) || !text_field(&encoded, &row->text) ||
-            !field(&encoded, &buttons) || encoded.cursor != encoded.units ||
+        if (!gg_recipe_field(&rows, &encoded) || !text_field(&encoded, &row->text) ||
+            !gg_recipe_field(&encoded, &buttons) || encoded.cursor != encoded.units ||
             !controls(&buttons, row)) goto done;
     }
     gg_recipe_view_dispose(destination);

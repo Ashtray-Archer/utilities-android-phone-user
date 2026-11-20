@@ -55,12 +55,48 @@ proc emit(directory, module, destination, name, exports) {
   diagnostics "$destination/compiler.txt"
   test -s "$destination/$name.dex"
 }
+proc editor_host(directory, destination) {
+  mkdir -p "$destination"
+  "$compiler" --cg chez --source-dir "$directory" --build-dir "$destination/build" \
+    --output-dir "$destination" "$directory/RecipeEditorChecks.idric" -o checks > "$destination/compiler.txt" 2>&1
+  diagnostics "$destination/compiler.txt"
+  cp "$frontend/_/build/exec/idris2_app/libidris2_support.so" "$destination/checks_app/"
+  try { "$destination/checks" > "$destination/stdout.txt" 2> "$destination/stderr.txt" }
+  var status = _error.code
+  printf '%s\n' "$status" > "$destination/exit.txt"
+}
 
 host "$source" "$output/host"
 cat "$output/host/stdout.txt"
 test "$(cat "$output/host/exit.txt")" = 0
 rg -x -F 'recipe_screen_checks 16' "$output/host/stdout.txt"
 emit "$source" RecipeScreenChecks "$output/checks" checks no
+editor_host "$source" "$output/editor-host"
+cat "$output/editor-host/stdout.txt"
+test "$(cat "$output/editor-host/exit.txt")" = 0
+rg -x -F 'recipe_editor_checks 37' "$output/editor-host/stdout.txt"
+emit "$source" RecipeEditorChecks "$output/editor-checks" checks no
+for mutation in stale decimal {
+  var directory = "$output/editor-$mutation-source"
+  mkdir -p "$directory"
+  cp -R "$source/." "$directory/"
+  var assertion = 'FAIL old keyboard connection cannot write to another field'
+  if (mutation === 'stale') {
+    sed 's/expected ≟ "" || not (expected ≟ input_target session)/expected ≟ ""/' \
+      "$source/RecipeEditor.idric" > "$directory/RecipeEditor.idric"
+    if cmp -s "$source/RecipeEditor.idric" "$directory/RecipeEditor.idric" { echo 'FAIL unchanged stale input mutation' >&2; exit 1 }
+  } else {
+    sed 's/scale × 10/scale × 2/' "$source/RecipeDraft.idric" > "$directory/RecipeDraft.idric"
+    if cmp -s "$source/RecipeDraft.idric" "$directory/RecipeDraft.idric" { echo 'FAIL unchanged decimal mutation' >&2; exit 1 }
+    setvar assertion = 'FAIL decimal quantity stays exact'
+  }
+  editor_host "$directory" "$output/editor-$mutation-host"
+  test "$(cat "$output/editor-$mutation-host/exit.txt")" = 1
+  rg -x -F "$assertion" "$output/editor-$mutation-host/stdout.txt"
+  emit "$directory" RecipeEditorChecks "$output/editor-mutant-$mutation" checks no
+  if cmp -s "$output/editor-checks/checks.dex" "$output/editor-mutant-$mutation/checks.dex" { echo 'FAIL unchanged editor mutant DEX' >&2; exit 1 }
+  printf '%s\n' "$assertion" > "$output/editor-mutant-$mutation/assertion.txt"
+}
 emit "$source" RecipeNative "$output/recipes" recipes yes
 emit "$source" RecipeNative "$output/recipes-repeat" recipes yes
 cmp "$output/recipes/recipes.dex" "$output/recipes-repeat/recipes.dex"
@@ -107,6 +143,10 @@ rg -x -F '.super Landroid/app/NativeActivity;' "$output/callback/decoded/org/iso
 rg -x -F '.method public native onActivityResult(IILandroid/content/Intent;)V' "$output/callback/decoded/org/isomorphisms/greengrocer/RecipeActivity.smali"
 rg -x -F '.implements Ljava/lang/Runnable;' "$output/callback/decoded/org/isomorphisms/greengrocer/RecipeDocumentRequest.smali"
 rg -F 'Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V' "$output/callback/decoded/org/isomorphisms/greengrocer/RecipeActivity.smali"
+rg -x -F '.method public constructor <init>(Landroid/content/Context;)V' "$output/callback/decoded/org/isomorphisms/greengrocer/RecipeInputView.smali"
+rg -x -F '.method public constructor <init>(Landroid/view/View;Z)V' "$output/callback/decoded/org/isomorphisms/greengrocer/RecipeInputConnection.smali"
+rg -x -F '.method public native getEditable()Landroid/text/Editable;' "$output/callback/decoded/org/isomorphisms/greengrocer/RecipeInputConnection.smali"
+rg -x -F '.method public native replaceText(IILjava/lang/CharSequence;ILandroid/view/inputmethod/TextAttribute;)Z' "$output/callback/decoded/org/isomorphisms/greengrocer/RecipeModernInputConnection.smali"
 
 var native_compiler = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
 var native_source = "$application/green-grocer/android"
@@ -129,6 +169,8 @@ for target in x86_64 a1 c67 {
 "$grease" "$application/green-grocer/_/package-recipe-observer.grease" \
   "$application" "$sdk" "$tools/smali.jar" "$key" "$compiler" "$frontend" "$output/observer"
 sha256sum "$source/RecipeSession.idric" "$source/RecipeScreen.idric" "$source/RecipeNative.idric" \
+  "$source/RecipeText.idric" "$source/RecipeDraft.idric" "$source/RecipeEditorSession.idric" \
+  "$source/RecipeEditorScreen.idric" "$source/RecipeEditor.idric" "$source/RecipeEditorChecks.idric" \
   "$source/RecipeScreenChecks.idric" "$source/RecipeActivityPlan.idric" \
   "$output/recipes/recipes.dex" "$output/checks/checks.dex" "$output/callback/classes.dex" \
   "$output/view-check" "$output/view-mutant" > "$output/digests.txt"
@@ -136,10 +178,14 @@ printf 'recipe_screen_host\t16_PASS\nUI_mutants\t3_COMPILED\nnative_transport_mu
 printf '\033[32mPASS\033[0m checked recipe UI, source mutation controls, native boundary and three signed APK candidates prepared\n'
 cd "$output"
 sha256sum checks/checks.dex recipes/recipes.dex callback/classes.dex host/stdout.txt \
+  editor-checks/checks.dex editor-host/stdout.txt \
+  editor-mutant-stale/checks.dex editor-mutant-stale/assertion.txt \
+  editor-mutant-decimal/checks.dex editor-mutant-decimal/assertion.txt \
   mutant-pantry/checks.dex mutant-pantry/assertion.txt \
   mutant-navigation/checks.dex mutant-navigation/assertion.txt \
   mutant-review/checks.dex mutant-review/assertion.txt view-check view-mutant \
   observer/archive/classes.dex observer/recipe-observer.apk observer/assets/fixture.recipe \
-  observer/assets/expected/imported.view \
+  observer/assets/expected/imported.view observer/assets/edit-new.recipe observer/assets/edit-updated.recipe \
+  observer/assets/expected/edit-cold.view \
   apk-x86_64/green-grocer-recipes-x86_64.apk apk-a1/green-grocer-recipes-a1.apk \
   apk-c67/green-grocer-recipes-c67.apk > artifacts.sha256

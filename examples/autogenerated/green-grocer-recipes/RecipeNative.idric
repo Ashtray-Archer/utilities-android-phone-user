@@ -4,6 +4,11 @@ import RecipeShopping
 import RecipeStorage
 import RecipeSession
 import RecipeScreen
+import RecipeDraft
+import RecipeText
+import RecipeEditorSession
+import RecipeEditorScreen
+import RecipeEditor
 import RecipeFiles
 import RecipeFilePlatform
 import Data.IORef
@@ -57,37 +62,40 @@ save_owned_recipe directory recipe state = do
 
 %export "dex:recipe_session_valid"
 recipe_session_valid : Text → Bool
-recipe_session_valid encoded = case decode_session encoded of
+recipe_session_valid encoded = case decode_editor encoded of
   Left _ ⇒ False
   Right _ ⇒ True
 
 %export "dex:recipe_session_can_go_back"
 recipe_session_can_go_back : Text → Bool
-recipe_session_can_go_back encoded = case decode_session encoded of
+recipe_session_can_go_back encoded = case decode_editor encoded of
   Left _ ⇒ False
-  Right state ⇒ not (null state.previous_screens)
+  Right state ⇒ editor_can_go_back state
 
 %export "dex:recipe_session_start"
 recipe_session_start : Text
-recipe_session_start = encode_session begin_shopping
+recipe_session_start = encode_editor begin_editor
 
 %export "dex:recipe_session_view"
 recipe_session_view : Text → Text
-recipe_session_view encoded = case decode_session encoded of
+recipe_session_view encoded = case decode_editor encoded of
   Left message ⇒ encode_view (View "Recipe session refused" message [])
-  Right state ⇒ encode_view (recipe_view state)
+  Right state ⇒ encode_view (editor_view state)
 
 %export "dex:recipe_session_restore"
 recipe_session_restore : Text → Text → IO Text
-recipe_session_restore encoded path = case (decode_session encoded, recipe_file path) of
-  (Right state, Right file) ⇒ map encode_session (load_recipe_file file state)
+recipe_session_restore encoded path = case (decode_editor encoded, recipe_file path) of
+  (Right session, Right file) ⇒ do
+    state ← load_recipe_file file session.shopping
+    pure (encode_editor ({ shopping := state } session))
   _ ⇒ pure encoded
 
 %export "dex:recipe_session_import"
 recipe_session_import : Text → Text → Text → IO Text
-recipe_session_import encoded path directory = case decode_session encoded of
+recipe_session_import encoded path directory = case decode_editor encoded of
   Left _ ⇒ pure encoded
-  Right state ⇒ do
+  Right session ⇒ do
+    let state = session.shopping
     result ← newIORef state
     try_recipe_file (do
       source ← read_recipe_text path
@@ -97,22 +105,70 @@ recipe_session_import encoded path directory = case decode_session encoded of
           saved ← save_owned_recipe directory recipe state
           writeIORef result saved)
       (writeIORef result ({ notice := "Recipe import failed; previous recipes retained" } state))
-    map encode_session (readIORef result)
+    saved ← readIORef result
+    pure (encode_editor ({ shopping := saved } session))
 
 %export "dex:recipe_session_action"
 recipe_session_action : Text → Text → Text → IO Text
-recipe_session_action encoded token directory = case decode_session encoded of
+recipe_session_action encoded token directory = case decode_editor encoded of
   Left _ ⇒ pure encoded
-  Right state ⇒
-    if token ≟ "system:back" then pure (encode_session (transition go_back state))
-    else if not (visible_action token state) then pure
-      (encode_session ({ notice := "Action is no longer on this screen" } state))
+  Right session ⇒
+    if not (visible_editor_action token session) then pure (encode_editor (editor_action token session))
     else case decode_fields token of
+      Right ["editor:save"] ⇒ case session.draft of
+        Nothing ⇒ pure encoded
+        Just draft ⇒ case validate_draft draft of
+          Left _ ⇒ pure (encode_editor (editor_action token session))
+          Right recipe ⇒ do
+            saved ← save_owned_recipe directory recipe session.shopping
+            pure (encode_editor (finish_draft_save (saved.notice ≟ "Recipe saved") saved session))
       Right ["save", identity] ⇒ case find
-        (\recipe ⇒ recipe.recipe_identity ≟ identity) state.saved_recipes of
-          Nothing ⇒ pure (encode_session ({ notice := "Saved recipe is missing" } state))
-          Just recipe ⇒ map encode_session (save_owned_recipe directory recipe state)
-      _ ⇒ pure (encode_session (activate_control token state))
+        (\recipe ⇒ recipe.recipe_identity ≟ identity) session.shopping.saved_recipes of
+          Nothing ⇒ pure (encode_editor ({ shopping.notice := "Saved recipe is missing" } session))
+          Just recipe ⇒ do
+            saved ← save_owned_recipe directory recipe session.shopping
+            pure (encode_editor ({ shopping := saved } session))
+      _ ⇒ pure (encode_editor (editor_action token session))
+
+%export "dex:recipe_session_effectful"
+recipe_session_effectful : Text → Text → Bool
+recipe_session_effectful encoded token = case decode_editor encoded of
+  Left _ ⇒ False
+  Right session ⇒ visible_editor_action token session && case decode_fields token of
+    Right ["editor:save"] ⇒ True
+    Right ["save", _] ⇒ True
+    _ ⇒ False
+
+%export "dex:recipe_session_merge_effect"
+recipe_session_merge_effect : Text → Text → Text → Text
+recipe_session_merge_effect before latest result = case
+  (decode_editor before, decode_editor latest, decode_editor result) of
+    (Right old, Right current, Right changed) ⇒ encode_editor (merge_file_effect old current changed)
+    _ ⇒ latest
+
+%export "dex:recipe_session_input_snapshot"
+recipe_session_input_snapshot : Text → Text
+recipe_session_input_snapshot encoded = case decode_editor encoded of
+  Left _ ⇒ input_snapshot begin_editor
+  Right session ⇒ input_snapshot session
+
+%export "dex:recipe_session_input"
+recipe_session_input : Text → Text → Text → Text → Int32 → Int32 → Text
+recipe_session_input encoded expected operation text first last = case decode_editor encoded of
+  Left _ ⇒ encode_fields ["no", encoded]
+  Right session ⇒ if operation ≟ "done" && not (expected ≟ "") && expected ≟ input_target session
+    then encode_fields ["yes", encode_editor (editor_back session)]
+    else case input_command operation text (cast first) (cast last) of
+      Left _ ⇒ encode_fields ["no", encoded]
+      Right command ⇒ let (accepted, next) = apply_field_command expected command session
+        in encode_fields [if accepted then "yes" else "no", encode_editor next]
+
+%export "dex:recipe_session_replace"
+recipe_session_replace : Text → Text → Text → Int32 → Int32 → Int32 → Text
+recipe_session_replace encoded expected text first last cursor = case decode_editor encoded of
+  Left _ ⇒ encode_fields ["no", encoded]
+  Right session ⇒ let (accepted, next) = apply_field_command expected (replace_text (cast first) (cast last) text (cast cursor)) session
+    in encode_fields [if accepted then "yes" else "no", encode_editor next]
 
 main : IO ()
 main = pure ()

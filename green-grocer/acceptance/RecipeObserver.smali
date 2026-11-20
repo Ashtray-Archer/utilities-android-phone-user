@@ -332,6 +332,8 @@
 
 .method private tap(II)V
     .registers 12
+    const/4 v8, 0
+  :position
     new-instance v0, Ljava/lang/StringBuilder;
     invoke-direct {v0}, Ljava/lang/StringBuilder;-><init>()V
     const-string v1, "row="
@@ -370,9 +372,18 @@
     goto :again
   :coordinates
     if-ltz v1, :missing
-    if-gez v2, :offset
+    if-gez v2, :visible
   :missing
     const-string v0, "FAIL missing native recipe touch bounds"
+    invoke-static {v0}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
+  :visible
+    invoke-direct {p0, v2}, Lacceptance/RecipeObserver;->scroll_if_needed(I)Z
+    move-result v3
+    if-eqz v3, :offset
+    add-int/lit8 v8, v8, 1
+    const/16 v3, 12
+    if-lt v8, v3, :position
+    const-string v0, "FAIL native control did not scroll into the visible body"
     invoke-static {v0}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
   :offset
     iget-object v0, p0, Lacceptance/RecipeObserver;->activity:Landroid/app/Activity;
@@ -400,6 +411,91 @@
     const/4 v3, 1
     invoke-static {v0, v3, v1, v2}, Lacceptance/RecipeObserver;->inject(Landroid/app/UiAutomation;IFF)V
     return-void
+.end method
+
+.method private scroll_if_needed(I)Z
+    .registers 13
+    const-string v0, "viewport top=([0-9]+) bottom=([0-9]+)"
+    invoke-static {v0}, Ljava/util/regex/Pattern;->compile(Ljava/lang/String;)Ljava/util/regex/Pattern;
+    move-result-object v0
+    const-string v1, "logcat -d -v raw -s GGRecipeBounds:I"
+    invoke-direct {p0, v1}, Lacceptance/RecipeObserver;->shell(Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v1
+    invoke-virtual {v0, v1}, Ljava/util/regex/Pattern;->matcher(Ljava/lang/CharSequence;)Ljava/util/regex/Matcher;
+    move-result-object v0
+    const/4 v1, -1
+    const/4 v2, -1
+  :again
+    invoke-virtual {v0}, Ljava/util/regex/Matcher;->find()Z
+    move-result v3
+    if-eqz v3, :bounds
+    const/4 v3, 1
+    invoke-virtual {v0, v3}, Ljava/util/regex/Matcher;->group(I)Ljava/lang/String;
+    move-result-object v1
+    invoke-static {v1}, Ljava/lang/Integer;->parseInt(Ljava/lang/String;)I
+    move-result v1
+    const/4 v3, 2
+    invoke-virtual {v0, v3}, Ljava/util/regex/Matcher;->group(I)Ljava/lang/String;
+    move-result-object v2
+    invoke-static {v2}, Ljava/lang/Integer;->parseInt(Ljava/lang/String;)I
+    move-result v2
+    goto :again
+  :bounds
+    if-ltz v1, :missing
+    add-int/lit8 v1, v1, 24
+    add-int/lit8 v2, v2, -24
+    if-lt p1, v1, :above
+    if-gt p1, v2, :below
+    const/4 v0, 0
+    return v0
+  :above
+    move v3, v1
+    move v4, v2
+    goto :swipe
+  :below
+    move v3, v2
+    move v4, v1
+  :swipe
+    iget-object v0, p0, Lacceptance/RecipeObserver;->activity:Landroid/app/Activity;
+    invoke-virtual {v0}, Landroid/app/Activity;->getWindow()Landroid/view/Window;
+    move-result-object v0
+    invoke-virtual {v0}, Landroid/view/Window;->getDecorView()Landroid/view/View;
+    move-result-object v0
+    invoke-virtual {v0}, Landroid/view/View;->getWidth()I
+    move-result v5
+    div-int/lit8 v5, v5, 2
+    const/4 v1, 2
+    new-array v1, v1, [I
+    invoke-virtual {v0, v1}, Landroid/view/View;->getLocationOnScreen([I)V
+    const/4 v2, 0
+    aget v0, v1, v2
+    add-int/2addr v5, v0
+    const/4 v2, 1
+    aget v0, v1, v2
+    add-int/2addr v3, v0
+    add-int/2addr v4, v0
+    int-to-float v5, v5
+    int-to-float v3, v3
+    int-to-float v4, v4
+    iget-object v0, p0, Lacceptance/RecipeObserver;->automation:Landroid/app/UiAutomation;
+    const/4 v1, 0
+    invoke-static {v0, v1, v5, v3}, Lacceptance/RecipeObserver;->inject(Landroid/app/UiAutomation;IFF)V
+    const-wide/16 v6, 60
+    invoke-static {v6, v7}, Landroid/os/SystemClock;->sleep(J)V
+    const/4 v1, 2
+    invoke-static {v0, v1, v5, v4}, Lacceptance/RecipeObserver;->inject(Landroid/app/UiAutomation;IFF)V
+    invoke-static {v6, v7}, Landroid/os/SystemClock;->sleep(J)V
+    const/4 v1, 1
+    invoke-static {v0, v1, v5, v4}, Lacceptance/RecipeObserver;->inject(Landroid/app/UiAutomation;IFF)V
+    const-wide/16 v6, 400
+    invoke-static {v6, v7}, Landroid/os/SystemClock;->sleep(J)V
+    const/4 v0, 1
+    return v0
+  :missing
+    const-string v0, "FAIL missing native recipe viewport bounds"
+    invoke-static {v0}, Lacceptance/RecipeObserver;->fail(Ljava/lang/String;)V
+    const/4 v0, 0
+    return v0
 .end method
 
 .method private deliver()V
@@ -441,6 +537,44 @@
     invoke-super {p0, p1}, Landroid/app/Instrumentation;->onCreate(Landroid/os/Bundle;)V
     invoke-virtual {p0}, Landroid/app/Instrumentation;->start()V
     return-void
+.end method
+
+# Shared SDK-only observation helpers. They do not call recipe exports or
+# mutate the app's opaque state; actions are real touches and IME messages.
+.method public editor_launch()V
+    .registers 4
+    invoke-virtual {p0}, Landroid/app/Instrumentation;->getUiAutomation()Landroid/app/UiAutomation;
+    move-result-object v0
+    iput-object v0, p0, Lacceptance/RecipeObserver;->automation:Landroid/app/UiAutomation;
+    invoke-direct {p0}, Lacceptance/RecipeObserver;->clear()V
+    new-instance v0, Landroid/content/Intent;
+    invoke-direct {v0}, Landroid/content/Intent;-><init>()V
+    const-string v1, "org.isomorphisms.greengrocer"
+    const-string v2, "org.isomorphisms.greengrocer.RecipeActivity"
+    invoke-virtual {v0, v1, v2}, Landroid/content/Intent;->setClassName(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;
+    const/high16 v1, 0x10000000
+    invoke-virtual {v0, v1}, Landroid/content/Intent;->addFlags(I)Landroid/content/Intent;
+    invoke-virtual {p0, v0}, Landroid/app/Instrumentation;->startActivitySync(Landroid/content/Intent;)Landroid/app/Activity;
+    move-result-object v0
+    iput-object v0, p0, Lacceptance/RecipeObserver;->activity:Landroid/app/Activity;
+    return-void
+.end method
+
+.method public editor_tap(II)V
+    .registers 3
+    invoke-direct {p0, p1, p2}, Lacceptance/RecipeObserver;->tap(II)V
+    return-void
+.end method
+.method public editor_expect(Ljava/lang/String;)V
+    .registers 2
+    invoke-direct {p0, p1}, Lacceptance/RecipeObserver;->expect(Ljava/lang/String;)V
+    return-void
+.end method
+.method public editor_shell(Ljava/lang/String;)Ljava/lang/String;
+    .registers 3
+    invoke-direct {p0, p1}, Lacceptance/RecipeObserver;->shell(Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v0
+    return-object v0
 .end method
 
 .method public onStart()V

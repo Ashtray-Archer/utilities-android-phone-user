@@ -6,8 +6,19 @@ servings, inspect combined requirements, and add/remove pantry quantities.
 Details displays ingredients, source links and notes, and saves through the
 same strict UTF-8 AtomicFile adapter used by the file acceptance lane.
 
-Details is read-only. Recipe creation/editing, live catalog search, product/store
-selection controls and retailer cart submission remain unfinished. Stores says
+New recipe and Details → Edit recipe open an isolated draft. It includes name,
+positive whole servings, ingredients, exact decimal/fraction quantities in g,
+mL or each, preparation, source links and notes. Ingredient identities are
+fresh unless the shopper explicitly chooses an existing ingredient to combine
+shopping quantities. Existing substitution choices are retained; choosing a
+different identity does not silently approve its substitutions.
+
+Save validates the complete draft and updates the saved shopping state only
+after durable storage succeeds. Invalid or failed saves retain the draft and
+preceding review. Canceling a changed draft asks whether to discard it. The
+draft is process-session state and is lost if Android ends the process before
+save. Live catalog search, product/store selection controls and retailer cart
+submission remain unfinished. Stores says
 connections are unavailable. An unresolved plan cannot pass final review. The
 candidate makes no retailer requests.
 
@@ -27,9 +38,17 @@ checked scalar Text/Bool/IO Text methods for start, validation, projection,
 actions, back eligibility, import and restore. No arbitrary object marshal or
 numeric narrowing crosses JNI.
 
+`RecipeDraft`, `RecipeText`, `RecipeEditorSession`, `RecipeEditorScreen` and
+`RecipeEditor` add the optional draft, raw fields, typed text selection and
+composition, checked controls, and a fresh input generation to that shopping
+session. Text fields admit at most 262144 UTF-16 units. Numeric recipe values
+remain arbitrary precision. Ingredient/source overviews and identity choices
+are paginated; typing projects a small caret window while retaining all text.
+Recipe files keep their existing schema.
+
 `recipe_engine.c` loads the actual checked DEX asset through Android's
 InMemoryDexClassLoader. It retains the opaque state independently of the native
-window, serializes model calls and commits a candidate only after its complete
+window, serializes pure model calls and commits a candidate only after its complete
 projection parses. `recipe_view.c` decodes codepoint-counted fields into exact
 UTF-16 spans, including surrogate pairs and embedded NUL. It refuses malformed,
 truncated or over-budget projections as a whole, preserving the preceding view.
@@ -44,7 +63,21 @@ They do not calculate recipe quantities,
 prices or shopping decisions. The recipe APK links no `model/cart.c` or sample
 catalog. Checked Idriç framework plans emit the NativeActivity subclass and
 Runnable callback classes; no Java/Kotlin application source, Gradle, framework
-View replacement or Smali application producer is used.
+form replacement or Smali application producer is used.
+
+`recipe_input.c` adds a transparent 1 × 1 focus View and BaseInputConnection
+solely for the SDK input protocol. Idriç emits their checked DEX constructor
+and callback plans. The SDK keyboard, clipboard, UTF-16 positions and temporary
+Editable read projections cross this adapter; editable text and selection stay
+in Idriç. Each connection binds an exact field/generation key. Late commands
+after field changes or discard refuse. A separate class loads TextAttribute
+overloads only on API33 and later. Plain hardware keys use the SDK key mapping;
+hardware dead-key composition is not qualified by this lane.
+
+Keyboard callbacks never perform filesystem I/O. File effects release the
+state mutex while running on the native thread, then Idriç merges their result
+with newer independent draft text. Unexpected concurrent shopping changes
+refuse rather than overwriting the current session.
 
 ## Import and private files
 
@@ -95,14 +128,18 @@ without arguments:
   expectations; it never produces application semantics or callback DEX.
 - `observe-recipe-ui.grease`: separate emulator execution, installed-app touches,
   private bytes, screenshots and cold-process restore evidence.
+- `observe-recipe-editor.grease`: checked editor ART/mutation controls, installed
+  creation/editing with a system-bound test IME, failed-save retry and cold reopening.
 
 | Gate | Required observation |
 | --- | --- |
 | Existing planner/codec | 52 + 24 cases, 14 changing runtime inputs and 11 compiled mutants, including strict file effects, API29/API34 ART |
 | Screen/session | 16 host and ART cases; independent full-state semantic observations, stale-control refusals and three source mutants rejected at their named assertions |
+| Editor/text | 37 host and ART cases, including the full text limit; stale field and decimal mutants rejected at their named assertions |
 | Native text boundary | Unicode/NUL, every truncated prefix, schema, surrogate and budget checks; compiled surrogate mutant exits at the expected assertion |
 | Candidate packaging | Actual checked DEX and callback bytes, stable signer/version, three ABI builds, independent finished-APK receipt verification |
 | Installed x86_64 app | Own app UID, exact installed APK, 12 expected screen states, real touch input, saved UTF-8 bytes and distinct-PID cold reopening, API29/API34 |
+| Installed editor | 36 host-projected views, real InputMethodService connection, composition, supplementary characters/NUL, selection, clipboard, stale-connection refusal, invalid servings, failed save/retry, exact demand and edited-file cold reopening, API29/API34 |
 | Import callback | Real picker opening followed by an **injected SDK file-URI result**, then actual native worker and Idriç save; not provider-grant or human selection qualification |
 | Physical A1/C67 and independent producer promotion | NOT_RUN |
 
@@ -113,6 +150,11 @@ visible native background/button pixels in every screenshot (up to four RGB
 levels per channel for observed capture quantization), and verifies private
 file bytes. Failed pixel checks retain the captured image. It does not replace
 app logic.
+The test keyboard is in the acceptance APK, runs in its own process and calls
+the real served InputConnection through Android. The editor observer uses
+touches and SDK text queries, never the app's semantic exports. Its broadcast
+command receiver exists only in that test APK. The emulator's previous keyboard
+is restored after the test.
 Emulator results do not establish physical phone acceptance, a live provider
 grant, retailer access or independent producer registration.
 

@@ -27,13 +27,13 @@ var observe = []
 if (target === 'x86_64') { setvar observe = ['-DGG_RECIPE_OBSERVE=1'] }
 mkdir -p "$output"
 printf '\033[36mACTION\033[0m compile native recipe transport and presentation: %s\n' "$target"
-for module in recipes_main canvas recipe_view recipe_engine recipe_document {
+for module in recipes_main canvas recipe_view recipe_engine recipe_document recipe_input {
   "$compiler" @flags @observe -isystem "$glue" -c "$source/$module.c" -o "$output/$module.o"
 }
 "$compiler" -std=c17 -O2 -fPIC -Wno-strict-prototypes -c "$glue/android_native_app_glue.c" -o "$output/glue.o"
 "$compiler" --ld-path="$toolchain/ld.lld" -shared \
   "$output/recipes_main.o" "$output/canvas.o" "$output/recipe_view.o" \
-  "$output/recipe_engine.o" "$output/recipe_document.o" "$output/glue.o" \
+  "$output/recipe_engine.o" "$output/recipe_document.o" "$output/recipe_input.o" "$output/glue.o" \
   -Wl,-z,defs,-z,max-page-size=16384,-z,common-page-size=4096,--build-id=sha1 \
   -Wl,-u,ANativeActivity_onCreate -landroid -llog -o "$output/libgreen_grocer.so"
 "$toolchain/llvm-readobj" --elf-output-style=GNU --file-headers --program-headers \
@@ -48,6 +48,7 @@ git -C "$application" diff --binary HEAD > "$output/local.patch"
 sha256sum "$source/recipes_main.c" "$source/canvas.c" "$source/canvas.h" \
   "$source/recipe_view.c" "$source/recipe_view.h" "$source/recipe_engine.c" \
   "$source/recipe_engine.h" "$source/recipe_document.c" "$source/recipe_document.h" \
+  "$source/recipe_input.c" "$source/recipe_input.h" \
   "$compiler" "$toolchain/ld.lld" "$output/libgreen_grocer.so" > "$output/digests.txt"
 printf 'native_target\t%s\nNDK\t29.0.14206865\ncompile_link\tPASS\nAPK\tNOT_RUN\n' "$target" > "$output/result.tsv"
 printf '\033[32mPASS\033[0m native recipe %s compile/link; APK execution remains separate\n' "$target"
