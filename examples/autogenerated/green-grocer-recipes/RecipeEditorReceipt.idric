@@ -1,0 +1,121 @@
+module RecipeEditorReceipt
+
+import RecipeShopping
+import RecipeStorage
+import RecipeScreen
+import RecipeText
+import RecipeDraft
+import RecipeEditorSession
+import RecipeEditorScreen
+import RecipeEditor
+import RecipeScreenReceipt
+import Data.List
+import Data.Text
+import System
+
+click : List Text → EditorSession → EditorSession
+click fields = editor_action (encode_fields fields)
+
+field : draft_field → EditorSession → EditorSession
+field target = click ["editor:field", field_key target]
+
+type : Text → EditorSession → EditorSession
+type text session = snd (apply_field_command (input_target session) (commit_text text 1) session)
+
+replace : Text → EditorSession → EditorSession
+replace text session = type text (snd (apply_field_command (input_target session) select_all_text session))
+
+done : EditorSession → EditorSession
+done = click ["editor:done"]
+
+name : Text
+name = "Tuğba λ🦉"
+
+note : Text
+note = "食事\n" ++ pack [chr 0] ++ "notes 🦉"
+
+link : Text
+link = "https://example.org/source#t=80"
+
+save : EditorSession → EditorSession
+save session = case session.draft of
+  Nothing ⇒ session
+  Just draft ⇒ case validate_draft draft of
+    Left _ ⇒ session
+    Right recipe ⇒ finish_draft_save True (transition (save_recipe recipe) session.shopping) session
+
+snapshots : List (Text, EditorSession)
+snapshots =
+  let new = click ["editor:new"] begin_editor
+      invalid = click ["editor:save"] new
+      name_field = field recipe_name_field invalid
+      named = done (type name name_field)
+      servings = field recipe_servings_field named
+      zero = done (replace "0" servings)
+      refused = click ["editor:save"] zero
+      retry = field recipe_servings_field refused
+      portions = done (replace "2" retry)
+      ingredient = click ["editor:add-ingredient"] portions
+      ingredient_name = field (ingredient_name_field 0) ingredient
+      ingredient_named = done (type "Rice" ingredient_name)
+      quantity = field (ingredient_quantity_field 0) ingredient_named
+      measured = done (type "7/13" quantity)
+      overview = click ["editor:overview"] measured
+      source = click ["editor:add-source"] overview
+      source_link = field (source_link_field 0) source
+      linked = done (type link source_link)
+      source_note = field (source_note_field 0) linked
+      noted = done (type note source_note)
+      complete = click ["editor:overview"] noted
+      cancel = click ["editor:cancel"] complete
+      kept = click ["editor:keep"] cancel
+      saved = save kept
+      existing = click ["editor:edit", "recipe-1"] saved
+      existing_ingredient = click ["editor:ingredient", "0"] existing
+      existing_quantity = field (ingredient_quantity_field 0) existing_ingredient
+      changed = done (replace "1.25" existing_quantity)
+      changed_overview = click ["editor:overview"] changed
+      failed = finish_draft_save False
+        ({ notice := "Recipe save could not be confirmed; current recipes retained" } changed_overview.shopping) changed_overview
+      updated = save failed
+      recipes = click ["back"] updated
+      selected = click ["toggle", "recipe-1"] recipes
+      planning = click ["ingredients"] selected
+      scaled = click ["servings-more", "recipe-1"] planning
+  in [("edit-empty", begin_editor), ("edit-new", new), ("edit-invalid", invalid),
+      ("edit-name", name_field), ("edit-named", named), ("edit-servings", servings),
+      ("edit-zero", zero), ("edit-invalid-servings", refused), ("edit-servings-retry", retry),
+      ("edit-portions", portions), ("edit-ingredient", ingredient), ("edit-ingredient-name", ingredient_name),
+      ("edit-ingredient-named", ingredient_named), ("edit-quantity", quantity), ("edit-measured", measured),
+      ("edit-overview", overview), ("edit-source", source), ("edit-link", source_link),
+      ("edit-linked", linked), ("edit-note", source_note), ("edit-noted", noted),
+      ("edit-complete", complete), ("edit-cancel", cancel), ("edit-kept", kept), ("edit-saved", saved),
+      ("edit-existing", existing), ("edit-existing-ingredient", existing_ingredient),
+      ("edit-existing-quantity", existing_quantity), ("edit-changed", changed),
+      ("edit-changed-overview", changed_overview), ("edit-save-failed", failed), ("edit-updated", updated),
+      ("edit-recipes", recipes), ("edit-selected", selected), ("edit-plan", planning), ("edit-scaled", scaled)]
+
+fixtures : List (Text, Text)
+fixtures = [("empty", ""), ("tug", "Tug"), ("tugba", "Tuğ"), ("name", name),
+  ("food", "食"), ("name-food", "Tuğba λ食"), ("name-prefix", "Tuğba λ"), ("owl", "🦉"),
+  ("space", " "), ("name-space", name ++ " "), ("name-pasted", name ++ " Tuğba"),
+  ("one", "1"), ("zero", "0"), ("two", "2"), ("rice", "Rice"), ("fraction", "7/13"),
+  ("decimal", "1.25"), ("link", link), ("note", note), ("wrong", "WRONG FIELD")]
+
+covering
+main : IO ()
+main = do
+  [_, directory] ← getArgs | _ ⇒ exitFailure
+  traverse_ (\(name, state) ⇒ write_checked (directory ++ "/expected/" ++ name ++ ".view")
+    (encode_view (editor_view state))) snapshots
+  traverse_ (\(name, contents) ⇒ write_checked (directory ++ "/ime/" ++ name ++ ".txt") contents) fixtures
+  let recipe = SavedRecipe "recipe-1" name (Serves 1)
+        [Needs (IngredientNamed "ingredient-1") "Rice" (Measured mass (Fraction 7 12)) "" []]
+        [FromSource link note]
+      edited = { recipe_ingredients :=
+        [Needs (IngredientNamed "ingredient-1") "Rice" (Measured mass (Fraction 125 99)) "" []] } recipe
+      cold = RecipeApp (transition (save_recipe edited) begin_shopping) Nothing 0
+  write_checked (directory ++ "/edit-new.recipe") (encode_recipe recipe)
+  write_checked (directory ++ "/edit-updated.recipe") (encode_recipe edited)
+  write_checked (directory ++ "/expected/edit-cold.view") (encode_view (editor_view cold))
+  putStrLn "PASS checked editor projections, exact saved recipes and IME fixtures written"

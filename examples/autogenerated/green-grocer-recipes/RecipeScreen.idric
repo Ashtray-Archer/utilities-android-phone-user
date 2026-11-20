@@ -1,0 +1,199 @@
+module RecipeScreen
+
+import RecipeShopping
+import RecipeStorage
+import Data.List
+import Data.Text
+
+%unbound_implicits off
+
+public export
+record RecipeControl where
+  constructor Control
+  label : Text
+  action_token : Text
+
+public export
+record RecipeRow where
+  constructor Row
+  text : Text
+  controls : List RecipeControl
+
+public export
+record RecipeView where
+  constructor View
+  title : Text
+  notice : Text
+  rows : List RecipeRow
+
+control : Text → List Text → RecipeControl
+control label action = Control label (encode_fields action)
+
+amount_text : RationalAmount → Text
+amount_text amount = if denominator amount ≟ 1 then show amount.numerator
+  else show amount.numerator ++ "/" ++ show (denominator amount)
+
+unit_text : dimension_kind → Text
+unit_text mass = "g"
+unit_text volume = "mL"
+unit_text count = "each"
+
+measured_text : Measure → Text
+measured_text amount = amount_text amount.base_amount ++ " " ++ unit_text amount.dimension
+
+selection_for : ShoppingState → Recipe → Maybe Selection
+selection_for state recipe = find
+  (\selection ⇒ selection.selected_recipe ≟ recipe.recipe_identity) state.selections
+
+recipe_row : ShoppingState → Recipe → RecipeRow
+recipe_row state recipe =
+  let selected = selection_for state recipe
+      identity = recipe.recipe_identity
+      status = case selected of
+        Nothing ⇒ "Not in this plan"
+        Just selection ⇒ "Cooking " ++ show (serving_count selection.selected_servings) ++ " servings"
+  in Row (recipe.recipe_name ++ "\n" ++ status)
+    [control (case selected of Nothing ⇒ "Select"; Just _ ⇒ "Unselect") ["toggle", identity],
+     control "Details" ["details", identity]]
+
+navigation : List RecipeRow
+navigation =
+  [Row "" [control "Recipes" ["recipes"], control "Ingredients" ["ingredients"]],
+   Row "" [control "Stores" ["stores"], control "Review" ["review"]]]
+
+pantry_step : dimension_kind → Number
+pantry_step count = 1
+pantry_step _ = 100
+
+pantry_row : ShoppingState → Requirement → RecipeRow
+pantry_row state required =
+  let net = subtract_pantry state.pantry required
+      identity = required.required_ingredient.ingredient_text
+      dimension = case required.required_dimension of mass ⇒ "mass"; volume ⇒ "volume"; count ⇒ "count"
+      step = show (pantry_step required.required_dimension) ++ " " ++ unit_text required.required_dimension
+  in Row (required.required_name ++ "\nNeed " ++ amount_text required.required_amount ++ " " ++ unit_text required.required_dimension ++
+      "; at home " ++ amount_text net.owned_amount ++ "; buy " ++ amount_text net.remaining_amount)
+    [control ("Home -" ++ step) ["pantry-less", identity, dimension],
+     control ("Home +" ++ step) ["pantry-more", identity, dimension]]
+
+selection_row : ShoppingState → Selection → RecipeRow
+selection_row state selection =
+  let name = maybe selection.selected_recipe recipe_name
+        (find (\recipe ⇒ recipe.recipe_identity ≟ selection.selected_recipe) state.saved_recipes)
+  in Row (name ++ ": " ++ show (serving_count selection.selected_servings) ++ " servings")
+    [control "- serving" ["servings-less", selection.selected_recipe],
+     control "+ serving" ["servings-more", selection.selected_recipe]]
+
+ingredient_row : Ingredient → RecipeRow
+ingredient_row ingredient = Row
+  (ingredient.ingredient_name ++ ": " ++ measured_text ingredient.ingredient_measure ++
+   (if ingredient.preparation ≟ "" then "" else "\n" ++ ingredient.preparation)) []
+
+source_row : RecipeSource → RecipeRow
+source_row source = Row (source.source_link ++ "\n" ++ source.source_note) []
+
+review_rows : ShoppingState → List RecipeRow
+review_rows state = case current_plan state of
+  Left message ⇒ [Row message []]
+  Right plan ⇒ map describe plan
+  where
+    describe : planned_line → RecipeRow
+    describe (pantry_covered net) = Row (net.demand.required_name ++ ": covered at home") []
+    describe (unresolved net _) = Row (net.demand.required_name ++ ": product match unresolved") []
+    describe (ready _ line) = Row (line.purchase_product.product_name ++ ": " ++
+      show line.packages ++ " packages; " ++ show line.line_cents ++ " cents") []
+
+export
+recipe_view : ShoppingState → RecipeView
+recipe_view state = case state.screen of
+  recipes_screen ⇒ View "Recipes" state.notice
+    ([Row "Saved recipes" [Control "Import recipe file" "platform:import-recipe-file"]] ++
+     (if null state.saved_recipes then [Row "No saved recipes yet. Import a Green Grocer recipe file." []]
+       else map (recipe_row state) state.saved_recipes) ++ navigation)
+  recipe_editor identity ⇒ case find (\recipe ⇒ recipe.recipe_identity ≟ identity) state.saved_recipes of
+    Nothing ⇒ View "Recipe details" "Saved recipe is missing" navigation
+    Just recipe ⇒ View recipe.recipe_name state.notice
+      ([Row ("Recipe makes " ++ show (serving_count recipe.recipe_servings) ++ " servings")
+          [control "Save recipe" ["save", identity], control "Back" ["back"]]] ++
+       map ingredient_row recipe.recipe_ingredients ++ map source_row recipe.recipe_sources ++ navigation)
+  ingredients_screen ⇒
+    let requirements = case requirements_for state.saved_recipes state.selections of
+          Left message ⇒ [Row message []]
+          Right [] ⇒ [Row "Select recipes to build an ingredient plan." []]
+          Right needed ⇒ map (pantry_row state) needed
+    in View "Ingredients and pantry" state.notice
+      (map (selection_row state) state.selections ++ requirements ++ navigation)
+  stores_screen ⇒ View "Stores" state.notice
+    [Row "Store connections are not available yet. Saved recipes and ingredient planning work offline." [],
+     Row "" [control "Back" ["back"], control "Review" ["review"]]]
+  matches_screen ⇒ View "Product matches" state.notice
+    ([Row "Each ingredient needs an approved match at its selected store." []] ++ navigation)
+  cart_screen ⇒ View "Review" state.notice
+    (review_rows state ++ [Row (if state.review_approved then "Reviewed" else "Not approved")
+      [control "Approve review" ["approve-review"], control "Back" ["back"]]] ++ navigation)
+
+export
+encode_view : RecipeView → Text
+encode_view view = encode_fields
+  ["green-grocer-view-v1", view.title, view.notice,
+   encode_fields (map encode_row view.rows)]
+  where
+    encode_control : RecipeControl → Text
+    encode_control button = encode_fields [button.label, button.action_token]
+    encode_row : RecipeRow → Text
+    encode_row row = encode_fields [row.text, encode_fields (map encode_control row.controls)]
+
+export
+visible_action : Text → ShoppingState → Bool
+visible_action token state = any (\row ⇒ any (\button ⇒ button.action_token ≟ token) row.controls)
+  (recipe_view state).rows
+
+adjust_servings : Bool → Text → ShoppingState → ShoppingState
+adjust_servings increase identity state = case find
+  (\selection ⇒ selection.selected_recipe ≟ identity) state.selections of
+    Nothing ⇒ { notice := "Select a saved recipe" } state
+    Just selection ⇒
+      let previous = selection.selected_servings.servings_less_one
+          next = if increase then S previous else minus previous 1
+      in transition (select_recipe (Cook identity (Serves next))) state
+
+adjust_pantry : Bool → Text → Text → ShoppingState → ShoppingState
+adjust_pantry increase identity dimension state =
+  case requirements_for state.saved_recipes state.selections of
+    Left message ⇒ { notice := message } state
+    Right needed ⇒ case find (\required ⇒ required.required_ingredient.ingredient_text ≟ identity &&
+      (case required.required_dimension of mass ⇒ "mass"; volume ⇒ "volume"; count ⇒ "count") ≟ dimension) needed of
+        Nothing ⇒ { notice := "Ingredient is no longer in this plan" } state
+        Just required ⇒
+          let net = subtract_pantry state.pantry required
+              step = whole (pantry_step required.required_dimension)
+              next = if increase then add_amount net.owned_amount step else subtract_owned net.owned_amount step
+              retained = filter (\item ⇒ not
+                (same_ingredient item.pantry_ingredient required.required_ingredient &&
+                 same_dimension item.pantry_measure.dimension required.required_dimension)) state.pantry
+          in transition (set_pantry (HaveAtHome required.required_ingredient
+            (Measured required.required_dimension next) :: retained)) state
+
+export
+activate_control : Text → ShoppingState → ShoppingState
+activate_control token state = if not (visible_action token state)
+  then { notice := "Action is no longer on this screen" } state
+  else case decode_fields token of
+    Right ["recipes"] ⇒ transition (go_to recipes_screen) state
+    Right ["ingredients"] ⇒ transition (go_to ingredients_screen) state
+    Right ["stores"] ⇒ transition (go_to stores_screen) state
+    Right ["review"] ⇒ transition (go_to cart_screen) state
+    Right ["back"] ⇒ transition go_back state
+    Right ["approve-review"] ⇒ transition approve_review state
+    Right ["details", identity] ⇒ transition (go_to (recipe_editor identity)) state
+    Right ["toggle", identity] ⇒ case find
+      (\recipe ⇒ recipe.recipe_identity ≟ identity) state.saved_recipes of
+        Nothing ⇒ { notice := "Saved recipe is missing" } state
+        Just recipe ⇒ case selection_for state recipe of
+          Nothing ⇒ transition (select_recipe (Cook identity recipe.recipe_servings)) state
+          Just _ ⇒ transition (unselect_recipe identity) state
+    Right ["servings-more", identity] ⇒ adjust_servings True identity state
+    Right ["servings-less", identity] ⇒ adjust_servings False identity state
+    Right ["pantry-more", identity, dimension] ⇒ adjust_pantry True identity dimension state
+    Right ["pantry-less", identity, dimension] ⇒ adjust_pantry False identity dimension state
+    _ ⇒ state

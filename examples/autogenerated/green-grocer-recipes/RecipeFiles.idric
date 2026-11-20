@@ -1,0 +1,39 @@
+module RecipeFiles
+
+import RecipeShopping
+import RecipeStorage
+import RecipeFilePlatform
+import Data.IORef
+import Data.Text
+
+export
+data RecipeFile = SavedRecipeAt Text
+
+export
+recipe_file : Text → Either Text RecipeFile
+recipe_file path = case unpack path of
+  '/' :: _ ⇒ Right (SavedRecipeAt path)
+  _ ⇒ Left "Recipe file needs an absolute app-owned path"
+
+export
+save_recipe_file : RecipeFile → Recipe → ShoppingState → IO ShoppingState
+save_recipe_file (SavedRecipeAt path) recipe current =
+  case decode_recipe (encode_recipe recipe) of
+    Left problem ⇒ pure ({ notice := "Recipe not saved: " ++ problem } current)
+    Right admitted ⇒ do
+      result ← newIORef current
+      try_recipe_file (do
+        write_recipe_text path (encode_recipe admitted)
+        writeIORef result (transition (save_recipe admitted) current))
+        (writeIORef result ({ notice := "Recipe save could not be confirmed; current recipes retained" } current))
+      readIORef result
+
+export
+load_recipe_file : RecipeFile → ShoppingState → IO ShoppingState
+load_recipe_file (SavedRecipeAt path) current = do
+  result ← newIORef current
+  try_recipe_file (do
+    text ← read_recipe_text path
+    writeIORef result (restore_recipe text current))
+    (writeIORef result ({ notice := "Recipe file could not be read; previous recipes retained" } current))
+  readIORef result

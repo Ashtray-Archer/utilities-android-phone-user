@@ -1,0 +1,25 @@
+PASS independent minimal recipe file decodes
+PASS minimal recipe encodes to independently expected bytes
+PASS decoded ingredient quantities dimensions and identities are exact
+PASS saved sources preserve exact links Unicode whitespace and notes
+PASS restored recipe adds to existing recipes and revokes review
+PASS restoring same identity replaces one saved recipe
+PASS corrupt recipe preserves saved state and review
+PASS empty recipe file is refused
+PASS unknown schema is refused
+PASS truncated field is refused
+PASS missing delimiter is refused
+PASS nondecimal field size is refused
+PASS negative field size is refused
+PASS trailing fields are refused
+PASS trailing unframed bytes are refused
+PASS zero servings are refused
+PASS nonnumeric servings are refused
+PASS missing declared ingredients are refused
+PASS zero rational denominator is refused
+PASS unknown quantity dimension is refused
+PASS empty source link uses canonical save refusal
+PASS missing recipe identity uses canonical save refusal
+PASS empty draft ingredient list survives persistence
+PASS large exact quantity is not narrowed by storage
+PASS Idric recipe storage semantics

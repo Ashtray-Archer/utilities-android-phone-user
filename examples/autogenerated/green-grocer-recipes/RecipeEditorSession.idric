@@ -1,0 +1,208 @@
+module RecipeEditorSession
+
+import RecipeShopping
+import RecipeStorage
+import RecipeSession
+import RecipeText
+import RecipeDraft
+import Data.List
+import Data.Text
+
+%unbound_implicits off
+
+export
+field_key : draft_field → Text
+field_key recipe_name_field = encode_fields ["name"]
+field_key recipe_servings_field = encode_fields ["servings"]
+field_key (ingredient_name_field index) = encode_fields ["ingredient-name", show index]
+field_key (ingredient_quantity_field index) = encode_fields ["quantity", show index]
+field_key (ingredient_preparation_field index) = encode_fields ["preparation", show index]
+field_key (source_link_field index) = encode_fields ["link", show index]
+field_key (source_note_field index) = encode_fields ["note", show index]
+
+export
+decode_field : Text → Either Text draft_field
+decode_field text = do
+  fields ← decode_fields text
+  case fields of
+    ["name"] ⇒ Right recipe_name_field
+    ["servings"] ⇒ Right recipe_servings_field
+    ["ingredient-name", index] ⇒ map ingredient_name_field (decode_whole index)
+    ["quantity", index] ⇒ map ingredient_quantity_field (decode_whole index)
+    ["preparation", index] ⇒ map ingredient_preparation_field (decode_whole index)
+    ["link", index] ⇒ map source_link_field (decode_whole index)
+    ["note", index] ⇒ map source_note_field (decode_whole index)
+    _ ⇒ Left "Invalid recipe field"
+
+encode_selection : TextSelection → Text
+encode_selection selected = encode_fields
+  [show selected.anchor_unit, show selected.caret_unit,
+   case selected.composing of
+     Nothing ⇒ encode_fields []
+     Just span ⇒ encode_fields [show span.first_unit, show span.after_unit]]
+
+decode_selection : Text → Either Text TextSelection
+decode_selection text = do
+  [first, last, composition] ← decode_fields text | _ ⇒ Left "Invalid text selection"
+  anchor ← decode_whole first
+  caret ← decode_whole last
+  fields ← decode_fields composition
+  span ← case fields of
+    [] ⇒ Right Nothing
+    [left, right] ⇒ do
+      start ← decode_whole left
+      end ← decode_whole right
+      Right (Just (Between start end))
+    _ ⇒ Left "Invalid composing region"
+  Right (SelectedText anchor caret span)
+
+encode_page : editor_page → Text
+encode_page (draft_overview page) = encode_fields ["overview", show page]
+encode_page (ingredient_page index) = encode_fields ["ingredient", show index]
+encode_page (source_page index) = encode_fields ["source", show index]
+encode_page (ingredient_picker index page) = encode_fields ["picker", show index, show page]
+encode_page (typing_field field selected) = encode_fields ["typing", field_key field, encode_selection selected]
+encode_page discard_prompt = encode_fields ["discard"]
+
+decode_page : Text → Either Text editor_page
+decode_page text = do
+  fields ← decode_fields text
+  case fields of
+    ["overview", page] ⇒ map draft_overview (decode_whole page)
+    ["ingredient", index] ⇒ map ingredient_page (decode_whole index)
+    ["source", index] ⇒ map source_page (decode_whole index)
+    ["picker", index, page] ⇒ do
+      item ← decode_whole index
+      number ← decode_whole page
+      Right (ingredient_picker item number)
+    ["typing", field, selected] ⇒ do
+      target ← decode_field field
+      selection ← decode_selection selected
+      Right (typing_field target selection)
+    ["discard"] ⇒ Right discard_prompt
+    _ ⇒ Left "Invalid editor page"
+
+dimension_text : dimension_kind → Text
+dimension_text mass = "mass"
+dimension_text volume = "volume"
+dimension_text count = "count"
+
+decode_dimension : Text → Either Text dimension_kind
+decode_dimension "mass" = Right mass
+decode_dimension "volume" = Right volume
+decode_dimension "count" = Right count
+decode_dimension _ = Left "Invalid ingredient dimension"
+
+encode_ingredient : DraftIngredient → Text
+encode_ingredient item = encode_fields [item.identity.ingredient_text, item.name,
+  item.quantity, dimension_text item.dimension, item.preparation,
+  encode_fields (map ingredient_text item.substitutions)]
+
+decode_ingredient : Text → Either Text DraftIngredient
+decode_ingredient text = do
+  [identity, name, quantity, dimension, preparation, alternatives] ← decode_fields text
+    | _ ⇒ Left "Invalid ingredient draft"
+  kind ← decode_dimension dimension
+  substitutions ← decode_fields alternatives
+  Right (IngredientDraft (IngredientNamed identity) name quantity kind preparation
+    (map IngredientNamed substitutions))
+
+encode_source : RecipeSource → Text
+encode_source source = encode_fields [source.source_link, source.source_note]
+
+decode_source : Text → Either Text RecipeSource
+decode_source text = do
+  [link, note] ← decode_fields text | _ ⇒ Left "Invalid source draft"
+  Right (FromSource link note)
+
+boolean : Bool → Text
+boolean True = "yes"
+boolean False = "no"
+
+read_boolean : Text → Either Text Bool
+read_boolean "yes" = Right True
+read_boolean "no" = Right False
+read_boolean _ = Left "Invalid editor Boolean"
+
+export
+encode_draft : RecipeDraft → Text
+encode_draft draft = encode_fields [draft.identity, boolean draft.existing, draft.name,
+  draft.servings, encode_fields (map encode_ingredient draft.ingredients),
+  encode_fields (map encode_source draft.sources), encode_page draft.page,
+  boolean draft.dirty, draft.notice]
+
+valid_page : RecipeDraft → Bool
+valid_page draft = case draft.page of
+  draft_overview page ⇒ page × 16 <= length draft.ingredients + length draft.sources
+  ingredient_page index ⇒ index < length draft.ingredients
+  source_page index ⇒ index < length draft.sources
+  ingredient_picker index _ ⇒ index < length draft.ingredients
+  typing_field field selected ⇒ case field_text field draft of
+    Nothing ⇒ False
+    Just text ⇒ valid_text_selection text selected
+  discard_prompt ⇒ True
+
+decode_draft : Text → Either Text RecipeDraft
+decode_draft text = do
+  [identity, existing, name, servings, ingredients, sources, page, dirty, notice] ← decode_fields text
+    | _ ⇒ Left "Invalid recipe draft"
+  was_saved ← read_boolean existing
+  ingredient_fields ← decode_fields ingredients
+  items ← traverse decode_ingredient ingredient_fields
+  source_fields ← decode_fields sources
+  links ← traverse decode_source source_fields
+  location ← decode_page page
+  changed ← read_boolean dirty
+  let draft = DraftRecipe identity was_saved name servings items links location changed notice
+      texts = [name, servings] ++ concatMap (\item ⇒ [item.name, item.quantity, item.preparation]) items ++
+        concatMap (\source ⇒ [source.source_link, source.source_note]) links
+  if identity ≟ "" || not (all valid_field_text texts && valid_page draft)
+    then Left "Invalid recipe draft contents" else Right draft
+
+export
+encode_editor : EditorSession → Text
+encode_editor session = encode_fields ["green-grocer-editor-v1", encode_session session.shopping,
+  encode_fields (maybe [] (\draft ⇒ [encode_draft draft]) session.draft), show session.input_serial]
+
+export
+decode_editor : Text → Either Text EditorSession
+decode_editor text = do
+  ["green-grocer-editor-v1", shopping, optional, serial] ← decode_fields text
+    | _ ⇒ Left "Unsupported recipe editor session"
+  state ← decode_session shopping
+  fields ← decode_fields optional
+  draft ← case fields of
+    [] ⇒ Right Nothing
+    [value] ⇒ map Just (decode_draft value)
+    _ ⇒ Left "Invalid optional recipe draft"
+  generation ← decode_whole serial
+  Right (RecipeApp state draft generation)
+
+export
+input_target : EditorSession → Text
+input_target session = case session.draft of
+  Just draft ⇒ case draft.page of
+    typing_field field _ ⇒ encode_fields [draft.identity, field_key field, show session.input_serial]
+    _ ⇒ ""
+  Nothing ⇒ ""
+
+export
+current_field : EditorSession → Maybe FieldText
+current_field session = do
+  draft ← session.draft
+  case draft.page of
+    typing_field field selected ⇒ do
+      text ← field_text field draft
+      Just (EditingText text selected)
+    _ ⇒ Nothing
+
+-- File effects run off the Android UI thread. Only pure keyboard edits may
+-- arrive meanwhile. Preserve that draft when an import finishes late.
+export
+merge_file_effect : EditorSession → EditorSession → EditorSession → EditorSession
+merge_file_effect before latest result =
+  if encode_editor latest ≟ encode_editor before then result
+  else if encode_session latest.shopping ≟ encode_session before.shopping &&
+      map encode_draft result.draft ≟ map encode_draft before.draft
+    then { draft := latest.draft, input_serial := latest.input_serial } result
+    else { shopping.notice := "Concurrent action refused; current draft retained" } latest

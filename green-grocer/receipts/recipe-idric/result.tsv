@@ -1,0 +1,7 @@
+host_semantics	PASS
+runtime_probe_host	PASS
+semantic_mutants	PASS
+c_oracle_execution	NOT_RUN
+android_art	NOT_RUN
+physical_a1	NOT_RUN
+physical_c67	NOT_RUN

@@ -5,9 +5,18 @@
 #include <android/native_window.h>
 #include <jni.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
-/* Disposable Android drawing boundary. All JNI references belong to one frame. */
+/* Keep one Surface/producer connection for the native window's lifetime. */
+typedef struct {
+    JavaVM *vm;
+    ANativeWindow *window;
+    jobject surface;
+    jmethodID release;
+} gg_canvas_window;
+
+/* Other drawing references belong to one frame. */
 typedef struct {
     JNIEnv *env;
     JavaVM *vm;
@@ -17,7 +26,8 @@ typedef struct {
     jmethodID unlock, color, rectangle, text, paint_color, paint_size, measure;
 } gg_canvas;
 
-bool gg_canvas_begin(gg_canvas *canvas, ANativeActivity *activity,
+bool gg_canvas_window_release(gg_canvas_window *window);
+bool gg_canvas_begin(gg_canvas *canvas, gg_canvas_window *retained, ANativeActivity *activity,
                      ANativeWindow *window);
 void gg_canvas_end(gg_canvas *canvas);
 void gg_canvas_clear(gg_canvas *canvas, uint32_t color);
@@ -26,5 +36,9 @@ void gg_canvas_rect(gg_canvas *canvas, float x, float y, float width,
 void gg_canvas_text(gg_canvas *canvas, const char *text, float x,
                     float baseline, float size, uint32_t color);
 float gg_canvas_measure(gg_canvas *canvas, const char *text, float size);
+void gg_canvas_text16(gg_canvas *canvas, const uint16_t *text, size_t units,
+                      float x, float baseline, float size, uint32_t color);
+float gg_canvas_measure16(gg_canvas *canvas, const uint16_t *text, size_t units,
+                         float size);
 
 #endif

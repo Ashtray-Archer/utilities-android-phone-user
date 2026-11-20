@@ -18,6 +18,7 @@ typedef enum { NOTHING, FILTER, ADD, DECREMENT, REMOVE } action;
 typedef struct { rect bounds; action kind; gg_product_id identity; } button;
 typedef struct {
     struct android_app *app;
+    gg_canvas_window drawable;
     bool redraw, selected_only, touching, dragging, scroll_gesture;
     float density, scroll, max_scroll, down_x, down_y, last_y;
     int32_t pointer;
@@ -127,7 +128,7 @@ static void render(screen *state) {
         return;
     }
     gg_canvas canvas;
-    if (!gg_canvas_begin(&canvas, state->app->activity, state->app->window)) return;
+    if (!gg_canvas_begin(&canvas, &state->drawable, state->app->activity, state->app->window)) return;
     float d = state->density;
     rect view = state->viewport;
     float header_height = 128 * d, footer_height = 96 * d;
@@ -253,6 +254,7 @@ static int32_t input(struct android_app *app, AInputEvent *event) {
 
 static void command(struct android_app *app, int32_t kind) {
     screen *state = app->userData;
+    if (kind == APP_CMD_TERM_WINDOW) (void)gg_canvas_window_release(&state->drawable);
     if (kind == APP_CMD_TERM_WINDOW || kind == APP_CMD_LOST_FOCUS || kind == APP_CMD_PAUSE ||
         kind == APP_CMD_WINDOW_RESIZED || kind == APP_CMD_CONTENT_RECT_CHANGED ||
         kind == APP_CMD_CONFIG_CHANGED)
@@ -279,5 +281,6 @@ void android_main(struct android_app *app) {
             render(&state);
         }
     }
+    (void)gg_canvas_window_release(&state.drawable);
     app->userData = NULL;
 }

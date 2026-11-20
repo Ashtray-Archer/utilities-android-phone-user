@@ -1,0 +1,188 @@
+module RecipeEditor
+
+import RecipeShopping
+import RecipeStorage
+import RecipeSession
+import RecipeScreen
+import RecipeText
+import RecipeDraft
+import RecipeEditorSession
+import RecipeEditorScreen
+import Data.List
+import Data.Maybe
+import Data.Text
+
+%unbound_implicits off
+
+export
+begin_editor : EditorSession
+begin_editor = RecipeApp begin_shopping Nothing 0
+
+export
+editor_can_go_back : EditorSession → Bool
+editor_can_go_back session = isJust session.draft || not (null session.shopping.previous_screens)
+
+change_draft : (RecipeDraft → RecipeDraft) → EditorSession → EditorSession
+change_draft change session = { draft := map change session.draft } session
+
+show_page : editor_page → EditorSession → EditorSession
+show_page page = change_draft (\draft ⇒ { page := page, notice := "" } draft)
+
+export
+editor_back : EditorSession → EditorSession
+editor_back session = case session.draft of
+  Nothing ⇒ { shopping := transition go_back session.shopping } session
+  Just draft ⇒ case draft.page of
+    typing_field field _ ⇒ show_page (field_parent field) session
+    ingredient_page _ ⇒ show_page (draft_overview 0) session
+    source_page _ ⇒ show_page (draft_overview 0) session
+    ingredient_picker index _ ⇒ show_page (ingredient_page index) session
+    discard_prompt ⇒ show_page (draft_overview 0) session
+    draft_overview _ ⇒ if draft.dirty then show_page discard_prompt session
+      else { draft := Nothing } session
+
+open_field : draft_field → EditorSession → EditorSession
+open_field field session = case session.draft of
+  Nothing ⇒ session
+  Just draft ⇒ case field_text field draft of
+    Nothing ⇒ session
+    Just text ⇒ { draft := Just ({ page := typing_field field (text_at_end text).selection,
+      notice := "" } draft), input_serial := S session.input_serial } session
+
+change_ingredient : Number → (DraftIngredient → DraftIngredient) → EditorSession → EditorSession
+change_ingredient index change = change_draft (\draft ⇒
+  { ingredients := change_at index change draft.ingredients, dirty := True, notice := "" } draft)
+
+export
+apply_field_command : Text → text_command → EditorSession → (Bool, EditorSession)
+apply_field_command expected command session =
+  if expected ≟ "" || not (expected ≟ input_target session) then (False, session)
+  else case session.draft of
+    Nothing ⇒ (False, session)
+    Just draft ⇒ case draft.page of
+      typing_field field selected ⇒ case field_text field draft of
+        Nothing ⇒ (False, session)
+        Just previous ⇒ case edit_text command (EditingText previous selected) of
+          Left problem ⇒ (False, change_draft (\draft ⇒ { notice := problem } draft) session)
+          Right editing ⇒ (True, { draft := Just ({ page := typing_field field editing.selection,
+            dirty := draft.dirty || not (previous ≟ editing.contents), notice := "" }
+            (change_field field editing.contents draft)) } session)
+      _ ⇒ (False, session)
+
+export
+input_command : Text → Text → Integer → Integer → Either Text text_command
+input_command "commit" text cursor _ = Right (commit_text text cursor)
+input_command "compose" text cursor _ = Right (compose_text text cursor)
+input_command "finish" _ _ _ = Right finish_composition
+input_command "region" _ first last = Right (compose_region first last)
+input_command "select" _ first last = Right (select_text first last)
+input_command "delete-units" _ before after = Right (delete_units before after)
+input_command "delete-characters" _ before after = Right (delete_characters before after)
+input_command "backspace" _ _ _ = Right erase_backward
+input_command "delete" _ _ _ = Right erase_forward
+input_command "left" _ _ _ = Right cursor_left
+input_command "right" _ _ _ = Right cursor_right
+input_command "home" _ _ _ = Right cursor_home
+input_command "end" _ _ _ = Right cursor_end
+input_command "select-all" _ _ _ = Right select_all_text
+input_command "clear" _ _ _ = Right clear_text
+input_command "cut" text first last = Right (cut_selection text first last)
+input_command _ _ _ _ = Left "Unsupported keyboard command"
+
+export
+editor_action : Text → EditorSession → EditorSession
+editor_action token session = if token ≟ "system:back" then editor_back session
+  else if not (visible_editor_action token session) then
+    case session.draft of
+      Nothing ⇒ { shopping.notice := "Action is no longer on this screen" } session
+      Just _ ⇒ change_draft (\draft ⇒ { notice := "Action is no longer on this screen" } draft) session
+  else case decode_fields token of
+    Right ["editor:new"] ⇒ { draft := Just (new_recipe_draft session.shopping) } session
+    Right ["editor:edit", identity] ⇒ case find
+      (\recipe ⇒ recipe.recipe_identity ≟ identity) session.shopping.saved_recipes of
+        Nothing ⇒ session
+        Just recipe ⇒ { draft := Just (draft_from_recipe recipe) } session
+    Right ["editor:field", encoded] ⇒ case decode_field encoded of
+      Left _ ⇒ session
+      Right field ⇒ open_field field session
+    Right ["editor:done"] ⇒ editor_back session
+    Right ["editor:clear"] ⇒
+      let (_, cleared) = apply_field_command (input_target session) clear_text session
+      in { input_serial := S session.input_serial } cleared
+    Right ["editor:cancel"] ⇒ editor_back session
+    Right ["editor:discard"] ⇒ { draft := Nothing } session
+    Right ["editor:keep"] ⇒ show_page (draft_overview 0) session
+    Right ["editor:overview"] ⇒ show_page (draft_overview 0) session
+    Right ["editor:page", page] ⇒ case decode_whole page of
+      Left _ ⇒ session
+      Right index ⇒ show_page (draft_overview index) session
+    Right ["editor:ingredient", item] ⇒ case decode_whole item of
+      Left _ ⇒ session
+      Right index ⇒ show_page (ingredient_page index) session
+    Right ["editor:source", item] ⇒ case decode_whole item of
+      Left _ ⇒ session
+      Right index ⇒ show_page (source_page index) session
+    Right ["editor:add-ingredient"] ⇒ case session.draft of
+      Nothing ⇒ session
+      Just draft ⇒ { draft := Just ({ ingredients := draft.ingredients ++ [new_draft_ingredient session draft],
+        page := ingredient_page (length draft.ingredients), dirty := True, notice := "" } draft) } session
+    Right ["editor:add-source"] ⇒ change_draft (\draft ⇒
+      { sources := draft.sources ++ [FromSource "" ""], page := source_page (length draft.sources),
+        dirty := True, notice := "" } draft) session
+    Right ["editor:remove-ingredient", item] ⇒ case decode_whole item of
+      Left _ ⇒ session
+      Right index ⇒ change_draft (\draft ⇒ { ingredients := remove_at index draft.ingredients,
+        page := draft_overview 0, dirty := True, notice := "" } draft) session
+    Right ["editor:remove-source", item] ⇒ case decode_whole item of
+      Left _ ⇒ session
+      Right index ⇒ change_draft (\draft ⇒ { sources := remove_at index draft.sources,
+        page := draft_overview 0, dirty := True, notice := "" } draft) session
+    Right ["editor:unit", item, dimension] ⇒ case decode_whole item of
+      Left _ ⇒ session
+      Right index ⇒ case dimension of
+        "mass" ⇒ change_ingredient index (\ingredient ⇒ { dimension := mass } ingredient) session
+        "volume" ⇒ change_ingredient index (\ingredient ⇒ { dimension := volume } ingredient) session
+        "count" ⇒ change_ingredient index (\ingredient ⇒ { dimension := count } ingredient) session
+        _ ⇒ session
+    Right ["editor:picker", item, page] ⇒ case (decode_whole item, decode_whole page) of
+      (Right index, Right number) ⇒ show_page (ingredient_picker index number) session
+      _ ⇒ session
+    Right ["editor:choose", item, candidate] ⇒ case (decode_whole item, decode_whole candidate) of
+      (Right index, Right option) ⇒ case at_index option (available_ingredients session.shopping) of
+        Nothing ⇒ session
+        Just chosen ⇒ show_page (ingredient_page index) (change_ingredient index (\ingredient ⇒
+          { identity := chosen.ingredient.ingredient_identity, name := chosen.ingredient.ingredient_name,
+            dimension := chosen.ingredient.ingredient_measure.dimension,
+            substitutions := if same_ingredient ingredient.identity chosen.ingredient.ingredient_identity
+              then ingredient.substitutions else [] } ingredient) session)
+      _ ⇒ session
+    Right ["editor:separate", item] ⇒ case (decode_whole item, session.draft) of
+      (Right index, Just draft) ⇒ change_ingredient index (\ingredient ⇒
+        { identity := (new_draft_ingredient session draft).identity, substitutions := [] } ingredient) session
+      _ ⇒ session
+    Right ["editor:save"] ⇒ case session.draft of
+      Nothing ⇒ session
+      Just draft ⇒ case validate_draft draft of
+        Left problem ⇒ change_draft (\draft ⇒ { notice := problem } draft) session
+        Right _ ⇒ session -- The native effect boundary confirms durable storage.
+    _ ⇒ if isJust session.draft then session
+      else { shopping := activate_control token session.shopping } session
+
+export
+finish_draft_save : Bool → ShoppingState → EditorSession → EditorSession
+finish_draft_save confirmed result session = case session.draft of
+  Nothing ⇒ session
+  Just draft ⇒ if not confirmed then change_draft (\draft ⇒ { notice := result.notice } draft) session
+    else { shopping := (case result.screen of
+      recipe_editor identity ⇒ if identity ≟ draft.identity then result
+        else transition (go_to (recipe_editor draft.identity)) result
+      _ ⇒ transition (go_to (recipe_editor draft.identity)) result), draft := Nothing } session
+
+export
+input_snapshot : EditorSession → Text
+input_snapshot session = case current_field session of
+  Nothing ⇒ encode_fields ["green-grocer-input-v1", "", "", "0", "0", "-1", "-1"]
+  Just editing ⇒ encode_fields ["green-grocer-input-v1", input_target session, editing.contents,
+    show editing.selection.anchor_unit, show editing.selection.caret_unit,
+    maybe "-1" (show . first_unit) editing.selection.composing,
+    maybe "-1" (show . after_unit) editing.selection.composing]

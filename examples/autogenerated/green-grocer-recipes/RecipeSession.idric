@@ -1,0 +1,236 @@
+module RecipeSession
+
+import RecipeShopping
+import RecipeStorage
+import Data.List
+import Data.Text
+
+%unbound_implicits off
+
+-- The native renderer retains this complete checked state as opaque text.
+-- Every ShoppingState field is represented; no quantity crosses an Int32 ABI.
+export
+encode_session : ShoppingState → Text
+
+export
+decode_session : Text → Either Text ShoppingState
+
+encode_list : {0 item_type : Type} → (item_type → Text) → List item_type → Text
+encode_list encode = encode_fields . map encode
+
+decode_list : {0 item_type : Type} → (Text → Either Text item_type) → Text → Either Text (List item_type)
+decode_list decode text = do
+  fields ← decode_fields text
+  traverse decode fields
+
+encode_optional : {0 item_type : Type} → (item_type → Text) → Maybe item_type → Text
+encode_optional encode Nothing = encode_fields []
+encode_optional encode (Just value) = encode_fields [encode value]
+
+decode_optional : {0 item_type : Type} → (Text → Either Text item_type) → Text → Either Text (Maybe item_type)
+decode_optional decode text = do
+  fields ← decode_fields text
+  case fields of
+    [] ⇒ Right Nothing
+    [value] ⇒ map Just (decode value)
+    _ ⇒ Left "Invalid optional session field"
+
+encode_boolean : Bool → Text
+encode_boolean False = "no"
+encode_boolean True = "yes"
+
+decode_boolean : Text → Either Text Bool
+decode_boolean "no" = Right False
+decode_boolean "yes" = Right True
+decode_boolean _ = Left "Invalid session Boolean"
+
+encode_dimension : dimension_kind → Text
+encode_dimension mass = "mass"
+encode_dimension volume = "volume"
+encode_dimension count = "count"
+
+decode_dimension : Text → Either Text dimension_kind
+decode_dimension "mass" = Right mass
+decode_dimension "volume" = Right volume
+decode_dimension "count" = Right count
+decode_dimension _ = Left "Invalid session dimension"
+
+encode_measure : Measure → Text
+encode_measure value = encode_fields [encode_dimension value.dimension,
+  show value.base_amount.numerator, show (denominator value.base_amount)]
+
+decode_measure : Text → Either Text Measure
+decode_measure text = do
+  fields ← decode_fields text
+  case fields of
+    [dimension, numerator, divisor] ⇒ do
+      kind ← decode_dimension dimension
+      top ← decode_whole numerator
+      bottom ← decode_whole divisor
+      case fraction top bottom of
+        Nothing ⇒ Left "Session denominator is zero"
+        Just amount ⇒ Right (Measured kind amount)
+    _ ⇒ Left "Invalid session measure"
+
+encode_store : Store → Text
+encode_store store = encode_fields [store.retailer_identity, store.store_identity]
+
+decode_store : Text → Either Text Store
+decode_store text = do
+  fields ← decode_fields text
+  case fields of
+    [retailer, store] ⇒ Right (AtStore retailer store)
+    _ ⇒ Left "Invalid session store"
+
+encode_selection : Selection → Text
+encode_selection selection = encode_fields
+  [selection.selected_recipe, show (serving_count selection.selected_servings)]
+
+decode_selection : Text → Either Text Selection
+decode_selection text = do
+  fields ← decode_fields text
+  case fields of
+    [identity, servings] ⇒ do
+      portions ← decode_whole servings
+      case portions of
+        0 ⇒ Left "Session serving count is zero"
+        S previous ⇒ Right (Cook identity (Serves previous))
+    _ ⇒ Left "Invalid session selection"
+
+encode_pantry : PantryItem → Text
+encode_pantry item = encode_fields
+  [item.pantry_ingredient.ingredient_text, encode_measure item.pantry_measure]
+
+decode_pantry : Text → Either Text PantryItem
+decode_pantry text = do
+  fields ← decode_fields text
+  case fields of
+    [identity, measured] ⇒ do
+      amount ← decode_measure measured
+      Right (HaveAtHome (IngredientNamed identity) amount)
+    _ ⇒ Left "Invalid session pantry item"
+
+encode_requirement : Requirement → Text
+encode_requirement required = encode_fields
+  [required.required_ingredient.ingredient_text, required.required_name,
+   encode_measure (Measured required.required_dimension required.required_amount),
+   encode_list ingredient_text required.permitted_substitutions]
+
+decode_requirement : Text → Either Text Requirement
+decode_requirement text = do
+  fields ← decode_fields text
+  case fields of
+    [identity, name, measured, alternatives] ⇒ do
+      amount ← decode_measure measured
+      substitutions ← decode_list (Right . IngredientNamed) alternatives
+      Right (Requires (IngredientNamed identity) name amount.dimension amount.base_amount substitutions)
+    _ ⇒ Left "Invalid session requirement"
+
+encode_choice : RequirementStore → Text
+encode_choice store_choice = encode_fields
+  [encode_requirement store_choice.store_requirement, encode_store store_choice.chosen_store]
+
+decode_choice : Text → Either Text RequirementStore
+decode_choice text = do
+  fields ← decode_fields text
+  case fields of
+    [required, store] ⇒ do
+      ingredient ← decode_requirement required
+      location ← decode_store store
+      Right (BuyAt ingredient location)
+    _ ⇒ Left "Invalid session store choice"
+
+encode_availability : availability_kind → Text
+encode_availability in_stock = "in-stock"
+encode_availability out_of_stock = "out-of-stock"
+encode_availability availability_unknown = "unknown"
+
+decode_availability : Text → Either Text availability_kind
+decode_availability "in-stock" = Right in_stock
+decode_availability "out-of-stock" = Right out_of_stock
+decode_availability "unknown" = Right availability_unknown
+decode_availability _ = Left "Invalid session availability"
+
+encode_product : Product → Text
+encode_product product = encode_fields
+  [product.internal_product_identity, encode_store product.product_store,
+   product.retailer_product_identity, encode_optional id product.checkout_identity,
+   product.product_ingredient.ingredient_text, product.product_name,
+   encode_measure product.package_measure, encode_optional show product.observed_cents,
+   encode_availability product.availability, product.observation_identity]
+
+decode_product : Text → Either Text Product
+decode_product text = do
+  fields ← decode_fields text
+  case fields of
+    [internal, location, retailer, checkout, ingredient, name, measured, cents, available, observation] ⇒ do
+      store ← decode_store location
+      checkout_identity ← decode_optional Right checkout
+      amount ← decode_measure measured
+      price ← decode_optional decode_whole cents
+      availability ← decode_availability available
+      Right (SaleableProduct internal store retailer checkout_identity
+        (IngredientNamed ingredient) name amount price availability observation)
+    _ ⇒ Left "Invalid session product"
+
+encode_match : ApprovedMatch → Text
+encode_match approved = encode_fields
+  [encode_requirement approved.matched_requirement, encode_product approved.matched_product,
+   encode_boolean approved.substitution_approved]
+
+decode_match : Text → Either Text ApprovedMatch
+decode_match text = do
+  fields ← decode_fields text
+  case fields of
+    [required, product, substitution] ⇒ do
+      ingredient ← decode_requirement required
+      offered ← decode_product product
+      allowed ← decode_boolean substitution
+      Right (ShopperApproved ingredient offered allowed)
+    _ ⇒ Left "Invalid session approved match"
+
+encode_screen : shopping_screen → Text
+encode_screen recipes_screen = encode_fields ["recipes"]
+encode_screen (recipe_editor identity) = encode_fields ["recipe", identity]
+encode_screen ingredients_screen = encode_fields ["ingredients"]
+encode_screen stores_screen = encode_fields ["stores"]
+encode_screen matches_screen = encode_fields ["matches"]
+encode_screen cart_screen = encode_fields ["cart"]
+
+decode_screen : Text → Either Text shopping_screen
+decode_screen text = do
+  fields ← decode_fields text
+  case fields of
+    ["recipes"] ⇒ Right recipes_screen
+    ["recipe", identity] ⇒ Right (recipe_editor identity)
+    ["ingredients"] ⇒ Right ingredients_screen
+    ["stores"] ⇒ Right stores_screen
+    ["matches"] ⇒ Right matches_screen
+    ["cart"] ⇒ Right cart_screen
+    _ ⇒ Left "Invalid session screen"
+
+encode_session state = encode_fields
+  ["green-grocer-session-v1", encode_list encode_recipe state.saved_recipes,
+   encode_list encode_selection state.selections, encode_list encode_pantry state.pantry,
+   encode_optional encode_store state.selected_store, encode_list encode_choice state.store_choices,
+   encode_list encode_match state.approved_matches, encode_list encode_product state.fresh_products,
+   encode_screen state.screen, encode_list encode_screen state.previous_screens,
+   encode_boolean state.review_approved, state.notice]
+
+decode_session text = do
+  fields ← decode_fields text
+  case fields of
+    ["green-grocer-session-v1", recipes, selections, pantry, store, choices,
+     matches, products, screen, previous, reviewed, notice] ⇒ do
+      saved ← decode_list decode_recipe recipes
+      selected ← decode_list decode_selection selections
+      owned ← decode_list decode_pantry pantry
+      default_store ← decode_optional decode_store store
+      by_ingredient ← decode_list decode_choice choices
+      approved ← decode_list decode_match matches
+      observed ← decode_list decode_product products
+      page ← decode_screen screen
+      history ← decode_list decode_screen previous
+      review ← decode_boolean reviewed
+      Right (Shopping saved selected owned default_store by_ingredient approved observed page history review notice)
+    _ ⇒ Left "Unsupported or incomplete recipe session"

@@ -1,0 +1,55 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 11) {
+  echo 'usage: grease package-recipes.grease APPLICATION BACKEND SDK TEST_KEY BAKSMALI GREASE NATIVE RECIPE_DEX CALLBACK_DEX FRESH_OUTPUT a1|c67|x86_64' >&2
+  exit 2
+}
+var application = ARGV[0]
+var backend = ARGV[1]
+var sdk = ARGV[2]
+var key = ARGV[3]
+var baksmali = ARGV[4]
+var grease = ARGV[5]
+var native = ARGV[6]
+var recipes = ARGV[7]
+var callback = ARGV[8]
+var output = ARGV[9]
+var target = ARGV[10]
+for path in (ARGV[:10]) { if (path[0] !== '/') { echo 'FAIL absolute package paths required' >&2; exit 2 } }
+test ! -e "$output"
+test "$(git -C "$backend" rev-parse HEAD)" = f4e68eb012a69a7648ff5991cd320ec61feb5eaf
+git -C "$backend" diff --quiet HEAD
+var head = $(git -C "$application" rev-parse HEAD)
+test "$(cat "$native/application-revision.txt")" = "$head"
+test "$(awk -F '\t' '$1 == "native_target" {print $2}' "$native/result.tsv")" = "$target"
+sha256sum -c "$native/digests.txt"
+var abi = 'armeabi-v7a'
+if (target === 'c67') { setvar abi = 'arm64-v8a'
+} elif (target === 'x86_64') { setvar abi = 'x86_64'
+} elif (target !== 'a1') { echo 'FAIL unknown recipe APK ABI' >&2; exit 2 }
+mkdir -p "$output/assets"
+cp "$recipes" "$output/assets/recipes.dex"
+cp "$application/green-grocer/android/recipe/AndroidManifest.xml" "$output/AndroidManifest.xml"
+if (target === 'x86_64') {
+  # Only the emulator observation candidate permits run-as; phone candidates
+  # have neither this flag nor native observation logging.
+  sed 's/android:allowBackup="false"/android:debuggable="true" android:allowBackup="false"/' \
+    "$application/green-grocer/android/recipe/AndroidManifest.xml" > "$output/AndroidManifest.xml"
+}
+env ANDROID_HOME="$sdk" ANDROID_BUILD_TOOLS="$sdk/build-tools/36.0.0" \
+ ANDROID_PACKAGE_ID=org.isomorphisms.greengrocer ANDROID_VERSION_CODE=2 ANDROID_VERSION_NAME=0.2 \
+ ANDROID_MIN_SDK=26 ANDROID_TARGET_SDK=36 ANDROID_EXPECTED_LABEL='Green Grocer' \
+ ANDROID_KEYSTORE="$key" ANDROID_KEYSTORE_TYPE=PKCS12 ANDROID_KEY_ALIAS=wegert-debug \
+ ANDROID_STORE_PASSWORD=wegert-debug ANDROID_KEY_PASSWORD=wegert-debug \
+ ANDROID_EXPECTED_CERT_SHA256=de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9 \
+ ANDROID_SOURCE_COMMIT="$head" ANDROID_REQUIRE_NO_DEX=0 \
+ ANDROID_ACTIVITY_CLASS=org.isomorphisms.greengrocer.RecipeActivity \
+ ANDROID_DEX_FILE="$callback" ANDROID_BAKSMALI_JAR="$baksmali" ANDROID_ASSET_DIR="$output/assets" \
+ ANDROID_GREASE="$grease" \
+ bash "$backend/apk/build-nativeactivity-apk.sh" "$output/AndroidManifest.xml" \
+ "$native/libgreen_grocer.so" "$abi" "$output/green-grocer-recipes-$target.apk"
+unzip -p "$output/green-grocer-recipes-$target.apk" assets/recipes.dex > "$output/received-recipes.dex"
+cmp "$recipes" "$output/received-recipes.dex"
+sha256sum "$recipes" "$callback" "$output/green-grocer-recipes-$target.apk" > "$output/digests.txt"
+printf 'package\torg.isomorphisms.greengrocer\nversion_code\t2\nrecipe_DEX_bytes\tPASS\npackaging\tPASS\nproducer_approval\tNOT_RUN\ninstalled_recipe_UI\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$output/result.tsv"
+printf '\033[32mPASS\033[0m stable-signer recipe %s candidate; independent producer and execution gates remain separate\n' "$target"

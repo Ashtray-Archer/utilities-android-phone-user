@@ -1,0 +1,2 @@
+# Preserve raw compiler evidence, including its original final blank line.
+*.anf -whitespace

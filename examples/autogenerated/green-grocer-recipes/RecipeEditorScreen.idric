@@ -1,0 +1,133 @@
+module RecipeEditorScreen
+
+import RecipeShopping
+import RecipeStorage
+import RecipeScreen
+import RecipeText
+import RecipeDraft
+import RecipeEditorSession
+import Data.List
+import Data.Text
+
+%unbound_implicits off
+
+button : Text → List Text → RecipeControl
+button label fields = Control label (encode_fields fields)
+
+summary : Text → Text
+summary text = if length (unpack text) > 80 then pack (take 80 (unpack text)) ++ "…" else text
+
+field_row : draft_field → Text → RecipeRow
+field_row field text = Row (field_name field ++ ": " ++
+  (if text ≟ "" then "(empty)" else summary text))
+  [button "Edit" ["editor:field", field_key field]]
+
+unit_name : dimension_kind → Text
+unit_name mass = "g"
+unit_name volume = "mL"
+unit_name count = "each"
+
+indexed : {0 item_type : Type} → (Number → item_type → RecipeRow) → List item_type → List RecipeRow
+indexed describe = collect 0
+  where
+    collect : Number → List item_type → List RecipeRow
+    collect _ [] = []
+    collect index (first :: rest) = describe index first :: collect (S index) rest
+
+overview : RecipeDraft → Number → List RecipeRow
+overview draft page =
+  [Row "Changes are saved only when you choose Save recipe."
+    [button "Save recipe" ["editor:save"], button "Cancel" ["editor:cancel"]],
+   field_row recipe_name_field draft.name,
+   field_row recipe_servings_field draft.servings,
+   Row (show (length draft.ingredients) ++ " ingredients; " ++ show (length draft.sources) ++ " sources")
+     [button "Add ingredient" ["editor:add-ingredient"], button "Add source" ["editor:add-source"]]] ++
+  take 16 (drop (page × 16)
+    (indexed (\index, item ⇒ Row
+      ((if item.name ≟ "" then "Unnamed ingredient" else summary item.name) ++ ": " ++
+        summary item.quantity ++ " " ++ unit_name item.dimension)
+      [button "Edit ingredient" ["editor:ingredient", show index]]) draft.ingredients ++
+     indexed (\index, source ⇒ Row ("Source: " ++ summary source.source_link)
+       [button "Edit source" ["editor:source", show index]]) draft.sources)) ++
+  [Row ("Items page " ++ show (S page))
+    ((if page > 0 then [button "Previous" ["editor:page", show (minus page 1)]] else []) ++
+     (if S page × 16 < length draft.ingredients + length draft.sources
+       then [button "Next" ["editor:page", show (S page)]] else []))]
+
+ingredient_rows : Number → DraftIngredient → List RecipeRow
+ingredient_rows index item =
+  [Row "Ingredient"
+    [button "Back" ["editor:overview"], button "Remove" ["editor:remove-ingredient", show index]],
+   field_row (ingredient_name_field index) item.name,
+   field_row (ingredient_quantity_field index) item.quantity,
+   Row ("Quantity unit: " ++ unit_name item.dimension)
+     [button "g" ["editor:unit", show index, "mass"],
+      button "mL" ["editor:unit", show index, "volume"],
+      button "each" ["editor:unit", show index, "count"]],
+   field_row (ingredient_preparation_field index) item.preparation,
+   Row "Choose an existing ingredient to combine its shopping quantities with this one. Names alone do not combine ingredients."
+     [button "Use existing" ["editor:picker", show index, "0"],
+      button "Keep separate" ["editor:separate", show index]],
+   Row (show (length item.substitutions) ++ " saved substitution choices retained") []]
+
+source_rows : Number → RecipeSource → List RecipeRow
+source_rows index source =
+  [Row "Recipe source"
+    [button "Back" ["editor:overview"], button "Remove" ["editor:remove-source", show index]],
+   field_row (source_link_field index) source.source_link,
+   field_row (source_note_field index) source.source_note]
+
+picker_rows : ShoppingState → Number → Number → List RecipeRow
+picker_rows state index page =
+  let options = available_ingredients state
+  in [Row "Choose the ingredient whose shopping quantities should be combined."
+        [button "Back" ["editor:ingredient", show index]]] ++
+     take 16 (drop (page × 16) (indexed (\candidate, option ⇒ Row
+       (summary option.ingredient.ingredient_name ++ " (" ++ unit_name option.ingredient.ingredient_measure.dimension ++
+        ")\nFrom " ++ summary option.recipe_name)
+       [button "Use ingredient" ["editor:choose", show index, show candidate]]) options)) ++
+     [Row (if null options then "No saved ingredients to choose from" else "Ingredient choices")
+       ((if page > 0 then [button "Previous" ["editor:picker", show index, show (minus page 1)]] else []) ++
+        (if S page × 16 < length options
+          then [button "Next" ["editor:picker", show index, show (S page)]] else []))]
+
+draft_view : ShoppingState → RecipeDraft → RecipeView
+draft_view shopping draft = case draft.page of
+  draft_overview page ⇒ View (if draft.existing then "Edit recipe" else "New recipe") draft.notice (overview draft page)
+  ingredient_page index ⇒ View "Edit ingredient" draft.notice
+    (maybe [Row "Ingredient is missing" [button "Back" ["editor:overview"]]]
+      (ingredient_rows index) (at_index index draft.ingredients))
+  source_page index ⇒ View "Edit source" draft.notice
+    (maybe [Row "Source is missing" [button "Back" ["editor:overview"]]]
+      (source_rows index) (at_index index draft.sources))
+  ingredient_picker index page ⇒ View "Choose ingredient" draft.notice (picker_rows shopping index page)
+  typing_field field selected ⇒
+    let editing = EditingText (maybe "" id (field_text field draft)) selected
+    in View (field_name field) draft.notice
+      [Row "" [button "Done" ["editor:done"], button "Clear" ["editor:clear"],
+        Control "Paste" "platform:paste-recipe-field"],
+       Row (text_window editing) [],
+       Row "" [Control "Keyboard" "platform:recipe-keyboard"],
+       Row "Text stays in this draft until you save the recipe." []]
+  discard_prompt ⇒ View "Discard changes?" "Your saved recipe has not changed."
+    [Row "Discard this unsaved draft?"
+      [button "Keep editing" ["editor:keep"], button "Discard" ["editor:discard"]]]
+
+add_button : RecipeControl → RecipeView → RecipeView
+add_button button view = case view.rows of
+  [] ⇒ view
+  first :: rest ⇒ { rows := { controls := first.controls ++ [button] } first :: rest } view
+
+export
+editor_view : EditorSession → RecipeView
+editor_view session = case session.draft of
+  Just draft ⇒ draft_view session.shopping draft
+  Nothing ⇒ case session.shopping.screen of
+    recipes_screen ⇒ add_button (button "New recipe" ["editor:new"]) (recipe_view session.shopping)
+    recipe_editor identity ⇒ add_button (button "Edit recipe" ["editor:edit", identity]) (recipe_view session.shopping)
+    _ ⇒ recipe_view session.shopping
+
+export
+visible_editor_action : Text → EditorSession → Bool
+visible_editor_action token session = any (\row ⇒ any (\control ⇒ control.action_token ≟ token) row.controls)
+  (editor_view session).rows

@@ -1,0 +1,14 @@
+PASS independent minimal recipe file decodes
+PASS minimal recipe encodes to independently expected bytes
+PASS decoded ingredient quantities dimensions and identities are exact
+PASS saved sources preserve exact links Unicode whitespace and notes
+PASS restored recipe adds to existing recipes and revokes review
+PASS restoring same identity replaces one saved recipe
+PASS corrupt recipe preserves saved state and review
+PASS empty recipe file is refused
+PASS unknown schema is refused
+PASS truncated field is refused
+PASS missing delimiter is refused
+PASS nondecimal field size is refused
+PASS negative field size is refused
+FAIL trailing fields are refused

@@ -1,0 +1,34 @@
+#!/usr/bin/env grease
+# Fresh independent C specimen execution; not an Android/NDK qualification.
+if (len(ARGV) !== 4) { echo 'usage: grease check-cart-host.grease APPLICATION ICK_SOURCE QUALIFIED_COMPILER NEW_OUTPUT' >&2; exit 2 }
+var application = ARGV[0]
+var ick_source = ARGV[1]
+var compiler = ARGV[2]
+var output = ARGV[3]
+for path in ([application, ick_source, compiler, output]) {
+  if (len(path) === 0 or path[0] !== '/') { echo 'FAIL absolute paths required' >&2; exit 2 }
+}
+test ! -e "$output"
+test "$(git -C "$ick_source" rev-parse HEAD)" = fbe86e23d55cfec2000c08e61deea2a407fd7175
+git -C "$ick_source" diff --quiet HEAD
+test -x "$compiler"
+mkdir -p "$output"
+"$compiler" -dumpmachine > "$output/target.txt"
+rg -x -F x86_64-pc-linux-gnu "$output/target.txt"
+git -C "$application" rev-parse HEAD > "$output/application-revision.txt"
+git -C "$ick_source" rev-parse HEAD > "$output/ick-revision.txt"
+var cc1 = $("$compiler" -print-prog-name=cc1)
+test -x "$cc1"
+sha256sum "$compiler" "$cc1" "$application/green-grocer/model/cart.c" \
+  "$application/green-grocer/model/cart.h" "$application/green-grocer/model/cart_test.c" \
+  "$application/green-grocer/fixtures/catalog.c" "$application/green-grocer/fixtures/catalog.h" \
+  > "$output/inputs.sha256"
+"$compiler" -std=c17 -O2 -fno-link-libatomic -Wall -Wextra -Werror -Wpedantic -Wshadow \
+  "$application/green-grocer/model/cart.c" "$application/green-grocer/fixtures/catalog.c" \
+  "$application/green-grocer/model/cart_test.c" -o "$output/cart-test" \
+  > "$output/compiler.txt" 2>&1
+sha256sum "$output/cart-test" > "$output/executable.sha256"
+"$output/cart-test" > "$output/execution.txt" 2>&1
+rg -x -F 'PASS Green Grocer cart semantic cases' "$output/execution.txt"
+printf 'C_cart_host\tPASS\nrecipe_C_differential\tNOT_RUN\nAndroid_compile\tNOT_RUN\n' > "$output/result.tsv"
+printf '\033[32mPASS\033[0m unchanged C cart specimen executed through the qualified host ICK path\n'

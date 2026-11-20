@@ -1,0 +1,225 @@
+module RecipeEditorChecks
+
+import RecipeShopping
+import RecipeStorage
+import RecipeSession
+import RecipeScreen
+import RecipeText
+import RecipeDraft
+import RecipeEditorSession
+import RecipeEditorScreen
+import RecipeEditor
+import Data.List
+import Data.Text
+import System
+
+click : List Text → EditorSession → EditorSession
+click fields = editor_action (encode_fields fields)
+
+field : draft_field → EditorSession → EditorSession
+field target = click ["editor:field", field_key target]
+
+type : Text → EditorSession → EditorSession
+type text session = snd (apply_field_command (input_target session) (commit_text text 1) session)
+
+name_open : EditorSession
+name_open = field recipe_name_field (click ["editor:new"] begin_editor)
+
+named : EditorSession
+named = click ["editor:done"] (type "Soup λ🦉" name_open)
+
+with_ingredient : EditorSession
+with_ingredient = click ["editor:add-ingredient"] named
+
+quantity_open : EditorSession
+quantity_open = field (ingredient_quantity_field 0)
+  (click ["editor:done"] (type "Rice" (field (ingredient_name_field 0) with_ingredient)))
+
+complete : EditorSession
+complete = click ["editor:overview"] (click ["editor:done"] (type "1.25" quantity_open))
+
+unicode : Text
+unicode = "A🦉é食" ++ pack [chr 0] ++ "Z"
+
+texts : List text_command → FieldText → Either Text FieldText
+texts [] editing = Right editing
+texts (command :: rest) editing = edit_text command editing >>= texts rest
+
+observed : Text → Number → Number → Maybe (Number, Number) → Either Text FieldText → Bool
+observed text anchor caret composition (Left _) = False
+observed text anchor caret composition (Right editing) =
+  editing.contents ≟ text && editing.selection.anchor_unit ≟ anchor &&
+  editing.selection.caret_unit ≟ caret &&
+  map (\span ⇒ (span.first_unit, span.after_unit)) editing.selection.composing ≟ composition
+
+draft_name : EditorSession → Text
+draft_name session = maybe "" name session.draft
+
+saved_recipe : Recipe
+saved_recipe = SavedRecipe "existing" "Old" (Serves 1)
+  [Needs (IngredientNamed "rice") "Rice" (Measured mass (Fraction 3 1)) "rinse"
+    [IngredientNamed "lentils"]] [FromSource "https://example.org" unicode]
+
+existing : EditorSession
+existing = RecipeApp (transition (go_to (recipe_editor "existing"))
+  ({ review_approved := True } (transition (save_recipe saved_recipe) begin_shopping))) Nothing 0
+
+changed : EditorSession
+changed = click ["editor:done"] (type " changed" (field recipe_name_field
+  (click ["editor:edit", "existing"] existing)))
+
+checks : List (Text, Bool)
+checks =
+  [("explicit SDK replacement is one Unicode-safe edit", observed "A食B" 2 2 Nothing
+     (edit_text (replace_text 1 3 "食" 1) (text_at_end "A🦉B"))),
+   ("cut refuses a stale selection before deleting", let editing = EditingText "A🦉B" (SelectedText 1 3 Nothing)
+     in observed "AB" 1 1 Nothing (edit_text (cut_selection "🦉" 1 3) editing) &&
+       (case edit_text (cut_selection "changed" 1 3) editing of Left _ ⇒ True; _ ⇒ False)),
+   ("UTF-16 offsets include whole emoji, combining marks and NUL", utf16_units unicode ≟ 8),
+   ("composition replaces its previous region", observed "Tuğba" 5 5 Nothing
+     (texts [compose_text "Tug" 1, compose_text "Tuğ" 1, commit_text "Tuğba" 1] (text_at_end ""))),
+   ("negative cursor position is relative to replacement start", observed "abXYcd" 1 1 Nothing
+     (texts [select_text 2 2, commit_text "XY" (-1)] (text_at_end "abcd"))),
+   ("replacement preserves text on either side of reversed selection", observed "a食d" 2 2 Nothing
+     (texts [select_text 3 1, commit_text "食" 1] (text_at_end "abcd"))),
+   ("selection inside a surrogate pair refuses", case
+      edit_text (select_text 2 2) (text_at_end "A🦉B") of Left _ ⇒ True; _ ⇒ False),
+   ("backspace deletes one complete Unicode code point", observed "A" 1 1 Nothing
+     (edit_text erase_backward (text_at_end "A🦉"))),
+   ("forward delete preserves the following character", observed "AB" 1 1 Nothing
+     (texts [select_text 1 1, erase_forward] (text_at_end "A🦉B"))),
+   ("surrounding deletion protects selection and composition", observed "XY" 0 2 (Just (0, 2))
+     (texts [compose_region 2 4, select_text 2 4, delete_characters 2 2] (text_at_end "abXYcd"))),
+   ("UTF-16 deletion never leaves an isolated surrogate", observed "AB" 1 1 Nothing
+     (texts [select_text 3 3, delete_units 1 0] (text_at_end "A🦉B"))),
+   ("composition finish keeps exact Unicode text", observed unicode 8 8 Nothing
+     (texts [compose_text unicode 1, finish_composition] (text_at_end ""))),
+   ("clipboard replacement is length aware through NUL", observed unicode 8 8 Nothing
+     (texts [select_all_text, commit_text unicode 1] (text_at_end "old"))),
+   ("negative deletion counts refuse", case edit_text (delete_units (-1) 0) (text_at_end "a") of
+      Left _ ⇒ True; _ ⇒ False),
+   ("fractional quantity stays exact", case parse_quantity "7/13" of
+      Right amount ⇒ amount.numerator ≟ 7 && denominator amount ≟ 13
+      Left _ ⇒ False),
+   ("decimal quantity stays exact", case parse_quantity "1.25" of
+      Right amount ⇒ equal_amount amount (Fraction 5 3)
+      Left _ ⇒ False),
+   ("leading-point decimal stays exact", case parse_quantity ".125" of
+      Right amount ⇒ equal_amount amount (Fraction 1 7)
+      Left _ ⇒ False),
+   ("huge quantity does not cross a machine count", case parse_quantity "18446744073709551617/3" of
+      Right amount ⇒ amount.numerator ≟ 18446744073709551617 && denominator amount ≟ 3
+      Left _ ⇒ False),
+   ("zero denominator and malformed quantities refuse", all (\text ⇒ case parse_quantity text of
+      Left _ ⇒ True; Right _ ⇒ False) ["1/0", "1/2/3", "1.2.3", "1.", "-2", "", "1e3"]),
+   ("typing leaves saved shopping and review unchanged", encode_session changed.shopping ≟
+      encode_session existing.shopping && changed.shopping.review_approved),
+   ("editable fields use actual draft values", draft_name named ≟ "Soup λ🦉"),
+   ("old keyboard connection cannot write to another field", let
+      (accepted, retained) = apply_field_command (input_target name_open) (commit_text "wrong" 1) quantity_open
+      in not accepted && encode_editor retained ≟ encode_editor quantity_open),
+   ("reopening the same field rejects its old connection", let
+      reopened = field recipe_name_field named
+      (accepted, retained) = apply_field_command (input_target name_open) (commit_text "wrong" 1) reopened
+      in not accepted && draft_name retained ≟ "Soup λ🦉"),
+   ("complete draft validates the exact ingredient", case complete.draft of
+      Just draft ⇒ case validate_draft draft of
+        Right recipe ⇒ recipe.recipe_name ≟ "Soup λ🦉" &&
+          (case recipe.recipe_ingredients of
+            [item] ⇒ item.ingredient_name ≟ "Rice" && equal_amount item.ingredient_measure.base_amount (Fraction 5 3)
+            _ ⇒ False)
+        Left _ ⇒ False
+      Nothing ⇒ False),
+   ("invalid servings retain draft and saved recipe", let
+      bad = click ["editor:save"] (click ["editor:done"]
+        (type "0" (snd (apply_field_command (input_target (field recipe_servings_field changed)) clear_text
+          (field recipe_servings_field changed)))))
+      in encode_session bad.shopping ≟ encode_session existing.shopping &&
+        maybe False (\draft ⇒ draft.servings ≟ "0" && not (draft.notice ≟ "")) bad.draft),
+   ("failed durable save retains draft and review", let
+      failed = finish_draft_save False ({ notice := "Disk full" } changed.shopping) changed
+      in encode_session failed.shopping ≟ encode_session existing.shopping &&
+        maybe False (\draft ⇒ draft.name ≟ "Old changed" && draft.notice ≟ "Disk full") failed.draft),
+   ("confirmed durable save revokes review and closes draft", case changed.draft of
+      Just draft ⇒ case validate_draft draft of
+        Right recipe ⇒ let saved = finish_draft_save True (transition (save_recipe recipe) changed.shopping) changed
+          in maybe True (\_ ⇒ False) saved.draft && not saved.shopping.review_approved &&
+             any (\recipe ⇒ recipe.recipe_name ≟ "Old changed") saved.shopping.saved_recipes
+        _ ⇒ False
+      _ ⇒ False),
+   ("dirty cancel asks before discarding", let cancelled = click ["editor:cancel"] changed in
+      (editor_view cancelled).title ≟ "Discard changes?" &&
+      draft_name (click ["editor:keep"] cancelled) ≟ "Old changed" &&
+      maybe True (\_ ⇒ False) (click ["editor:discard"] cancelled).draft),
+   ("draft codec preserves Unicode, composition and original alternatives", let
+      composing = snd (apply_field_command (input_target (field recipe_name_field changed))
+        (compose_text unicode 1) (field recipe_name_field changed))
+      in case decode_editor (encode_editor composing) of
+        Right restored ⇒ input_target restored ≟ input_target composing &&
+          (case (current_field restored, restored.draft) of
+            (Just editing, Just draft) ⇒ editing.contents ≟ "Old changed" ++ unicode &&
+              map (\span ⇒ (span.first_unit, span.after_unit)) editing.selection.composing ≟ Just (11, 19) &&
+              (case draft.ingredients of [item] ⇒ map ingredient_text item.substitutions ≟ ["lentils"]; _ ⇒ False) &&
+              (case draft.sources of [source] ⇒ source.source_note ≟ unicode; _ ⇒ False)
+            _ ⇒ False)
+        Left _ ⇒ False),
+   ("late import keeps newer keyboard edits", let
+      result = { shopping := transition (save_recipe saved_recipe) name_open.shopping } name_open
+      latest = type "typing" name_open
+      merged = merge_file_effect name_open latest result
+      in draft_name merged ≟ "typing" && length merged.shopping.saved_recipes ≟ 1),
+   ("concurrent shopping change cannot be overwritten", let
+      latest = { shopping := transition (save_recipe saved_recipe) named.shopping } named
+      merged = merge_file_effect name_open latest begin_editor
+      in length merged.shopping.saved_recipes ≟ 1 && draft_name merged ≟ "Soup λ🦉"),
+   ("same name does not silently reuse an ingredient identity", case with_ingredient.draft of
+      Just draft ⇒ case draft.ingredients of
+        [item] ⇒ not (item.identity.ingredient_text ≟ "rice")
+        _ ⇒ False
+      _ ⇒ False),
+   ("source removal and ingredient removal retain a valid overview", let
+      removed = click ["editor:remove-source", "0"] (click ["editor:add-source"] complete)
+      in maybe False (\draft ⇒ null draft.sources) removed.draft &&
+        (case decode_editor (encode_editor removed) of Right _ ⇒ True; Left _ ⇒ False)),
+   ("opaque session rejects trailing and missing fields", case
+      (decode_editor (encode_editor complete ++ "1:x"), decode_editor "") of
+        (Left _, Left _) ⇒ True
+        _ ⇒ False),
+   ("full text budget supports editing without recursive stack growth", let
+      text = pack (replicate 262144 'x')
+      in case edit_text erase_backward (text_at_end text) of
+        Right editing ⇒ utf16_units editing.contents ≟ 262143 &&
+          editing.selection.caret_unit ≟ 262143 &&
+          (case edit_text (commit_text "ab" 1) editing of Left _ ⇒ True; _ ⇒ False)
+        Left _ ⇒ False),
+   ("unit changes retain exact quantities in their separate dimension", let
+      changed_unit = click ["editor:unit", "0", "volume"] (click ["editor:ingredient", "0"] complete)
+      in case changed_unit.draft of
+        Just draft ⇒ case validate_draft draft of
+          Right recipe ⇒ case recipe.recipe_ingredients of
+            [ingredient] ⇒ same_dimension ingredient.ingredient_measure.dimension volume &&
+              equal_amount ingredient.ingredient_measure.base_amount (Fraction 5 3)
+            _ ⇒ False
+          _ ⇒ False
+        _ ⇒ False),
+   ("explicit ingredient reuse combines identity without new substitution approval", let
+      recipes = RecipeApp (transition (go_to recipes_screen) existing.shopping) Nothing 0
+      fresh = click ["editor:add-ingredient"] (click ["editor:new"] recipes)
+      chosen = click ["editor:choose", "0", "0"] (click ["editor:picker", "0", "0"] fresh)
+      in case chosen.draft of
+        Just draft ⇒ case draft.ingredients of
+          [ingredient] ⇒ ingredient.identity.ingredient_text ≟ "rice" && ingredient.name ≟ "Rice" &&
+            null ingredient.substitutions && same_dimension ingredient.dimension mass
+          _ ⇒ False
+        _ ⇒ False)]
+
+%export "dex:recipe_editor_checks"
+main : IO ()
+main = do
+  -- A nullary checked DEX function is not a memoized host CAF. Retain the
+  -- observed booleans rather than evaluating the large fixtures again for
+  -- the final verdict and then once more merely to count the cases.
+  observed ← traverse (\(name, passed) ⇒ do
+    putStrLn ((if passed then "PASS " else "FAIL ") ++ name)
+    pure passed) checks
+  if all id observed then putStrLn ("recipe_editor_checks " ++ show (length observed)) else exitFailure

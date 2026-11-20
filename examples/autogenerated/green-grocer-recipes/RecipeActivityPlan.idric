@@ -1,0 +1,115 @@
+module RecipeActivityPlan
+
+import Backend.DEX.FrameworkClasses
+import Backend.DEX.IR
+import Backend.DEX.Encode
+import Data.List
+import System
+
+-- A checked platform callback shell only. Idriç's recipe program is separately
+-- emitted direct DEX; the native method transports the chosen document URI.
+activity : FrameworkClass
+activity = Subclass "Lorg/isomorphisms/greengrocer/RecipeActivity;"
+  "Landroid/app/NativeActivity;" (Just "green_grocer")
+  [Callback "onActivityResult" "V" ["I", "I", "Landroid/content/Intent;"]]
+
+picker_request : FrameworkClass
+picker_request = Subclass "Lorg/isomorphisms/greengrocer/RecipeDocumentRequest;"
+  "Ljava/lang/Object;" Nothing [Callback "run" "V" []]
+
+input_view : FrameworkClass
+input_view = Subclass "Lorg/isomorphisms/greengrocer/RecipeInputView;"
+  "Landroid/view/View;" Nothing
+  [Callback "onCheckIsTextEditor" "Z" [],
+   Callback "onCreateInputConnection" "Landroid/view/inputmethod/InputConnection;"
+     ["Landroid/view/inputmethod/EditorInfo;"],
+   Callback "onKeyDown" "Z" ["I", "Landroid/view/KeyEvent;"],
+   Callback "onKeyUp" "Z" ["I", "Landroid/view/KeyEvent;"]]
+
+input_request : FrameworkClass
+input_request = Subclass "Lorg/isomorphisms/greengrocer/RecipeInputRequest;"
+  "Ljava/lang/Object;" Nothing [Callback "run" "V" []]
+
+connection_callbacks : List NativeCallback
+connection_callbacks =
+  [Callback "getEditable" "Landroid/text/Editable;" [],
+   Callback "commitText" "Z" ["Ljava/lang/CharSequence;", "I"],
+   Callback "setComposingText" "Z" ["Ljava/lang/CharSequence;", "I"],
+   Callback "setComposingRegion" "Z" ["I", "I"],
+   Callback "finishComposingText" "Z" [],
+   Callback "setSelection" "Z" ["I", "I"],
+   Callback "deleteSurroundingText" "Z" ["I", "I"],
+   Callback "deleteSurroundingTextInCodePoints" "Z" ["I", "I"],
+   Callback "sendKeyEvent" "Z" ["Landroid/view/KeyEvent;"],
+   Callback "performEditorAction" "Z" ["I"],
+   Callback "performContextMenuAction" "Z" ["I"],
+   Callback "beginBatchEdit" "Z" [], Callback "endBatchEdit" "Z" [],
+   Callback "closeConnection" "V" []]
+
+input_connection : FrameworkClass
+input_connection = Subclass "Lorg/isomorphisms/greengrocer/RecipeInputConnection;"
+  "Landroid/view/inputmethod/BaseInputConnection;" Nothing connection_callbacks
+
+-- Keep newer SDK types in a separately loaded class. API29 never resolves
+-- TextAttribute. Its BaseInputConnection methods are covered above.
+modern_connection : FrameworkClass
+modern_connection = Subclass "Lorg/isomorphisms/greengrocer/RecipeModernInputConnection;"
+  "Landroid/view/inputmethod/BaseInputConnection;" Nothing
+  (connection_callbacks ++
+   [Callback "commitText" "Z" ["Ljava/lang/CharSequence;", "I", "Landroid/view/inputmethod/TextAttribute;"],
+    Callback "setComposingText" "Z" ["Ljava/lang/CharSequence;", "I", "Landroid/view/inputmethod/TextAttribute;"],
+    Callback "setComposingRegion" "Z" ["I", "I", "Landroid/view/inputmethod/TextAttribute;"],
+    Callback "replaceText" "Z" ["I", "I", "Ljava/lang/CharSequence;", "I", "Landroid/view/inputmethod/TextAttribute;"]])
+
+-- The public typed DEX plan supports explicit SDK constructors. The
+-- convenience FrameworkClass no-argument constructor is replaced here;
+-- no hand-assembled application instructions or Java source are involved.
+constructor : Text → List FrameworkValueType → MethodPlan
+constructor superclass arguments =
+  let registers = map MkRegister [0 .. cast (length arguments)]
+  in MkBoundMethodPlan "checked SDK constructor" "<init>" (cast (length arguments))
+    arguments VoidValue (cast (S (length arguments)))
+    [InvokeMethod (Invoke InvokeDirect
+      (MkMethodReference (MkTypeReference superclass) "<init>" arguments VoidValue)
+      registers Nothing), ReturnVoid] ConstructorMethod
+
+covering
+with_constructor : FrameworkClass → List FrameworkValueType → Either Text FilePlan
+with_constructor cls arguments = do
+  plan ← framework_class_plan cls []
+  Right ({ methods := constructor cls.superclass arguments ::
+    filter (\method ⇒ not (method.mode ≟ ConstructorMethod)) plan.methods } plan)
+
+covering
+plans : Either Text (List FilePlan)
+plans = do
+  activity_plan ← framework_class_plan activity []
+  document_plan ← framework_class_plan picker_request ["Ljava/lang/Runnable;"]
+  request_plan ← framework_class_plan input_request ["Ljava/lang/Runnable;"]
+  view_plan ← with_constructor input_view [ReferenceValue (MkTypeReference "Landroid/content/Context;")]
+  connection_plan ← with_constructor input_connection
+    [ReferenceValue (MkTypeReference "Landroid/view/View;"), ExistingValue BooleanValue]
+  modern_plan ← with_constructor modern_connection
+    [ReferenceValue (MkTypeReference "Landroid/view/View;"), ExistingValue BooleanValue]
+  Right [activity_plan, document_plan, request_plan, view_plan, connection_plan, modern_plan]
+
+covering
+emit_classes : Text → IO (Either Text ())
+emit_classes destination = case RecipeActivityPlan.plans of
+  Left problem ⇒ pure (Left problem)
+  Right classes ⇒ case encode_dex_classes classes of
+    Left problem ⇒ pure (Left problem)
+    Right bytes ⇒ write_dex destination bytes
+
+-- The reusable framework-plan writer exposes a covering file/validation API.
+covering
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_, destination] ⇒ do
+      result ← emit_classes destination
+      case result of
+        Left problem ⇒ do putStrLn problem; exitFailure
+        Right () ⇒ putStrLn "PASS checked Green Grocer NativeActivity, document and text-input callbacks emitted"
+    _ ⇒ do putStrLn "usage: recipe-activity-plan OUTPUT.dex"; exitFailure

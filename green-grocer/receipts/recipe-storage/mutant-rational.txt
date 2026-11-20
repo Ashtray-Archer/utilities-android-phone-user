@@ -1,0 +1,3 @@
+PASS independent minimal recipe file decodes
+PASS minimal recipe encodes to independently expected bytes
+FAIL decoded ingredient quantities dimensions and identities are exact

@@ -1,0 +1,258 @@
+module RecipeText
+
+import Data.List
+import Data.Text
+
+%unbound_implicits off
+
+public export
+record TextRange where
+  constructor Between
+  first_unit : Number
+  after_unit : Number
+
+public export
+record TextSelection where
+  constructor SelectedText
+  anchor_unit : Number
+  caret_unit : Number
+  composing : Maybe TextRange
+
+public export
+record FieldText where
+  constructor EditingText
+  contents : Text
+  selection : TextSelection
+
+public export
+choice text_command one_of
+  commit_text Text Integer
+  compose_text Text Integer
+  replace_text Integer Integer Text Integer
+  cut_selection Text Integer Integer
+  finish_composition
+  compose_region Integer Integer
+  select_text Integer Integer
+  delete_units Integer Integer
+  delete_characters Integer Integer
+  erase_backward
+  erase_forward
+  cursor_left
+  cursor_right
+  cursor_home
+  cursor_end
+  select_all_text
+  clear_text
+
+export
+character_units : Char → Number
+character_units character = if ord character > 65535 then 2 else 1
+
+export
+utf16_units : Text → Number
+utf16_units = foldl (\units, character ⇒ units + character_units character) 0 . unpack
+
+export
+valid_field_text : Text → Bool
+valid_field_text text = utf16_units text <= 262144 &&
+  all (\character ⇒ let point = ord character in
+    point >= 0 && (point < 55296 || (point > 57343 && point <= 1114111))) (unpack text)
+
+export
+text_at_end : Text → FieldText
+text_at_end text = EditingText text (SelectedText (utf16_units text) (utf16_units text) Nothing)
+
+-- Both offsets are UTF-16 boundaries, not recipe numeric values.
+split_units : Number → List Char → Maybe (List Char, List Char)
+split_units requested characters = walk requested characters []
+  where
+    walk : Number → List Char → List Char → Maybe (List Char, List Char)
+    walk 0 remaining reversed = Just (reverse reversed, remaining)
+    walk _ [] _ = Nothing
+    walk (S previous) (character :: rest) reversed =
+      let width = character_units character
+          requested = S previous
+      in if requested < width then Nothing
+        else walk (minus requested width) rest (character :: reversed)
+
+export
+unit_boundary : Text → Number → Bool
+unit_boundary text position = case split_units position (unpack text) of
+  Nothing ⇒ False
+  Just _ ⇒ True
+
+export
+valid_text_selection : Text → TextSelection → Bool
+valid_text_selection text selected = unit_boundary text selected.anchor_unit &&
+  unit_boundary text selected.caret_unit && case selected.composing of
+    Nothing ⇒ True
+    Just span ⇒ span.first_unit < span.after_unit &&
+      unit_boundary text span.first_unit && unit_boundary text span.after_unit
+
+export
+selection_range : TextSelection → TextRange
+selection_range selected = Between (min selected.anchor_unit selected.caret_unit)
+  (max selected.anchor_unit selected.caret_unit)
+
+replace_range : TextRange → Text → Text → Either Text Text
+replace_range span inserted previous = case split_units span.first_unit (unpack previous) of
+  Nothing ⇒ Left "Text selection is not a Unicode boundary"
+  Just (prefix, after_prefix) ⇒ case split_units (minus span.after_unit span.first_unit) after_prefix of
+    Nothing ⇒ Left "Text selection is not a Unicode boundary"
+    Just (_, suffix) ⇒
+      let candidate = pack prefix ++ inserted ++ pack suffix
+      in if valid_field_text candidate then Right candidate
+        else Left "Text exceeds the field limit or contains an invalid Unicode character"
+
+clamp_position : Number → Integer → Number
+clamp_position size requested = if requested <= 0 then 0
+  else min size (cast requested)
+
+-- Android's relative cursor argument may lie outside the replacement. Keep
+-- the cursor on a complete character when it lands inside a surrogate pair.
+boundary_before : Text → Number → Number
+boundary_before text requested = count (unpack text) 0
+  where
+    count : List Char → Number → Number
+    count [] position = position
+    count (character :: rest) position =
+      let next = position + character_units character
+      in if next > requested then position else count rest next
+
+boundary_after : Text → Number → Number
+boundary_after text requested = count (unpack text) 0
+  where
+    count : List Char → Number → Number
+    count [] position = position
+    count (character :: rest) position = if position >= requested then position
+      else count rest (position + character_units character)
+
+replace_current : Bool → Text → Integer → FieldText → Either Text FieldText
+replace_current composing inserted cursor editing = do
+  let span = maybe (selection_range editing.selection) id editing.selection.composing
+  candidate ← replace_range span inserted editing.contents
+  let after_insert = span.first_unit + utf16_units inserted
+      requested = if cursor > 0 then cast after_insert + cursor - 1
+        else cast span.first_unit + cursor
+      position = boundary_before candidate (clamp_position (utf16_units candidate) requested)
+      composition = if composing && span.first_unit < after_insert
+        then Just (Between span.first_unit after_insert) else Nothing
+  Right (EditingText candidate (SelectedText position position composition))
+
+protected_range : TextSelection → TextRange
+protected_range selected =
+  let chosen = selection_range selected
+  in case selected.composing of
+    Nothing ⇒ chosen
+    Just span ⇒ Between (min chosen.first_unit span.first_unit) (max chosen.after_unit span.after_unit)
+
+delete_surrounding : Bool → Integer → Integer → FieldText → Either Text FieldText
+delete_surrounding characters before after editing =
+  if before < 0 || after < 0 then Left "Deletion counts must be nonnegative" else do
+    let span = protected_range editing.selection
+    case split_units span.first_unit (unpack editing.contents) of
+      Nothing ⇒ Left "Invalid text selection"
+      Just (prefix, after_prefix) ⇒ case split_units (minus span.after_unit span.first_unit) after_prefix of
+        Nothing ⇒ Left "Invalid text composition"
+        Just (kept, suffix) ⇒ do
+          let before_count = the Number (cast before)
+              after_count = the Number (cast after)
+              left = if characters
+                then utf16_units (pack (take (minus (length prefix) before_count) prefix))
+                else boundary_before editing.contents (minus span.first_unit before_count)
+              right = if characters
+                then span.after_unit + utf16_units (pack (take after_count suffix))
+                else boundary_after editing.contents (min (utf16_units editing.contents) (span.after_unit + after_count))
+          first ← replace_range (Between span.after_unit right) "" editing.contents
+          candidate ← replace_range (Between left span.first_unit) "" first
+          let removed_before = minus span.first_unit left
+              selected = editing.selection
+              composition = map (\range ⇒ Between (minus range.first_unit removed_before)
+                (minus range.after_unit removed_before)) selected.composing
+          Right (EditingText candidate (SelectedText
+            (minus selected.anchor_unit removed_before) (minus selected.caret_unit removed_before) composition))
+
+collapse_at : Number → FieldText → FieldText
+collapse_at position editing = { selection := SelectedText position position Nothing } editing
+
+export
+selected_text : FieldText → Text
+
+export
+edit_text : text_command → FieldText → Either Text FieldText
+edit_text command editing = if not (valid_field_text editing.contents &&
+  valid_text_selection editing.contents editing.selection) then Left "Invalid text editor state"
+  else case command of
+    commit_text text cursor ⇒ replace_current False text cursor editing
+    compose_text text cursor ⇒ replace_current True text cursor editing
+    replace_text first last text cursor ⇒
+      if first < 0 || last < 0 then Left "Invalid replacement range"
+      else let size = utf16_units editing.contents
+               left = clamp_position size (min first last)
+               right = clamp_position size (max first last)
+           in if unit_boundary editing.contents left && unit_boundary editing.contents right
+             then replace_current False text cursor
+               ({ selection := SelectedText left right Nothing } editing)
+             else Left "Replacement is not a Unicode boundary"
+    cut_selection expected first last ⇒
+      let span = selection_range editing.selection
+      in if first < 0 || last < 0 || not (span.first_unit ≟ cast first &&
+          span.after_unit ≟ cast last && selected_text editing ≟ expected)
+        then Left "Selection changed before cut; text retained"
+        else replace_current False "" 1 ({ selection.composing := Nothing } editing)
+    finish_composition ⇒ Right ({ selection.composing := Nothing } editing)
+    select_text first last ⇒
+      if first < 0 || last < 0 then Left "Invalid text selection"
+      else if unit_boundary editing.contents (cast first) && unit_boundary editing.contents (cast last)
+        then Right ({ selection.anchor_unit := cast first, selection.caret_unit := cast last } editing)
+        else Left "Text selection is not a Unicode boundary"
+    compose_region first last ⇒
+      let size = utf16_units editing.contents
+          left = boundary_before editing.contents (clamp_position size (min first last))
+          right = boundary_after editing.contents (clamp_position size (max first last))
+      in Right ({ selection.composing := if left < right then Just (Between left right) else Nothing } editing)
+    delete_units before after ⇒ delete_surrounding False before after editing
+    delete_characters before after ⇒ delete_surrounding True before after editing
+    erase_backward ⇒
+      let span = selection_range editing.selection
+      in if span.first_unit < span.after_unit
+        then replace_current False "" 1 ({ selection.composing := Nothing } editing)
+        else delete_surrounding True 1 0 ({ selection.composing := Nothing } editing)
+    erase_forward ⇒
+      let span = selection_range editing.selection
+      in if span.first_unit < span.after_unit
+        then replace_current False "" 1 ({ selection.composing := Nothing } editing)
+        else delete_surrounding True 0 1 ({ selection.composing := Nothing } editing)
+    cursor_left ⇒
+      let span = selection_range editing.selection
+          position = if span.first_unit < span.after_unit then span.first_unit
+            else boundary_before editing.contents (minus span.first_unit 1)
+      in Right (collapse_at position editing)
+    cursor_right ⇒
+      let span = selection_range editing.selection
+          position = if span.first_unit < span.after_unit then span.after_unit
+            else boundary_after editing.contents (min (utf16_units editing.contents) (S span.after_unit))
+      in Right (collapse_at position editing)
+    cursor_home ⇒ Right (collapse_at 0 editing)
+    cursor_end ⇒ Right (collapse_at (utf16_units editing.contents) editing)
+    select_all_text ⇒ Right ({ selection := SelectedText 0 (utf16_units editing.contents) Nothing } editing)
+    clear_text ⇒ Right (text_at_end "")
+
+selected_text editing =
+  let span = selection_range editing.selection
+  in case split_units span.first_unit (unpack editing.contents) of
+    Nothing ⇒ ""
+    Just (_, suffix) ⇒ case split_units (minus span.after_unit span.first_unit) suffix of
+      Nothing ⇒ ""
+      Just (chosen, _) ⇒ pack chosen
+
+-- A small window around the caret keeps the native input toolbar reachable.
+-- This is a projection only; all field characters remain in the draft.
+export
+text_window : FieldText → Text
+text_window editing = case split_units editing.selection.caret_unit (unpack editing.contents) of
+  Nothing ⇒ editing.contents
+  Just (before, after) ⇒
+    (if length before > 64 then "…" else "") ++
+    pack (drop (minus (length before) 64) before) ++ "▏" ++
+    pack (take 32 after) ++ (if length after > 32 then "…" else "")

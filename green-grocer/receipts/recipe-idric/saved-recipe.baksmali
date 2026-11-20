@@ -1,0 +1,129 @@
+.class public final LIdric/Generated;
+.super Ljava/lang/Object;
+
+
+# direct methods
+.method public static _checked_2(Ljava/lang/String;Ljava/lang/String;)Z
+    .registers 4
+
+    invoke-virtual {p0, p1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v0
+
+    const/4 v1, 0x0
+
+    if-ne v0, v1, :cond_9
+
+    const/4 v1, 0x0
+
+    goto :goto_a
+
+    :cond_9
+    const/4 v1, 0x1
+
+    :goto_a
+    return v1
+.end method
+
+.method public static _checked_25(ZZ)Z
+    .registers 3
+
+    const/4 v0, 0x1
+
+    if-ne p0, v0, :cond_5
+
+    const/4 v0, 0x1
+
+    goto :goto_6
+
+    :cond_5
+    move v0, p1
+
+    :goto_6
+    return v0
+.end method
+
+.method public static _checked_53(ZZ)Z
+    .registers 3
+
+    const/4 v0, 0x1
+
+    if-ne p0, v0, :cond_5
+
+    move v0, p1
+
+    goto :goto_6
+
+    :cond_5
+    const/4 v0, 0x0
+
+    :goto_6
+    return v0
+.end method
+
+.method public static _checked_89(Ljava/lang/String;Ljava/lang/String;)Z
+    .registers 4
+
+    invoke-virtual {p0, p1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v0
+
+    const/4 v1, 0x1
+
+    if-ne v0, v1, :cond_9
+
+    const/4 v1, 0x0
+
+    goto :goto_a
+
+    :cond_9
+    const/4 v1, 0x1
+
+    :goto_a
+    return v1
+.end method
+
+.method public static saved_recipe_name(Ljava/lang/String;)Ljava/lang/String;
+    .registers 8
+
+    const-string v0, "user-recipe"
+
+    const-string v1, ""
+
+    invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v2
+
+    const/4 v6, 0x1
+
+    if-ne v2, v6, :cond_f
+
+    const-string v3, "Recipe needs an identity and name"
+
+    move-object v6, v3
+
+    goto :goto_1d
+
+    :cond_f
+    const-string v4, ""
+
+    invoke-virtual {p0, v4}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v5
+
+    const/4 v6, 0x1
+
+    if-ne v5, v6, :cond_1c
+
+    const-string v3, "Recipe needs an identity and name"
+
+    move-object v6, v3
+
+    goto :goto_1d
+
+    :cond_1c
+    move-object v6, p0
+
+    :goto_1d
+    return-object v6
+.end method

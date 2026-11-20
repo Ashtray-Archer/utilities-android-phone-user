@@ -1,0 +1,38 @@
+PASS shared ingredient combines before package rounding
+PASS selected empty recipe stays an explicit error
+PASS missing saved recipe stays an explicit error
+PASS servings scale 200 g for two to 300 g for three
+PASS one third remains an exact rational
+PASS zero denominator is rejected
+PASS kilograms convert exactly to grams
+PASS dozen converts to twelve each
+PASS 500 g selects two 300 g packages and 100 g surplus
+PASS package boundary needs no extra package
+PASS fractional package arithmetic is exact
+PASS zero package is rejected
+PASS pantry reduces demand and preserves all product identifiers
+PASS excess pantry remains visible as covered
+PASS count pantry cannot subtract mass
+PASS same name with different sizes and SKUs remains distinct
+PASS empty retailer identity cannot be approved
+PASS missing match remains unresolved
+PASS multiple approvals remain ambiguous
+PASS out of stock remains unresolved
+PASS unknown availability remains unresolved
+PASS changed price requires approval
+PASS missing price remains unresolved
+PASS changed package requires approval
+PASS changed checkout identifier requires approval
+PASS missing catalog product remains unresolved
+PASS duplicate catalog results remain ambiguous
+PASS same SKU at another store is not the approved product
+PASS substitution requires explicit approval
+PASS combined recipes intersect allowed substitutions
+PASS launch and back navigation are Idric transitions
+PASS editing a selected recipe recomputes and revokes review
+PASS handoff preserves leading zero SKU UPC and location
+PASS unreviewed cart cannot hand off
+PASS price refresh revokes cart review
+PASS item rejection cannot mark another SKU successful
+PASS historical three-product total is 2264 cents
+PASS Idric recipe shopping host semantics

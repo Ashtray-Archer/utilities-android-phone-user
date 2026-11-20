@@ -1,0 +1,132 @@
+module RecipeStorageChecks
+
+import RecipeStorage
+import RecipeShopping
+import Data.Text
+import Data.List
+import System
+
+expect : Text → Bool → IO ()
+expect name True = putStrLn ("PASS " ++ name)
+expect name False = do
+  putStrLn ("FAIL " ++ name)
+  exitFailure
+
+is_left : Either error value → Bool
+is_left (Left _) = True
+is_left _ = False
+
+-- Independently written file bytes. These expectations do not call the encoder.
+minimal_file : Text
+minimal_file = "22:green-grocer-recipe-v12:r14:Soup1:21:01:0"
+
+minimal_recipe : Recipe
+minimal_recipe = SavedRecipe "r1" "Soup" (Serves 1) [] []
+
+fixture : Recipe
+fixture = SavedRecipe "00042" "  Soup: λ🦉\n" (Serves 2)
+  [Needs (IngredientNamed "rice-001") "Rice" (Measured mass (Fraction 7 2))
+    "rinse:\nthen simmer" [IngredientNamed "lentils", IngredientNamed "grain:002"],
+   Needs (IngredientNamed "water") "Water" (Measured volume (Fraction 1 1)) "" [],
+   Needs (IngredientNamed "eggs") "Eggs" (measure each (whole 2)) "beat" []]
+  [FromSource "https://www.youtube.com/watch?v=fixture#t=80" "  saved note\n",
+   FromSource "https://www.tiktok.com/@fixture/video/000123" "食事 🦉"]
+
+decoded_fields : Bool
+decoded_fields = case decode_recipe (encode_recipe fixture) of
+  Right recipe ⇒ recipe.recipe_identity ≟ "00042" &&
+    recipe.recipe_name ≟ "  Soup: λ🦉\n" && serving_count recipe.recipe_servings ≟ 3 &&
+    case recipe.recipe_ingredients of
+      [first, second, third] ⇒ first.ingredient_identity.ingredient_text ≟ "rice-001" &&
+        first.ingredient_name ≟ "Rice" && same_dimension first.ingredient_measure.dimension mass &&
+        first.ingredient_measure.base_amount.numerator ≟ 7 &&
+        denominator first.ingredient_measure.base_amount ≟ 3 &&
+        first.preparation ≟ "rinse:\nthen simmer" &&
+        map ingredient_text first.acceptable_substitutions ≟ ["lentils", "grain:002"] &&
+        same_dimension second.ingredient_measure.dimension volume &&
+        equal_amount second.ingredient_measure.base_amount (Fraction 1 1) &&
+        same_dimension third.ingredient_measure.dimension count &&
+        equal_amount third.ingredient_measure.base_amount (whole 2)
+      _ ⇒ False
+  _ ⇒ False
+
+decoded_sources : Bool
+decoded_sources = case decode_recipe (encode_recipe fixture) of
+  Right recipe ⇒ case recipe.recipe_sources of
+    [FromSource first first_note, FromSource second second_note] ⇒
+      first ≟ "https://www.youtube.com/watch?v=fixture#t=80" && first_note ≟ "  saved note\n" &&
+      second ≟ "https://www.tiktok.com/@fixture/video/000123" && second_note ≟ "食事 🦉"
+    _ ⇒ False
+  _ ⇒ False
+
+restored_state : ShoppingState
+restored_state = restore_recipe (encode_recipe fixture)
+  ({ review_approved := True } (transition (save_recipe minimal_recipe) begin_shopping))
+
+replace_recipe : Bool
+replace_recipe =
+  let previous = transition (save_recipe fixture) begin_shopping
+      edited = { recipe_name := "Edited soup" } fixture
+      restored = restore_recipe (encode_recipe edited) ({ review_approved := True } previous)
+  in not restored.review_approved && case restored.saved_recipes of
+    [recipe] ⇒ recipe.recipe_identity ≟ "00042" && recipe.recipe_name ≟ "Edited soup"
+    _ ⇒ False
+
+refusal_preserves_state : Bool
+refusal_preserves_state =
+  let previous = { review_approved := True, notice := "Existing review" }
+        (transition (save_recipe fixture) begin_shopping)
+      refused = restore_recipe (minimal_file ++ "garbage") previous
+  in refused.review_approved && case refused.saved_recipes of
+    [recipe] ⇒ recipe.recipe_name ≟ "  Soup: λ🦉\n" && length recipe.recipe_sources ≟ 2
+    _ ⇒ False
+
+invalid_denominator : Text
+invalid_denominator = "22:green-grocer-recipe-v11:p1:N1:11:11:i1:I4:mass1:11:00:1:01:0"
+
+invalid_dimension : Text
+invalid_dimension = "22:green-grocer-recipe-v11:p1:N1:11:11:i1:I3:bad1:11:10:1:01:0"
+
+%export "dex:recipe_storage_checks"
+main : IO ()
+main = do
+  expect "independent minimal recipe file decodes" (case decode_recipe minimal_file of
+    Right recipe ⇒ recipe.recipe_identity ≟ "r1" && recipe.recipe_name ≟ "Soup" &&
+      serving_count recipe.recipe_servings ≟ 2 && null recipe.recipe_ingredients && null recipe.recipe_sources
+    _ ⇒ False)
+  expect "minimal recipe encodes to independently expected bytes" (encode_recipe minimal_recipe ≟ minimal_file)
+  expect "decoded ingredient quantities dimensions and identities are exact" decoded_fields
+  expect "saved sources preserve exact links Unicode whitespace and notes" decoded_sources
+  expect "restored recipe adds to existing recipes and revokes review"
+    (length restored_state.saved_recipes ≟ 2 && not restored_state.review_approved)
+  expect "restoring same identity replaces one saved recipe" replace_recipe
+  expect "corrupt recipe preserves saved state and review" refusal_preserves_state
+  expect "empty recipe file is refused" (is_left (decode_recipe ""))
+  expect "unknown schema is refused" (is_left (decode_recipe "3:bad"))
+  expect "truncated field is refused" (is_left (decode_recipe "22:green-grocer"))
+  expect "missing delimiter is refused" (is_left (decode_recipe "22green-grocer-recipe-v1"))
+  expect "nondecimal field size is refused" (is_left (decode_recipe "x:abc"))
+  expect "negative field size is refused" (is_left (decode_recipe "-1:abc"))
+  expect "trailing fields are refused" (is_left (decode_recipe (minimal_file ++ "0:")))
+  expect "trailing unframed bytes are refused" (is_left (decode_recipe (minimal_file ++ "x")))
+  expect "zero servings are refused" (is_left (decode_recipe "22:green-grocer-recipe-v12:r14:Soup1:01:01:0"))
+  expect "nonnumeric servings are refused" (is_left (decode_recipe "22:green-grocer-recipe-v12:r14:Soup1:x1:01:0"))
+  expect "missing declared ingredients are refused" (is_left (decode_recipe "22:green-grocer-recipe-v12:r14:Soup1:21:91:0"))
+  expect "zero rational denominator is refused" (case decode_recipe invalid_denominator of
+    Left "Recipe quantity denominator is zero" ⇒ True; _ ⇒ False)
+  expect "unknown quantity dimension is refused" (case decode_recipe invalid_dimension of
+    Left "Unknown ingredient dimension" ⇒ True; _ ⇒ False)
+  expect "empty source link uses canonical save refusal" (is_left (decode_recipe
+    (encode_recipe ({ recipe_sources := [FromSource "" "note"] } fixture))))
+  expect "missing recipe identity uses canonical save refusal" (is_left (decode_recipe
+    (encode_recipe ({ recipe_identity := "" } fixture))))
+  expect "empty draft ingredient list survives persistence" (case decode_recipe minimal_file of
+    Right recipe ⇒ null recipe.recipe_ingredients; _ ⇒ False)
+  expect "large exact quantity is not narrowed by storage" (case decode_recipe (encode_recipe
+    ({ recipe_ingredients := [Needs (IngredientNamed "rice") "Rice"
+        (Measured mass (whole 18446744073709551616)) "" []] } fixture)) of
+      Right recipe ⇒ case recipe.recipe_ingredients of
+        [ingredient] ⇒ ingredient.ingredient_measure.base_amount.numerator ≟ 18446744073709551616
+        _ ⇒ False
+      _ ⇒ False)
+  putStrLn "PASS Idric recipe storage semantics"

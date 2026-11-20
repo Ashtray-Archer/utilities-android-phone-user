@@ -1,0 +1,13 @@
+PASS shared ingredient combines before package rounding
+PASS selected empty recipe stays an explicit error
+PASS missing saved recipe stays an explicit error
+PASS servings scale 200 g for two to 300 g for three
+PASS one third remains an exact rational
+PASS zero denominator is rejected
+PASS kilograms convert exactly to grams
+PASS dozen converts to twelve each
+PASS 500 g selects two 300 g packages and 100 g surplus
+PASS package boundary needs no extra package
+PASS fractional package arithmetic is exact
+PASS zero package is rejected
+FAIL pantry reduces demand and preserves all product identifiers

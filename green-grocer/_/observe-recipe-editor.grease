@@ -1,0 +1,135 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 5) { echo 'usage: grease observe-recipe-editor.grease ADB EMULATOR_SERIAL PREPARATION FRESH_OUTPUT API' >&2; exit 2 }
+var adb = ARGV[0]
+var serial = ARGV[1]
+var inputs = ARGV[2]
+var output = ARGV[3]
+var api = ARGV[4]
+for path in ([adb, inputs, output]) { if (path[0] !== '/') { echo 'FAIL absolute editor observation paths required' >&2; exit 2 } }
+test ! -e "$output"
+mkdir -p "$output"
+proc device { "$adb" -s "$serial" @ARGV }
+test "$(device shell -T -n getprop ro.kernel.qemu | tr -d '\r\n')" = 1
+test "$(device shell -T -n getprop ro.build.version.sdk | tr -d '\r\n')" = "$api"
+test "$(device shell -T -n getprop ro.product.cpu.abi | tr -d '\r\n')" = x86_64
+cp "$inputs/application-revision.txt" "$output/application-revision.txt"
+device shell -T -n getprop ro.build.fingerprint > "$output/fingerprint.txt"
+cd "$inputs"
+sha256sum -c artifacts.sha256 > "$output/input-verification.txt"
+var remote = '/data/local/tmp/greengrocer-recipe-editor'
+device shell -T -n mkdir -p "$remote"
+proc transfer(source, name) {
+  device push "$source" "$remote/$name" > "$output/transfer-$name.txt" 2>&1
+  device pull "$remote/$name" "$output/received-$name" >> "$output/transfer-$name.txt" 2>&1
+  cmp "$source" "$output/received-$name"
+}
+proc command(name, artifact) {
+  transfer "$artifact" "$name.dex"
+  try { timeout 180 "$adb" -s "$serial" shell -T -n "CLASSPATH=$remote/$name.dex" app_process / Idric.Generated > "$output/$name.stdout" 2> "$output/$name.stderr" }
+  var status = _error.code
+  printf '%s\n' "$status" > "$output/$name.exit"
+}
+command editor "$inputs/editor-checks/checks.dex"
+test "$(cat "$output/editor.exit")" = 0
+cmp "$inputs/editor-host/stdout.txt" "$output/editor.stdout"
+var editor_cases = $(sed -n 's/^recipe_editor_checks //p' "$output/editor.stdout")
+test -n "$editor_cases"
+for mutation in stale decimal {
+  command "editor-$mutation" "$inputs/editor-mutant-$mutation/checks.dex"
+  test "$(cat "$output/editor-$mutation.exit")" = 1
+  var assertion = $(cat "$inputs/editor-mutant-$mutation/assertion.txt")
+  rg -x -F "$assertion" "$output/editor-$mutation.stdout"
+}
+var package = 'org.isomorphisms.greengrocer'
+var observer = 'org.isomorphisms.greengrocer.acceptance'
+var keyboard = "$observer/acceptance.RecipeTestIme"
+var prior_keyboard = $(device shell -T -n settings get secure default_input_method | tr -d '\r\n')
+var prior_hardware_keyboard = $(device shell -T -n settings get secure show_ime_with_hard_keyboard | tr -d '\r\n')
+printf '%s\n' "$prior_keyboard" > "$output/previous-keyboard.txt"
+proc restore_keyboard {
+  if (prior_keyboard !== '' and prior_keyboard !== 'null') { try { device shell -T -n ime set "$prior_keyboard" > "$output/restore-keyboard.txt" 2>&1 } }
+  try { device shell -T -n ime disable "$keyboard" > "$output/disable-test-keyboard.txt" 2>&1 }
+  if (prior_hardware_keyboard === 'null') { try { device shell -T -n settings delete secure show_ime_with_hard_keyboard > "$output/restore-hardware-keyboard.txt" 2>&1 }
+  } else { try { device shell -T -n settings put secure show_ime_with_hard_keyboard "$prior_hardware_keyboard" > "$output/restore-hardware-keyboard.txt" 2>&1 } }
+}
+trap --add EXIT { restore_keyboard }
+device install --no-incremental -r "$inputs/apk-x86_64/green-grocer-recipes-x86_64.apk" > "$output/install.txt" 2>&1
+device install --no-incremental -r "$inputs/observer/recipe-observer.apk" > "$output/observer-install.txt" 2>&1
+device shell -T -n am force-stop "$package"
+device shell -T -n pm clear "$package" > "$output/clear-fixture-state.txt"
+device shell -T -n wm dismiss-keyguard
+device shell -T -n settings put system screen_off_timeout 2147483647
+device shell -T -n ime enable "$keyboard" > "$output/enable-test-keyboard.txt"
+device shell -T -n ime set "$keyboard" > "$output/set-test-keyboard.txt"
+device shell -T -n settings put secure show_ime_with_hard_keyboard 1
+device shell -T -n run-as "$package" id > "$output/application-uid.txt"
+device shell -T -n dumpsys package "$observer" > "$output/observer-package.txt"
+var installed = $(device shell -T -n pm path "$package" | sed -n 's/^package://p' | tr -d '\r')
+test -n "$installed"
+device pull "$installed" "$output/installed.apk" > "$output/installed-transfer.txt" 2>&1
+cmp "$inputs/apk-x86_64/green-grocer-recipes-x86_64.apk" "$output/installed.apk"
+try {
+  timeout 480 "$adb" -s "$serial" shell -T -n am instrument -w -r \
+    "$observer/acceptance.RecipeEditorObserver" > "$output/instrumentation.txt" 2> "$output/instrumentation.stderr"
+}
+var status = _error.code
+printf '%s\n' "$status" > "$output/instrumentation.exit"
+device logcat -d -v threadtime > "$output/installed.logcat"
+device shell -T -n dumpsys input_method > "$output/input-method.txt"
+device shell -T -n ps -A > "$output/processes.txt"
+device exec-out screencap -p > "$output/final.png"
+for phase in edit-empty edit-new edit-invalid edit-name edit-named edit-servings edit-zero edit-invalid-servings edit-servings-retry edit-portions edit-ingredient edit-ingredient-name edit-ingredient-named edit-quantity edit-measured edit-overview edit-source edit-link edit-linked edit-note edit-noted edit-complete edit-cancel edit-kept edit-saved edit-existing edit-existing-ingredient edit-existing-quantity edit-changed edit-changed-overview edit-save-failed edit-updated edit-recipes edit-selected edit-plan edit-scaled {
+  try { device exec-out run-as "$package" cat "cache/gg-$phase.png" > "$output/$phase.png" 2> "$output/$phase-pull.stderr" }
+  var pull_status = _error.code
+  var signature = $(od -An -tx1 -N8 "$output/$phase.png" | tr -d ' \n')
+  if (pull_status !== 0 or signature !== '89504e470d0a1a0a') { rm -f "$output/$phase.png" }
+}
+cat "$output/instrumentation.txt"
+test "$status" = 0
+rg -x -F 'INSTRUMENTATION_CODE: -1' "$output/instrumentation.txt"
+rg -F 'PASS installed recipe creation, system IME composition, Unicode/NUL, selection, clipboard, validation, failed save, edit and exact planning' "$output/instrumentation.txt"
+for phase in name-compose-one name-compose-two name-commit name-select-owl name-replace-owl name-delete-point name-restore-owl name-sdk-replace-food name-sdk-replace-owl name-copy name-paste name-cut stale-name-refused invalid-servings valid-servings fractional-quantity unicode-nul-source-note decimal-edit {
+  rg -x -F "INSTRUMENTATION_STATUS: system_ime_phase=$phase" "$output/instrumentation.txt"
+}
+for phase in edit-name edit-complete edit-save-failed edit-updated edit-scaled { test -s "$output/$phase.png" }
+var filename = $(device shell -T -n run-as "$package" ls files/recipes | tr -d '\r\n')
+printf '%s\n' "$filename" > "$output/saved-filename.txt"
+if ! rg -q '^[0-9]+\.recipe$' "$output/saved-filename.txt" { echo 'FAIL expected one edited recipe file' >&2; exit 1 }
+device exec-out run-as "$package" cat "files/recipes/$filename" > "$output/saved.recipe"
+cmp "$inputs/observer/assets/edit-updated.recipe" "$output/saved.recipe"
+try { device shell -T -n pidof "$package" > "$output/before-stop.pid" }
+awk '$6 == "GGRecipeView:" {print $3; exit}' "$output/installed.logcat" > "$output/observed-application.pid"
+test -s "$output/observed-application.pid"
+device shell -T -n am force-stop "$package"
+device logcat -c
+transfer "$inputs/observer/archive/classes.dex" hash-observer.dex
+transfer "$inputs/callback/classes.dex" callback.dex
+transfer "$inputs/observer/assets/expected/edit-cold.view" cold.view
+device shell -T -n "CLASSPATH=$remote/hash-observer.dex:$remote/callback.dex" app_process / acceptance.RecipeViewHash "$remote/cold.view" > "$output/expected-cold-hash.txt" 2> "$output/expected-cold-hash.stderr"
+var expected = $(cat "$output/expected-cold-hash.txt")
+if ! rg -q '^hash=[0-9a-f]{8}$' "$output/expected-cold-hash.txt" { echo 'FAIL independent editor cold hash' >&2; exit 1 }
+device shell -T -n am start -W -n "$package/org.isomorphisms.greengrocer.RecipeActivity" > "$output/cold-launch.txt"
+var reopened = false
+for attempt in @(seq 1 60) {
+  device logcat -d -v brief -s GGRecipeView:I GGRecipeBounds:I AndroidRuntime:E > "$output/cold.logcat"
+  if rg -q -F "$expected" "$output/cold.logcat" {
+    if rg -q -F 'control=0 x=' "$output/cold.logcat" { setvar reopened = true; break }
+  }
+  sleep 1
+}
+if (not reopened) { echo 'FAIL edited recipe did not survive cold process reopening' >&2; exit 1 }
+device shell -T -n pidof "$package" > "$output/after-stop.pid"
+test -s "$output/after-stop.pid"
+if cmp -s "$output/observed-application.pid" "$output/after-stop.pid" { echo 'FAIL editor cold process reused observed PID' >&2; exit 1 }
+if test -s "$output/before-stop.pid" {
+  if cmp -s "$output/before-stop.pid" "$output/after-stop.pid" { echo 'FAIL editor cold process reused PID' >&2; exit 1 }
+}
+device exec-out screencap -p > "$output/cold-reopen.png"
+transfer "$output/cold-reopen.png" cold-reopen.png
+device shell -T -n "CLASSPATH=$remote/hash-observer.dex:$remote/callback.dex" app_process / acceptance.RecipeScreenshotCheck "$remote/cold-reopen.png" > "$output/cold-pixels.stdout" 2> "$output/cold-pixels.stderr"
+rg -x -F 'PASS native recipe background and button pixels visible' "$output/cold-pixels.stdout"
+device exec-out run-as "$package" cat "files/recipes/$filename" > "$output/reopened.recipe"
+cmp "$output/saved.recipe" "$output/reopened.recipe"
+printf 'recipe_editor_ART\t%s_PASS\neditor_mutants\t2_REJECTED\ninstalled_creation_editing\tPASS\nkeyboard_boundary\tSYSTEM_INPUT_METHOD_SERVICE\ncomposition_selection_clipboard\tPASS\nUnicode_NUL\tEXACT\ninvalid_save\tDRAFT_RETAINED\nfailed_file_save\tDRAFT_RETAINED_AND_RETRY_PASS\nexact_quantity_planning\tPASS\nprivate_file_cold_reopen\tEXACT\nretailer_writes\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' "$editor_cases" > "$output/result.tsv"
+printf '\033[32mPASS\033[0m installed native recipe creation/editing and system keyboard on API%s x86_64 emulator\n' "$api"

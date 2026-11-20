@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.isomorphisms.greengrocer.acceptance">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="29" />
+    <application android:label="Green Grocer acceptance" android:hasCode="true">
+        <service android:name="acceptance.RecipeTestIme" android:exported="true"
+            android:process=":ime" android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter><action android:name="android.view.InputMethod" /></intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/recipe_test_ime" />
+        </service>
+        <receiver android:name="acceptance.RecipeImeCommand" android:exported="true" android:process=":ime" />
+    </application>
+    <instrumentation android:name="acceptance.RecipeObserver"
+        android:targetPackage="org.isomorphisms.greengrocer" />
+    <instrumentation android:name="acceptance.RecipeEditorObserver"
+        android:targetPackage="org.isomorphisms.greengrocer" />
+</manifest>
