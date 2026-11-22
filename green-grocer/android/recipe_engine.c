@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 /* One opaque checked session survives disposable NativeActivity windows.
  * JNIEnv is thread-local; only global references and method IDs are retained. */
@@ -109,7 +110,7 @@ static bool load_asset(JNIEnv *env, ANativeActivity *activity) {
     runtime.loader = (*env)->NewGlobalRef(env, loader);
     runtime.generated = (*env)->NewGlobalRef(env, generated);
     if (exception(env, "retain recipe runtime") || runtime.loader == NULL || runtime.generated == NULL) goto done;
-    runtime.start = (*env)->GetStaticMethodID(env, generated, "recipe_session_start", "()Ljava/lang/String;");
+    runtime.start = (*env)->GetStaticMethodID(env, generated, "recipe_session_start", "(I)Ljava/lang/String;");
     runtime.valid = (*env)->GetStaticMethodID(env, generated, "recipe_session_valid", "(Ljava/lang/String;)Z");
     runtime.view = (*env)->GetStaticMethodID(env, generated, "recipe_session_view", "(Ljava/lang/String;)Ljava/lang/String;");
     runtime.action = (*env)->GetStaticMethodID(env, generated, "recipe_session_action",
@@ -192,7 +193,10 @@ bool gg_recipe_engine_open(gg_recipe_engine *engine, ANativeActivity *activity,
         if (runtime.vm == engine->vm && strcmp(runtime.directory, engine->directory) == 0)
             success = present(engine->env, runtime.session, view, false);
     } else if (load_asset(engine->env, activity)) {
-        jstring initial = (*engine->env)->CallStaticObjectMethod(engine->env, runtime.generated, runtime.start);
+        time_t now = time(NULL);
+        struct tm local;
+        jint month = now != (time_t)-1 && localtime_r(&now, &local) != NULL ? local.tm_mon + 1 : 0;
+        jstring initial = (*engine->env)->CallStaticObjectMethod(engine->env, runtime.generated, runtime.start, month);
         if (!exception(engine->env, "new recipe session") && present(engine->env, initial, view, true)) {
             runtime.vm = engine->vm;
             memcpy(runtime.directory, engine->directory, (size_t)length + 1);

@@ -114,9 +114,19 @@ device shell -T -n "CLASSPATH=$remote/hash-observer.dex:$remote/callback.dex" ap
 var expected = $(cat "$output/expected-cold-hash.txt")
 if ! rg -q '^hash=[0-9a-f]{8}$' "$output/expected-cold-hash.txt" { echo 'FAIL independent cold-view hash observation' >&2; exit 1 }
 device shell -T -n am start -W -n "$package/org.isomorphisms.greengrocer.RecipeActivity" > "$output/cold-launch.txt"
+var tapped_recipes = false
 var reopened = false
 for attempt in @(seq 1 60) {
   device logcat -d -v brief -s GGRecipeView:I GGRecipeBounds:I AndroidRuntime:E > "$output/cold.logcat"
+  if (not tapped_recipes) {
+    var coords = $(sed -n 's/.*row=2 control=1 x=\([0-9]*\) y=\([0-9]*\).*/\1 \2/p' "$output/cold.logcat" | tail -1)
+    if (coords !== '') {
+      var touch_x = $(printf '%s\n' "$coords" | cut -d ' ' -f 1)
+      var touch_y = $(printf '%s\n' "$coords" | cut -d ' ' -f 2)
+      device shell -T -n input tap "$touch_x" "$touch_y"
+      setvar tapped_recipes = true
+    }
+  }
   if rg -q -F "$expected" "$output/cold.logcat" {
     if rg -q -F 'control=0 x=' "$output/cold.logcat" { setvar reopened = true; break }
   }
@@ -138,5 +148,5 @@ device shell -T -n "CLASSPATH=$remote/hash-observer.dex:$remote/callback.dex" ap
 rg -x -F 'PASS native recipe background and button pixels visible' "$output/cold-pixels.stdout"
 device exec-out run-as "$package" cat "files/recipes/$filename" > "$output/reopened.recipe"
 cmp "$output/saved.recipe" "$output/reopened.recipe"
-printf 'recipe_screen_ART\t16_PASS\nsource_UI_mutants\t3_REJECTED\nnative_UTF16_transport\tPASS\ncompiled_transport_mutant\tREJECTED\ninstalled_native_recipe_UI\tPASS\nfile_result_callback\tINJECTED_SDK_FILE_URI_PASS\nservings_and_pantry_touch\tPASS\nmissing_store_review\tREFUSED\nprivate_recipe_file\tEXACT_UTF8_PASS\ncold_process_reopen\tPASS\nretailer_writes\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\nproducer_approval\tNOT_RUN\n' > "$output/result.tsv"
+printf 'recipe_screen_ART\t31_PASS\nsource_UI_mutants\t3_REJECTED\nnative_UTF16_transport\tPASS\ncompiled_transport_mutant\tREJECTED\ninstalled_native_recipe_UI\tPASS\nfile_result_callback\tINJECTED_SDK_FILE_URI_PASS\nservings_and_pantry_touch\tPASS\nmissing_store_review\tREFUSED\nprivate_recipe_file\tEXACT_UTF8_PASS\ncold_process_reopen\tPASS\nretailer_writes\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\nproducer_approval\tNOT_RUN\n' > "$output/result.tsv"
 printf '\033[32mPASS\033[0m installed recipe UI and private-file reopening on API%s x86_64 emulator\n' "$api"

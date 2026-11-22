@@ -1,0 +1,85 @@
+module StorefrontChecks
+
+import StorefrontModel
+import RecipeShopping
+import RecipeStorage
+import RecipeSession
+import RecipeScreen
+import Data.List
+import Data.Text
+
+%unbound_implicits off
+
+click : List Text → ShoppingState → ShoppingState
+click fields = activate_control (encode_fields fields)
+
+offered : List Text → ShoppingState → Bool
+offered fields = visible_action (encode_fields fields)
+
+codes : Text → Number → Bool → List Text
+codes shop month history = map (sku . fst) (front_shelf shop month history [])
+
+profile : Bool → List (ShelfItem, Text)
+profile history = front_shelf "hardware" 4 history []
+
+sample_list : ShoppingState
+sample_list =
+  let hardware = click ["shelf", "hardware", ""] (storefront_start 10)
+      added = click ["shop-add", "hardware", "0001"] hardware
+      grocery = click ["shelf", "indian", ""] (click ["stores"] added)
+      rice = click ["shop-add", "indian", "0001"] grocery
+  in click ["shop-list"] rice
+
+all_sized : Number → Bool
+all_sized month = all (\shop ⇒ let items = codes shop month True in
+  length items ≟ 6 && length (nub items) ≟ 6) ["hardware", "indian"]
+
+filtered_recipe : Number → ShoppingState
+filtered_recipe pantry_count =
+  let garlic = Needs (IngredientNamed "garlic") "Garlic" (measure each (whole 2)) "" []
+      recipe = SavedRecipe "sauce" "Sauce" (Serves 2) [garlic] []
+      initial = transition (save_recipe recipe) (storefront_start 10)
+      selected = click ["toggle","sauce"] (click ["recipes"] initial)
+      owned = transition (set_pantry [HaveAtHome (IngredientNamed "garlic") (measure each (whole pantry_count))]) selected
+  in click ["shelf","indian",""] (click ["stores"] owned)
+
+legacy : Text
+legacy = encode_fields ["green-grocer-session-v1","","","","","","","",encode_fields ["recipes"],"","no",""]
+
+export
+storefront_checks : List (Text, Bool)
+storefront_checks =
+  [("both shops open directly from the cold start", (recipe_view (storefront_start 4)).title ≟ "Stores" &&
+     all (\shop ⇒ offered ["shelf",shop,""] (storefront_start 4)) ["hardware","indian"]),
+   ("hardware April leads with mower and garden soil", take 2 (codes "hardware" 4 True) ≟ ["0003","0004"]),
+   ("hardware October leads with rake and leaf bags", take 2 (codes "hardware" 10 True) ≟ ["0001","0002"]),
+   ("winter window crosses New Year", take 2 (codes "hardware" 1 True) ≟ ["0007","0025"] &&
+     take 2 (codes "hardware" 12 True) ≟ ["0007","0025"]),
+   ("purchase observations explain plumbing and paint suggestions", elem ("0014","Previously bought Kitchen sink P-trap, 1-1/2 in")
+     (map (\(item, reason) ⇒ (sku item,reason)) (profile True)) &&
+     elem ("0015","Previously bought KILZ 2 All-Purpose primer") (map (\(item, reason) ⇒ (sku item,reason)) (profile True))),
+   ("shopper can switch off purchase-based suggestions",
+     let hardware = click ["shelf","hardware",""] (storefront_start 4)
+         nohistory = click ["toggle-history"] (click ["profile","hardware"] hardware)
+         display = click ["shelf","hardware",""] nohistory
+     in not display.use_sample_history && not (offered ["shop-add","hardware","0015"] display)),
+   ("seasonal and ordinary products stay browsable throughout the year",
+     let spring = click ["shelf","hardware",""] (storefront_start 4)
+         section = click ["shelf","hardware","Lawn and garden"] (click ["shelf","hardware","Departments"] spring)
+     in offered ["shop-add","hardware","0001"] section),
+   ("unknown and sold-out products have no add control",
+     let all_items = click ["shelf","hardware","All products"] (click ["shelf","hardware",""] (storefront_start 10)) in
+       not (offered ["shop-add","hardware","0023"] all_items) && not (offered ["shop-add","hardware","0026"] all_items)),
+   ("store-scoped leading zero SKUs survive selection and session decoding", case decode_session (encode_session sample_list) of
+     Right restored ⇒ elem ("hardware","0001",1) restored.picked_packs && elem ("indian","0001",1) restored.picked_packs &&
+       restored.store_month ≟ 10 && map text (take 1 (recipe_view restored).rows) ≟ ["Sample total $36.98"]
+     Left _ ⇒ False),
+   ("removing one store's item retains the other", (click ["shop-less","hardware","0001"] sample_list).picked_packs ≟ [("indian","0001",1)]),
+   ("a real selection promotes a remaining grocery ingredient", offered ["shop-add","indian","0024"] (filtered_recipe 0)),
+   ("pantry-covered garlic no longer takes a recipe slot", not (offered ["shop-add","indian","0024"] (filtered_recipe 2))),
+   ("spice mixtures and butter are never silently substituted", all (\entry ⇒ not (snd entry ≟ "Selected recipe"))
+     (front_shelf "indian" 4 False ["berbere","niter kibbeh"])),
+   ("each shop shows six distinct products across all months", all all_sized [1..12]),
+   ("old session opens with its recipe screen intact", case decode_session legacy of
+       Right state ⇒ (recipe_view state).title ≟ "Recipes" && null state.picked_packs
+       Left _ ⇒ False)]

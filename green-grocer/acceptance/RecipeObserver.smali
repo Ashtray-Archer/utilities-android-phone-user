@@ -577,6 +577,24 @@
     return-object v0
 .end method
 
+.method private expect_store(Ljava/lang/String;)V
+    .locals 3
+    invoke-static {}, Ljava/util/Calendar;->getInstance()Ljava/util/Calendar;
+    move-result-object v0
+    const/4 v1, 0x2
+    invoke-virtual {v0, v1}, Ljava/util/Calendar;->get(I)I
+    move-result v0
+    add-int/lit8 v0, v0, 0x1
+    new-instance v2, Ljava/lang/StringBuilder;
+    invoke-direct {v2}, Ljava/lang/StringBuilder;-><init>()V
+    invoke-virtual {v2, p1}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    invoke-virtual {v2, v0}, Ljava/lang/StringBuilder;->append(I)Ljava/lang/StringBuilder;
+    invoke-virtual {v2}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
+    move-result-object v2
+    invoke-direct {p0, v2}, Lacceptance/RecipeObserver;->expect(Ljava/lang/String;)V
+    return-void
+.end method
+
 .method public onStart()V
     .registers 9
   :start
@@ -594,6 +612,28 @@
     invoke-virtual {p0, v0}, Landroid/app/Instrumentation;->startActivitySync(Landroid/content/Intent;)Landroid/app/Activity;
     move-result-object v0
     iput-object v0, p0, Lacceptance/RecipeObserver;->activity:Landroid/app/Activity;
+    const-string v0, "stores-home"
+    invoke-direct {p0, v0}, Lacceptance/RecipeObserver;->expect(Ljava/lang/String;)V
+    const/4 v0, 0
+    invoke-direct {p0, v0, v0}, Lacceptance/RecipeObserver;->tap(II)V
+    const-string v0, "hardware-"
+    invoke-direct {p0, v0}, Lacceptance/RecipeObserver;->expect_store(Ljava/lang/String;)V
+    const/4 v0, 0
+    invoke-direct {p0, v0, v0}, Lacceptance/RecipeObserver;->tap(II)V
+    const-string v0, "stores-home"
+    invoke-direct {p0, v0}, Lacceptance/RecipeObserver;->expect(Ljava/lang/String;)V
+    const/4 v0, 1
+    const/4 v1, 0
+    invoke-direct {p0, v0, v1}, Lacceptance/RecipeObserver;->tap(II)V
+    const-string v0, "indian-"
+    invoke-direct {p0, v0}, Lacceptance/RecipeObserver;->expect_store(Ljava/lang/String;)V
+    const/4 v0, 0
+    invoke-direct {p0, v0, v0}, Lacceptance/RecipeObserver;->tap(II)V
+    const-string v0, "stores-home"
+    invoke-direct {p0, v0}, Lacceptance/RecipeObserver;->expect(Ljava/lang/String;)V
+    const/4 v0, 2
+    const/4 v1, 1
+    invoke-direct {p0, v0, v1}, Lacceptance/RecipeObserver;->tap(II)V
     const-string v0, "empty"
     invoke-direct {p0, v0}, Lacceptance/RecipeObserver;->expect(Ljava/lang/String;)V
     const/4 v0, 0

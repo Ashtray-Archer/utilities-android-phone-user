@@ -190,6 +190,11 @@
     .registers 12
   :start
     invoke-virtual {p0}, Lacceptance/RecipeObserver;->editor_launch()V
+    const-string v0, "stores-home"
+    invoke-virtual {p0, v0}, Lacceptance/RecipeObserver;->editor_expect(Ljava/lang/String;)V
+    const/4 v0, 2
+    const/4 v1, 1
+    invoke-virtual {p0, v0, v1}, Lacceptance/RecipeObserver;->editor_tap(II)V
     const-string v0, "edit-empty"
     invoke-virtual {p0, v0}, Lacceptance/RecipeObserver;->editor_expect(Ljava/lang/String;)V
     const/4 v0, 0

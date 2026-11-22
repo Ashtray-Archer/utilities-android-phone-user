@@ -1,7 +1,10 @@
-# Native recipe candidate
+# Native storefront and recipe candidate
 
-The recipe APK starts at Recipes and connects the exact Idriç model to native
-Android drawing and touch. Import a saved recipe, select/unselect it, change
+The app opens at Stores. Each sample merchant offers a seasonal front display,
+department browsing, an optional sample purchase history and a shared local
+shopping list grouped by store. The device supplies the calendar month. The
+[storefront data](storefront/README.md) supplies display windows, merchandise,
+stock and integer-cent prices. Open Recipes to import or select a recipe, change
 servings, inspect combined requirements, and add/remove pantry quantities.
 Details displays ingredients, source links and notes, and saves through the
 same strict UTF-8 AtomicFile adapter used by the file acceptance lane.
@@ -17,24 +20,23 @@ Save validates the complete draft and updates the saved shopping state only
 after durable storage succeeds. Invalid or failed saves retain the draft and
 preceding review. Canceling a changed draft asks whether to discard it. The
 draft is process-session state and is lost if Android ends the process before
-save. Live catalog search, product/store selection controls and retailer cart
-submission remain unfinished. Stores says
-connections are unavailable. An unresolved plan cannot pass final review. The
-candidate makes no retailer requests.
+save. The local list is session-only. Live retailer feeds, price refresh and
+order submission require merchant integration. The separate recipe review
+requires an approved product match for each outstanding requirement.
 
 ## Ownership and runtime boundary
 
 `RecipeSession.idric` encodes the complete typed shopping state as a versioned,
 length-framed opaque Text: saved recipes, selections, exact quantities, pantry,
 default and per-ingredient stores, approved matches, observed products, screen,
-history, review and notice. It preserves arbitrary-precision values, optional
+history, review, notice, month, history preference and store-scoped pack counts. It preserves arbitrary-precision values, optional
 metadata, Unicode and NUL. It is a process-session transport; only recipe files
-are durable, so reopening starts at Recipes without restoring selections.
+are durable. A new process opens at Stores, with saved recipes accessible via Recipes.
 
 `RecipeScreen.idric` derives all displayed rows, labels and opaque action
 tokens from that state. It admits only controls visible in the current screen,
 then calls the existing shopping transitions. `RecipeNative.idric` exposes
-checked scalar Text/Bool/IO Text methods for start, validation, projection,
+checked scalar Int32/Text/Bool/IO Text methods for start, validation, projection,
 actions, back eligibility, import and restore. No arbitrary object marshal or
 numeric narrowing crosses JNI.
 
@@ -134,11 +136,11 @@ without arguments:
 | Gate | Required observation |
 | --- | --- |
 | Existing planner/codec | 52 + 24 cases, 14 changing runtime inputs and 11 compiled mutants, including strict file effects, API29/API34 ART |
-| Screen/session | 16 host and ART cases; independent full-state semantic observations, stale-control refusals and three source mutants rejected at their named assertions |
+| Screen/session | 31 cases, including 15 for storefronts, run on host and compared with ART by CI; independent full-state semantic observations, stale-control refusals and three source mutants rejected at their named assertions |
 | Editor/text | 37 host and ART cases, including the full text limit; stale field and decimal mutants rejected at their named assertions |
 | Native text boundary | Unicode/NUL, every truncated prefix, schema, surrogate and budget checks; compiled surrogate mutant exits at the expected assertion |
 | Candidate packaging | Actual checked DEX and callback bytes, stable signer/version, three ABI builds, independent finished-APK receipt verification |
-| Installed x86_64 app | Own app UID, exact installed APK, 12 expected screen states, real touch input, saved UTF-8 bytes and distinct-PID cold reopening, API29/API34 |
+| Installed x86_64 app | Own app UID, exact installed APK, both store displays for the device month, 12 recipe screen states, real touch input, saved UTF-8 bytes and distinct-PID cold reopening, API29/API34 |
 | Installed editor | 36 host-projected views, real InputMethodService connection, composition, supplementary characters/NUL, selection, clipboard, stale-connection refusal, invalid servings, failed save/retry, exact demand and edited-file cold reopening, API29/API34 |
 | Import callback | Real picker opening followed by an **injected SDK file-URI result**, then actual native worker and Idriç save; not provider-grant or human selection qualification |
 | Physical A1/C67 and independent producer promotion | NOT_RUN |

@@ -2,6 +2,8 @@ module RecipeScreen
 
 import RecipeShopping
 import RecipeStorage
+import StorefrontModel
+import Data.Maybe
 import Data.List
 import Data.Text
 
@@ -103,6 +105,102 @@ review_rows state = case current_plan state of
     describe (ready _ line) = Row (line.purchase_product.product_name ++ ": " ++
       show line.packages ++ " packages; " ++ show line.line_cents ++ " cents") []
 
+shop_button : Text → Text → RecipeControl
+shop_button shop section = control (if section ≟ "" then "Front display" else section) ["shelf", shop, section]
+
+stores_rows : List RecipeRow
+stores_rows =
+  [Row "Sample stores" [control "Carpenter Bros. Hardware" ["shelf", "hardware", ""]],
+   Row "" [control "Indian grocery" ["shelf", "indian", ""]],
+   Row "" [control "Shopping list" ["shop-list"], control "Recipes" ["recipes"]]]
+
+pack_quantity : Text → Text → ShoppingState → Number
+pack_quantity shop sku state = case find (\(merchant, code, _) ⇒ merchant ≟ shop && code ≟ sku) state.picked_packs of
+  Just (_, _, quantity) ⇒ quantity
+  Nothing ⇒ 0
+
+availability_text : ShelfItem → Text
+availability_text item = case item.available_units of
+  Nothing ⇒ "Availability unknown"
+  Just 0 ⇒ "Sold out"
+  Just quantity ⇒ show quantity ++ " available"
+
+pick_buttons : ShoppingState → ShelfItem → List RecipeControl
+pick_buttons state item =
+  let quantity = pack_quantity item.merchant item.sku state
+      plus = case item.available_units of
+        Just available ⇒ if quantity < available then [control "Add one" ["shop-add", item.merchant, item.sku]] else []
+        Nothing ⇒ []
+      less = if quantity > 0 then [control "Remove one" ["shop-less", item.merchant, item.sku]] else []
+  in plus ++ less
+
+item_row : ShoppingState → (ShelfItem, Text) → RecipeRow
+item_row state (item, reason) =
+  let quantity = pack_quantity item.merchant item.sku state
+  in Row (item.item_name ++ "\n" ++ price_text item.cents ++ " / " ++ item.selling_unit ++
+      " · " ++ availability_text item ++ " · SKU " ++ item.sku ++
+      (if reason ≟ "" then "" else "\n" ++ reason) ++
+      (if quantity > 0 then "\nOn list: " ++ show quantity else "")) (pick_buttons state item)
+
+selected_ingredient_names : ShoppingState → List Text
+selected_ingredient_names state = case requirements_for state.saved_recipes state.selections of
+  Left _ ⇒ []
+  Right needed ⇒ map required_name (filter (\req ⇒ (subtract_pantry state.pantry req).remaining_amount.numerator > 0) needed)
+
+shelf_page : Text → Text → ShoppingState → RecipeView
+shelf_page shop section state =
+  let items = inventory shop
+      front = section ≟ ""
+      shown = if front then front_shelf shop state.store_month state.use_sample_history (selected_ingredient_names state)
+        else map (\item ⇒ (item, "")) (filter (\item ⇒ section ≟ "All products" || item.department ≟ section) items)
+      sections = nub (map department items)
+      top = [Row (if front then "Front display · sample stock" else section ++ " · sample stock")
+               [control "Stores" ["stores"], control "Shopping list" ["shop-list"]],
+             Row "" [if front then shop_button shop "All products" else shop_button shop "",
+               control "Sample history" ["profile", shop]],
+             Row "" [shop_button shop "Departments"]]
+      departments = map (\name ⇒ Row "" [shop_button shop name]) sections
+  in View (shop_name shop) state.notice
+       (top ++ (if section ≟ "Departments" then departments else map (item_row state) shown))
+
+profile_page : Text → ShoppingState → RecipeView
+profile_page shop state =
+  let receipt : (PastPurchase, ShelfItem) → RecipeRow
+      receipt = \(p, item) ⇒ Row (show (packs p) ++ " × " ++ item_name item ++
+        " · " ++ show (months_ago p) ++ " mo ago") []
+  in View "Sample purchase history" state.notice
+      ([Row (shop_name shop) [shop_button shop "", control
+        (if state.use_sample_history then "Turn history off" else "Use history") ["toggle-history"]],
+        Row (if state.use_sample_history then "Used for this display" else "History off") []] ++
+       map receipt (purchase_history shop))
+
+list_rows : ShoppingState → List RecipeRow
+list_rows state =
+  let resolved : List (ShelfItem, Number)
+      resolved = mapMaybe (\(shop, sku, quantity) ⇒ map (\item ⇒ (item, quantity))
+        (lookup_item shop sku)) state.picked_packs
+      line : (ShelfItem, Number) → RecipeRow
+      line = \(item, quantity) ⇒ Row (item_name item ++ " · " ++ selling_unit item ++ "\n" ++
+        show quantity ++ " × " ++ price_text (cents item) ++ " = " ++ price_text (quantity × cents item))
+        (pick_buttons state item)
+      section : Text → List RecipeRow
+      section = \shop ⇒ let items = filter (\entry ⇒ merchant (fst entry) ≟ shop) resolved in
+        if null items then [] else Row (shop_name shop) [] :: map line items
+      list_cents = sum (map (\(item, quantity) ⇒ quantity × cents item) resolved)
+  in [Row (if null resolved then "Your shopping list is empty" else "Sample total " ++ price_text list_cents)
+        [control "Stores" ["stores"]]] ++ concatMap section ["hardware", "indian"]
+
+change_pick : Bool → Text → Text → ShoppingState → ShoppingState
+change_pick increase shop sku state = case lookup_item shop sku of
+  Nothing ⇒ state
+  Just item ⇒
+    let quantity = pack_quantity shop sku state
+        next = if increase then S quantity else minus quantity 1
+        retained = filter (\(merchant, code, _) ⇒ not (merchant ≟ shop && code ≟ sku)) state.picked_packs
+    in if increase && next > fromMaybe 0 item.available_units then state else
+       { picked_packs := (if next > 0 then (shop,sku,next) :: retained else retained),
+         notice := "Shopping list updated" } state
+
 export
 recipe_view : ShoppingState → RecipeView
 recipe_view state = case state.screen of
@@ -123,9 +221,10 @@ recipe_view state = case state.screen of
           Right needed ⇒ map (pantry_row state) needed
     in View "Ingredients and pantry" state.notice
       (map (selection_row state) state.selections ++ requirements ++ navigation)
-  stores_screen ⇒ View "Stores" state.notice
-    [Row "Store connections are not available yet. Saved recipes and ingredient planning work offline." [],
-     Row "" [control "Back" ["back"], control "Review" ["review"]]]
+  stores_screen ⇒ View "Stores" state.notice stores_rows
+  merchant_shelf shop section ⇒ shelf_page shop section state
+  purchase_profile shop ⇒ profile_page shop state
+  local_list ⇒ View "Shopping list" state.notice (list_rows state)
   matches_screen ⇒ View "Product matches" state.notice
     ([Row "Each ingredient needs an approved match at its selected store." []] ++ navigation)
   cart_screen ⇒ View "Review" state.notice
@@ -181,6 +280,12 @@ activate_control token state = if not (visible_action token state)
   else case decode_fields token of
     Right ["recipes"] ⇒ transition (go_to recipes_screen) state
     Right ["ingredients"] ⇒ transition (go_to ingredients_screen) state
+    Right ["shelf", shop, section] ⇒ transition (go_to (merchant_shelf shop section)) ({ notice := "" } state)
+    Right ["profile", shop] ⇒ transition (go_to (purchase_profile shop)) ({ notice := "" } state)
+    Right ["toggle-history"] ⇒ { use_sample_history := not state.use_sample_history, notice := "" } state
+    Right ["shop-list"] ⇒ transition (go_to local_list) ({ notice := "" } state)
+    Right ["shop-add", shop, sku] ⇒ change_pick True shop sku state
+    Right ["shop-less", shop, sku] ⇒ change_pick False shop sku state
     Right ["stores"] ⇒ transition (go_to stores_screen) state
     Right ["review"] ⇒ transition (go_to cart_screen) state
     Right ["back"] ⇒ transition go_back state

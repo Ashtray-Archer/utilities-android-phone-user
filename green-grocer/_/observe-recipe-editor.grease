@@ -110,9 +110,19 @@ device shell -T -n "CLASSPATH=$remote/hash-observer.dex:$remote/callback.dex" ap
 var expected = $(cat "$output/expected-cold-hash.txt")
 if ! rg -q '^hash=[0-9a-f]{8}$' "$output/expected-cold-hash.txt" { echo 'FAIL independent editor cold hash' >&2; exit 1 }
 device shell -T -n am start -W -n "$package/org.isomorphisms.greengrocer.RecipeActivity" > "$output/cold-launch.txt"
+var tapped_recipes = false
 var reopened = false
 for attempt in @(seq 1 60) {
   device logcat -d -v brief -s GGRecipeView:I GGRecipeBounds:I AndroidRuntime:E > "$output/cold.logcat"
+  if (not tapped_recipes) {
+    var coords = $(sed -n 's/.*row=2 control=1 x=\([0-9]*\) y=\([0-9]*\).*/\1 \2/p' "$output/cold.logcat" | tail -1)
+    if (coords !== '') {
+      var touch_x = $(printf '%s\n' "$coords" | cut -d ' ' -f 1)
+      var touch_y = $(printf '%s\n' "$coords" | cut -d ' ' -f 2)
+      device shell -T -n input tap "$touch_x" "$touch_y"
+      setvar tapped_recipes = true
+    }
+  }
   if rg -q -F "$expected" "$output/cold.logcat" {
     if rg -q -F 'control=0 x=' "$output/cold.logcat" { setvar reopened = true; break }
   }
