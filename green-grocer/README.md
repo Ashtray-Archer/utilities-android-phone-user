@@ -28,7 +28,7 @@ The store catalogs and prices are offline fixtures. Recipe review still requires
 [recipe-idric.md](recipe-idric.md) describes the wider exact planner;
 [recipe-files.md](recipe-files.md) describes its storage adapter. The model has
 52 host cases, the recipe codec has 24, and the native screen/session layer has
-31, and the editor adds 37, with independent source-mutation controls and separate Android checks.
+32, and the editor adds 37, with independent source-mutation controls and separate Android checks.
 
 ## Historical C cart specimen
 

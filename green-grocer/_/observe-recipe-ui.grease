@@ -148,5 +148,5 @@ device shell -T -n "CLASSPATH=$remote/hash-observer.dex:$remote/callback.dex" ap
 rg -x -F 'PASS native recipe background and button pixels visible' "$output/cold-pixels.stdout"
 device exec-out run-as "$package" cat "files/recipes/$filename" > "$output/reopened.recipe"
 cmp "$output/saved.recipe" "$output/reopened.recipe"
-printf 'recipe_screen_ART\t31_PASS\nsource_UI_mutants\t3_REJECTED\nnative_UTF16_transport\tPASS\ncompiled_transport_mutant\tREJECTED\ninstalled_native_recipe_UI\tPASS\nfile_result_callback\tINJECTED_SDK_FILE_URI_PASS\nservings_and_pantry_touch\tPASS\nmissing_store_review\tREFUSED\nprivate_recipe_file\tEXACT_UTF8_PASS\ncold_process_reopen\tPASS\nretailer_writes\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\nproducer_approval\tNOT_RUN\n' > "$output/result.tsv"
+printf 'recipe_screen_ART\t32_PASS\nsource_UI_mutants\t3_REJECTED\nnative_UTF16_transport\tPASS\ncompiled_transport_mutant\tREJECTED\ninstalled_native_recipe_UI\tPASS\nfile_result_callback\tINJECTED_SDK_FILE_URI_PASS\nservings_and_pantry_touch\tPASS\nmissing_store_review\tREFUSED\nprivate_recipe_file\tEXACT_UTF8_PASS\ncold_process_reopen\tPASS\nretailer_writes\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\nproducer_approval\tNOT_RUN\n' > "$output/result.tsv"
 printf '\033[32mPASS\033[0m installed recipe UI and private-file reopening on API%s x86_64 emulator\n' "$api"

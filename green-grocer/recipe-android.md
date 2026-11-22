@@ -136,7 +136,7 @@ without arguments:
 | Gate | Required observation |
 | --- | --- |
 | Existing planner/codec | 52 + 24 cases, 14 changing runtime inputs and 11 compiled mutants, including strict file effects, API29/API34 ART |
-| Screen/session | 31 cases, including 15 for storefronts, run on host and compared with ART by CI; independent full-state semantic observations, stale-control refusals and three source mutants rejected at their named assertions |
+| Screen/session | 32 cases, including 16 for storefronts, run on host and compared with ART by CI; independent full-state semantic observations, stale-control refusals and three source mutants rejected at their named assertions |
 | Editor/text | 37 host and ART cases, including the full text limit; stale field and decimal mutants rejected at their named assertions |
 | Native text boundary | Unicode/NUL, every truncated prefix, schema, surrogate and budget checks; compiled surrogate mutant exits at the expected assertion |
 | Candidate packaging | Actual checked DEX and callback bytes, stable signer/version, three ABI builds, independent finished-APK receipt verification |

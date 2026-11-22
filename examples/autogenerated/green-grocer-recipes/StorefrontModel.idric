@@ -59,11 +59,17 @@ front_shelf merchant month use_history recipe_names =
         merchant ≟ "indian" && not (item.ingredient_key ≟ "-") && elem item.ingredient_key wanted) items)
       usual = map (\item ⇒ (item, "Staple")) (filter staple items)
       rest = map (\item ⇒ (item, "In this shop")) items
-  in take 6 (nubBy same_item (take 2 season ++ take 2 (nubBy same_group related) ++
-      take 1 recipe ++ take 1 usual ++ season ++ related ++ recipe ++ usual ++ rest))
+      primary = nubBy same_item (take 2 season ++ take 2 (nubBy same_group related) ++ take 1 recipe ++ take 1 usual)
+      represented = map (department . fst) primary
+      -- After personal and seasonal picks, leave room for other grocery aisles.
+      other_aisles = if merchant ≟ "indian" then nubBy same_department (filter
+        (\entry ⇒ not (elem (department (fst entry)) represented)) (usual ++ rest)) else []
+  in take 6 (nubBy same_item (primary ++ other_aisles ++ season ++ related ++ recipe ++ usual ++ rest))
   where
     same_item : (ShelfItem, Text) → (ShelfItem, Text) → Bool
     same_item (a, _) (b, _) = a.merchant ≟ b.merchant && a.sku ≟ b.sku
+    same_department : (ShelfItem, Text) → (ShelfItem, Text) → Bool
+    same_department (a, _) (b, _) = a.department ≟ b.department
     same_group : (ShelfItem, Text) → (ShelfItem, Text) → Bool
     same_group (a, _) (b, _) = a.affinity ≟ b.affinity
     history_reason : List (PastPurchase, ShelfItem) → ShelfItem → Maybe (ShelfItem, Text)

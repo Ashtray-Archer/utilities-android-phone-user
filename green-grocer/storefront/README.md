@@ -10,6 +10,6 @@ Carpenter Bros. publicly lists tools, plumbing, paint, lawn and garden, potting/
 - [University of Michigan neighborhood grocery guide](https://mbc.studentlife.umich.edu/2026/03/26/grocery-shopping-in-ann-arbor-without-a-car/)
 - [OM Market assortment reference](https://www.courtesyindia.com/resource-details/indian-grocery-store/usa/michigan/ann-arbor/om-market)
 
-The display reads a merchant, local calendar month, catalog rows, and optional purchase observations. Store and SKU together resolve a purchase. A prior brush or primer purchase is evidence of an interest in painting supplies. The profile contains no project-completion field. Selected recipes may suggest matching grocery items. Quantities, substitutions, and cart choices require shopper action.
+The display reads a merchant, local calendar month, catalog rows, and optional purchase observations. Store and SKU together resolve a purchase. A prior brush or primer purchase is evidence of an interest in painting supplies. The profile contains no project-completion field. Remaining grocery display slots favor different departments, so rice and dal purchases still leave room for spices, frozen food and fresh produce. Selected recipes may suggest matching grocery items. Quantities, substitutions, and cart choices require shopper action.
 
 The TSV tables are the editable fixture source. Build preparation converts them into typed Idriç rows in the build directory. The same native view and ranking code consumes those rows in host and Android checks.

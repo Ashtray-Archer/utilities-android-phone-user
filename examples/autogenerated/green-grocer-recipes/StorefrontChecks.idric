@@ -79,6 +79,9 @@ storefront_checks =
    ("pantry-covered garlic no longer takes a recipe slot", not (offered ["shop-add","indian","0024"] (filtered_recipe 2))),
    ("spice mixtures and butter are never silently substituted", all (\entry ⇒ not (snd entry ≟ "Selected recipe"))
      (front_shelf "indian" 4 False ["berbere","niter kibbeh"])),
+   ("rice and dal purchase history leaves room for spices, frozen food and produce",
+      let sections = map (department . fst) (front_shelf "indian" 11 True [])
+      in all (\name ⇒ elem name sections) ["Rice and grains","Dal and beans","Spices","Frozen","Fresh produce"]),
    ("each shop shows six distinct products across all months", all all_sized [1..12]),
    ("old session opens with its recipe screen intact", case decode_session legacy of
        Right state ⇒ (recipe_view state).title ≟ "Recipes" && null state.picked_packs
