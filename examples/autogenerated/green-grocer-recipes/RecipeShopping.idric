@@ -418,6 +418,9 @@ choice shopping_screen one_of
   recipe_editor Text
   ingredients_screen
   stores_screen
+  merchant_shelf Text Text
+  purchase_profile Text
+  local_list
   matches_screen
   cart_screen
 
@@ -435,10 +438,17 @@ record ShoppingState where
   previous_screens : List shopping_screen
   review_approved : Bool
   notice : Text
+  store_month : Number
+  use_sample_history : Bool
+  picked_packs : List (Text, Text, Number)
 
 export
 begin_shopping : ShoppingState
-begin_shopping = Shopping [] [] [] Nothing [] [] [] recipes_screen [] False ""
+begin_shopping = Shopping [] [] [] Nothing [] [] [] recipes_screen [] False "" 0 True []
+
+export
+storefront_start : Number → ShoppingState
+storefront_start month = { screen := stores_screen, store_month := month } begin_shopping
 
 export
 current_plan : ShoppingState → Either Text (List planned_line)

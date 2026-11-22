@@ -194,6 +194,9 @@ encode_screen recipes_screen = encode_fields ["recipes"]
 encode_screen (recipe_editor identity) = encode_fields ["recipe", identity]
 encode_screen ingredients_screen = encode_fields ["ingredients"]
 encode_screen stores_screen = encode_fields ["stores"]
+encode_screen (merchant_shelf shop section) = encode_fields ["shelf", shop, section]
+encode_screen (purchase_profile shop) = encode_fields ["profile", shop]
+encode_screen local_list = encode_fields ["list"]
 encode_screen matches_screen = encode_fields ["matches"]
 encode_screen cart_screen = encode_fields ["cart"]
 
@@ -205,23 +208,42 @@ decode_screen text = do
     ["recipe", identity] ⇒ Right (recipe_editor identity)
     ["ingredients"] ⇒ Right ingredients_screen
     ["stores"] ⇒ Right stores_screen
+    ["shelf", shop, section] ⇒ Right (merchant_shelf shop section)
+    ["profile", shop] ⇒ Right (purchase_profile shop)
+    ["list"] ⇒ Right local_list
     ["matches"] ⇒ Right matches_screen
     ["cart"] ⇒ Right cart_screen
     _ ⇒ Left "Invalid session screen"
 
+encode_pick : (Text, Text, Number) → Text
+encode_pick (shop, sku, quantity) = encode_fields [shop, sku, show quantity]
+
+decode_pick : Text → Either Text (Text, Text, Number)
+decode_pick encoded = do
+  fields ← decode_fields encoded
+  case fields of
+    [shop, sku, amount] ⇒ do
+      packs ← decode_whole amount
+      if packs > 0 then Right (shop, sku, packs) else Left "Empty shopping list line"
+    _ ⇒ Left "Invalid shopping list line"
+
 encode_session state = encode_fields
-  ["green-grocer-session-v1", encode_list encode_recipe state.saved_recipes,
+  ["green-grocer-session-v2", encode_list encode_recipe state.saved_recipes,
    encode_list encode_selection state.selections, encode_list encode_pantry state.pantry,
    encode_optional encode_store state.selected_store, encode_list encode_choice state.store_choices,
    encode_list encode_match state.approved_matches, encode_list encode_product state.fresh_products,
    encode_screen state.screen, encode_list encode_screen state.previous_screens,
-   encode_boolean state.review_approved, state.notice]
+   encode_boolean state.review_approved, state.notice, show state.store_month,
+   encode_boolean state.use_sample_history, encode_list encode_pick state.picked_packs]
 
 decode_session text = do
   fields ← decode_fields text
-  case fields of
-    ["green-grocer-session-v1", recipes, selections, pantry, store, choices,
-     matches, products, screen, previous, reviewed, notice] ⇒ do
+  let upgraded = case fields of
+        "green-grocer-session-v1" :: old ⇒ "green-grocer-session-v2" :: (old ++ ["0", "yes", ""])
+        other ⇒ other
+  case upgraded of
+    ["green-grocer-session-v2", recipes, selections, pantry, store, choices,
+     matches, products, screen, previous, reviewed, notice, month, sample, picks] ⇒ do
       saved ← decode_list decode_recipe recipes
       selected ← decode_list decode_selection selections
       owned ← decode_list decode_pantry pantry
@@ -232,5 +254,8 @@ decode_session text = do
       page ← decode_screen screen
       history ← decode_list decode_screen previous
       review ← decode_boolean reviewed
-      Right (Shopping saved selected owned default_store by_ingredient approved observed page history review notice)
+      calendar ← decode_whole month
+      enabled ← decode_boolean sample
+      amounts ← decode_list decode_pick picks
+      Right (Shopping saved selected owned default_store by_ingredient approved observed page history review notice calendar enabled amounts)
     _ ⇒ Left "Unsupported or incomplete recipe session"

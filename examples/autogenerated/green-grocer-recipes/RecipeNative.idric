@@ -73,8 +73,8 @@ recipe_session_can_go_back encoded = case decode_editor encoded of
   Right state ⇒ editor_can_go_back state
 
 %export "dex:recipe_session_start"
-recipe_session_start : Text
-recipe_session_start = encode_editor begin_editor
+recipe_session_start : Int32 → Text
+recipe_session_start month = encode_editor (RecipeApp (storefront_start (cast month)) Nothing 0)
 
 %export "dex:recipe_session_view"
 recipe_session_view : Text → Text

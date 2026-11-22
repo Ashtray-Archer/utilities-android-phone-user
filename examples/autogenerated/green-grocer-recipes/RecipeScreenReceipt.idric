@@ -63,7 +63,12 @@ main = do
       case decode_recipe fixture of
         Left problem ⇒ do putStrLn ("FAIL independent recipe fixture: " ++ problem); exitFailure
         Right recipe ⇒ do
+          let home = storefront_start 1
+          let storefronts : List (Text, ShoppingState)
+              storefronts = [("stores-home", home)] ++
+                [(shop ++ "-" ++ show month, click ["shelf", shop, ""] (storefront_start month)) |
+                  shop ← ["hardware","indian"], month ← [1..12]]
           traverse_ (\(name, state) ⇒ write_checked (directory ++ "/expected/" ++ name ++ ".view")
-            (encode_view (editor_view (RecipeApp state Nothing 0)))) (snapshots recipe)
+            (encode_view (editor_view (RecipeApp state Nothing 0)))) (storefronts ++ snapshots recipe)
           putStrLn "PASS checked host recipe projections and independent import bytes written"
     _ ⇒ do putStrLn ("FAIL recipe receipt arguments: " ++ show arguments); exitFailure

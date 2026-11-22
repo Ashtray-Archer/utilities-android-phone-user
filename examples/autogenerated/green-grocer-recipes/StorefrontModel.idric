@@ -1,0 +1,87 @@
+module StorefrontModel
+
+import public StorefrontTypes
+import StorefrontFixtures
+import Data.List
+import Data.Maybe
+import Data.Text
+
+%unbound_implicits off
+
+export
+shop_name : Text → Text
+shop_name "hardware" = "Carpenter Bros. Hardware"
+shop_name "indian" = "Indian grocery"
+shop_name _ = "Unknown shop"
+
+export
+inventory : Text → List ShelfItem
+inventory merchant = filter (\item ⇒ item.merchant ≟ merchant) catalog
+
+export
+lookup_item : Text → Text → Maybe ShelfItem
+lookup_item merchant sku = find (\item ⇒ item.merchant ≟ merchant && item.sku ≟ sku) catalog
+
+export
+can_buy : ShelfItem → Bool
+can_buy item = case item.available_units of
+  Just (S _) ⇒ True
+  _ ⇒ False
+
+export
+in_season : Number → ShelfItem → Bool
+in_season month item = month > 0 && month <= 12 && item.first_month > 0 &&
+  (if item.first_month <= item.last_month
+    then month >= item.first_month && month <= item.last_month
+    else month >= item.first_month || month <= item.last_month)
+
+export
+purchase_history : Text → List (PastPurchase, ShelfItem)
+purchase_history merchant = mapMaybe resolve (filter (\p ⇒ p.merchant ≟ merchant) sample_purchases)
+  where
+    resolve : PastPurchase → Maybe (PastPurchase, ShelfItem)
+    resolve p = map (\item ⇒ (p, item)) (lookup_item p.merchant p.sku)
+
+lower : Text → Text
+lower = pack . map toLower . unpack
+
+-- Each slot has a reason visible to the shopper. A group of outdoor products
+-- cannot displace every history or staple slot during a seasonal window.
+export
+front_shelf : Text → Number → Bool → List Text → List (ShelfItem, Text)
+front_shelf merchant month use_history recipe_names =
+  let items = filter can_buy (inventory merchant)
+      receipts = if use_history then purchase_history merchant else []
+      season = map (\item ⇒ (item, "In season")) (filter (in_season month) items)
+      related = mapMaybe (history_reason receipts) items
+      wanted = map lower recipe_names
+      recipe = map (\item ⇒ (item, "Selected recipe")) (filter (\item ⇒
+        merchant ≟ "indian" && not (item.ingredient_key ≟ "-") && elem item.ingredient_key wanted) items)
+      usual = map (\item ⇒ (item, "Staple")) (filter staple items)
+      rest = map (\item ⇒ (item, "In this shop")) items
+      primary = nubBy same_item (take 2 season ++ take 2 (nubBy same_group related) ++ take 1 recipe ++ take 1 usual)
+      represented = map (department . fst) primary
+      -- After personal and seasonal picks, leave room for other grocery aisles.
+      other_aisles = if merchant ≟ "indian" then nubBy same_department (filter
+        (\entry ⇒ not (elem (department (fst entry)) represented)) (usual ++ rest)) else []
+  in take 6 (nubBy same_item (primary ++ other_aisles ++ season ++ related ++ recipe ++ usual ++ rest))
+  where
+    same_item : (ShelfItem, Text) → (ShelfItem, Text) → Bool
+    same_item (a, _) (b, _) = a.merchant ≟ b.merchant && a.sku ≟ b.sku
+    same_department : (ShelfItem, Text) → (ShelfItem, Text) → Bool
+    same_department (a, _) (b, _) = a.department ≟ b.department
+    same_group : (ShelfItem, Text) → (ShelfItem, Text) → Bool
+    same_group (a, _) (b, _) = a.affinity ≟ b.affinity
+    history_reason : List (PastPurchase, ShelfItem) → ShelfItem → Maybe (ShelfItem, Text)
+    history_reason receipts item =
+      if any (\entry ⇒ (snd entry).sku ≟ item.sku) receipts then Nothing else
+        case find (\entry ⇒ (fst entry).months_ago <= 6 && (snd entry).affinity ≟ item.affinity) receipts of
+          Nothing ⇒ Nothing
+          Just (_, bought) ⇒ Just (item, "Previously bought " ++ bought.item_name)
+
+export
+price_text : Number → Text
+price_text cents = case reverse (unpack (show cents)) of
+  units :: tens :: rest ⇒ "$" ++ (if null rest then "0" else pack (reverse rest)) ++ "." ++ pack [tens, units]
+  [units] ⇒ "$0.0" ++ pack [units]
+  _ ⇒ "$0.00"

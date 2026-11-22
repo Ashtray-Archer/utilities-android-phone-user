@@ -1,0 +1,55 @@
+store	sku	department	affinity	product	sale_unit	cents	stock	front_from	front_through	staple	ingredient
+hardware	0001	Lawn and garden	leaf-care	Fan leaf rake, 24 in	1 rake	1799	6	9	11	0	-
+hardware	0002	Lawn and garden	leaf-care	Paper leaf bags	5 bags	349	22	9	11	0	-
+hardware	0003	Lawn and garden	lawn-care	Toro walk-behind lawn mower	1 mower	38900	2	3	5	0	-
+hardware	0004	Lawn and garden	planting	Garden soil	1 cu ft bag	749	20	3	6	0	-
+hardware	0005	Lawn and garden	planting	Tomato starter plant	4 in pot	449	5	5	6	0	-
+hardware	0006	Lawn and garden	planting	Annual bedding flowers	6-cell pack	559	8	5	6	0	-
+hardware	0007	Lawn and garden	winter-care	Snow shovel, 18 in	1 shovel	2399	9	11	2	0	-
+hardware	0008	Lawn and garden	planting	All-purpose potting mix	8 qt bag	699	14	3	6	0	-
+hardware	0009	Lawn and garden	lawn-care	Grass seed for sun and shade	3 lb bag	1999	5	8	9	0	-
+hardware	0010	Tools	drilling	Milwaukee SHOCKWAVE titanium drill bits	15-piece set	3499	4	0	0	1	-
+hardware	0011	Tools	drilling	Automatic center punch	1 punch	1499	5	0	0	0	-
+hardware	0012	Tools	drilling	Hand-struck center punch	1 punch	899	6	0	0	0	-
+hardware	0013	Tools	threading	Tap and matching drill for 1/4-20 threads	1 set	1099	4	0	0	0	-
+hardware	0014	Plumbing	pipe-work	Straight pipe wrench, 14 in	1 wrench	2799	4	0	0	0	-
+hardware	0015	Paint	painting	Painter's tape, 1.41 in	1 roll	699	13	0	0	0	-
+hardware	0016	Plumbing	pipe-work	Slip-joint washer assortment	1 pack	379	15	0	0	0	-
+hardware	0017	Paint	painting	Roller cover, 3/8 in nap	2 covers	999	10	0	0	0	-
+hardware	0018	Paint	painting	Angled sash paintbrush, 2 in	1 brush	899	8	0	0	1	-
+hardware	0019	Paint	painting	KILZ 2 All-Purpose primer	1 gal	2699	7	0	0	0	-
+hardware	0020	Plumbing	pipe-work	PTFE thread-seal tape	1 roll	199	18	0	0	1	-
+hardware	0021	Plumbing	pipe-work	Kitchen sink P-trap, 1-1/2 in	1 kit	749	8	0	0	0	-
+hardware	0022	Lumber and fasteners	panel-work	Sanded plywood project panel, 1/2 in	2 x 4 ft panel	2499	3	0	0	0	-
+hardware	0023	Lumber and fasteners	panel-work	Sheathing plywood, 1/2 in	4 x 8 ft sheet	3499	?	0	0	0	-
+hardware	0024	Lumber and fasteners	panel-work	Exterior wood screws, #8 x 2 in	1 lb box	1099	12	0	0	1	-
+hardware	0025	Lawn and garden	winter-care	Sidewalk ice melt	20 lb bag	1199	11	11	2	0	-
+hardware	0026	Paint	painting	Canvas drop cloth	6 x 9 ft cloth	1599	0	0	0	0	-
+indian	0001	Rice and grains	rice	Long-grain basmati rice	10 lb bag	1899	10	0	0	1	basmati rice
+indian	0002	Rice and grains	rice	Sona masoori rice	10 lb bag	1599	7	0	0	0	sona masoori rice
+indian	0003	Rice and grains	flour	Whole-wheat chakki atta	5 lb bag	749	8	0	0	0	atta
+indian	0004	Dal and beans	dal	Toor dal	2 lb bag	499	14	0	0	1	toor dal
+indian	0005	Dal and beans	dal	Masoor dal	2 lb bag	429	11	0	0	0	masoor dal
+indian	0006	Dal and beans	dal	Chana dal	2 lb bag	449	10	0	0	0	chana dal
+indian	0007	Dal and beans	dal	Whole chickpeas	2 lb bag	399	9	0	0	0	chickpeas
+indian	0008	Spices	spice-seeds	Whole cumin seeds	100 g bag	249	20	0	0	1	cumin seeds
+indian	0009	Spices	spice-seeds	Whole coriander seeds	100 g bag	199	12	0	0	0	coriander seeds
+indian	0010	Spices	ground-spices	Ground turmeric	100 g bag	229	15	0	0	0	turmeric
+indian	0011	Spices	ground-spices	Kashmiri chili powder	100 g bag	349	7	0	0	0	kashmiri chili powder
+indian	0012	Spices	ground-spices	Garam masala	100 g box	349	9	0	0	0	garam masala
+indian	0013	Spices	ground-spices	Ground cardamom	50 g jar	549	4	0	0	0	ground cardamom
+indian	0014	Frozen	freezer-breads	Plain frozen paratha	5 pieces	399	11	0	0	1	paratha
+indian	0015	Frozen	frozen-veg	Frozen cut okra	12 oz bag	249	7	0	0	0	frozen okra
+indian	0016	Frozen	freezer-snacks	Frozen vegetable samosas	10 pieces	549	6	0	0	0	vegetable samosas
+indian	0017	Fresh produce	fresh-veg	Fresh okra	1 lb pack	399	5	0	0	0	fresh okra
+indian	0018	Fresh produce	fresh-fruit	Mangoes	1 fruit	179	12	5	7	0	mango
+indian	0019	Fresh produce	fresh-fruit	Guavas	1 lb pack	449	?	0	0	0	guava
+indian	0020	Fresh produce	fresh-herbs	Cilantro	1 bunch	99	10	0	0	1	cilantro
+indian	0021	Fresh produce	fresh-veg	Green chilies	100 g pack	129	8	0	0	0	green chilies
+indian	0022	Fresh produce	aromatics	Fresh ginger	4 oz pack	119	9	0	0	0	ginger
+indian	0023	Fresh produce	aromatics	Red onions	3 lb bag	329	8	0	0	0	red onions
+indian	0024	Fresh produce	aromatics	Garlic	1 bulb	79	16	0	0	0	garlic
+indian	0025	Chilled and pantry	dairy	Paneer	14 oz pack	549	6	0	0	0	paneer
+indian	0026	Chilled and pantry	dairy	Plain whole-milk dahi	32 oz tub	449	6	0	0	0	dahi
+indian	0027	Chilled and pantry	cooking-fat	Plain ghee	16 oz jar	899	8	0	0	0	plain ghee
+indian	0028	Fresh produce	fresh-herbs	Fresh curry leaves	1 packet	149	0	0	0	0	curry leaves

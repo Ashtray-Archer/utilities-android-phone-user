@@ -2,6 +2,7 @@ module RecipeScreenChecks
 
 import RecipeShopping
 import RecipeStorage
+import StorefrontChecks
 import RecipeSession
 import RecipeScreen
 import Data.List
@@ -110,7 +111,7 @@ full_restore_observed restored =
 
 checks : List (Text, Bool)
 checks =
-  [("Recipes is the cold-start screen", (recipe_view begin_shopping).title ≟ "Recipes"),
+  [("recipe context opens at Recipes", (recipe_view begin_shopping).title ≟ "Recipes"),
    ("empty screen offers a real file import", visible_action "platform:import-recipe-file" begin_shopping),
    ("recipe identities select the real model", length selected.selections ≟ 2),
    ("ingredient navigation exposes the planned screen", (recipe_view planning).title ≟ "Ingredients and pantry"),
@@ -143,10 +144,10 @@ checks =
    ("view has independently framed Unicode and action tokens", case
       decode_fields (encode_view (recipe_view saved)) of
         Right ["green-grocer-view-v1", "Recipes", "Recipe saved", rows] ⇒ not (rows ≟ "")
-        _ ⇒ False)]
+        _ ⇒ False)] ++ storefront_checks
 
 %export "dex:recipe_screen_checks"
 main : IO ()
 main = do
   traverse_ (\(name, passed) ⇒ putStrLn ((if passed then "PASS " else "FAIL ") ++ name)) checks
-  if all snd checks then putStrLn "recipe_screen_checks 16" else exitFailure
+  if all snd checks then putStrLn ("recipe_screen_checks " ++ show (length checks)) else exitFailure

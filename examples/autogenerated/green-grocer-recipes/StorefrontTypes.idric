@@ -1,0 +1,27 @@
+module StorefrontTypes
+
+%unbound_implicits off
+
+public export
+record ShelfItem where
+  constructor StockItem
+  merchant : Text
+  sku : Text
+  department : Text
+  affinity : Text
+  item_name : Text
+  selling_unit : Text
+  cents : Number
+  available_units : Maybe Number
+  first_month : Number
+  last_month : Number
+  staple : Bool
+  ingredient_key : Text
+
+public export
+record PastPurchase where
+  constructor Bought
+  merchant : Text
+  sku : Text
+  months_ago : Number
+  packs : Number
