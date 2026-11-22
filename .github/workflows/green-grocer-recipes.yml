@@ -40,8 +40,7 @@ jobs:
         with:
           repository: dilapidated-shed/grease
           run-id: 41253994123
-          artifact-ids: 14161714564
-          merge-multiple: true
+          name: grease-alias-diagnostics-6d19932f7a63faf38444bd3693aa61304f061fda
           github-token: ${{ github.token }}
           path: grease
       - uses: isomorphisms/ai-ci/.github/actions/charcoal-grease@ebfb667b64009f0c0bdf9dcfafb7884196786ef5
@@ -119,8 +118,7 @@ jobs:
         with:
           repository: dilapidated-shed/grease
           run-id: 41253994123
-          artifact-ids: 14161714564
-          merge-multiple: true
+          name: grease-alias-diagnostics-6d19932f7a63faf38444bd3693aa61304f061fda
           github-token: ${{ github.token }}
           path: grease
       - uses: isomorphisms/ai-ci/.github/actions/charcoal-grease@ebfb667b64009f0c0bdf9dcfafb7884196786ef5
